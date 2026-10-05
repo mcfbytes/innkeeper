@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+tsn-link = { path = "crates/tsn-link" }
+pad_thai = { path = "crates/pad_thai" }
+int14h = { path = "crates/int14h" }
+innkeeper-session = { path = "crates/innkeeper-session" }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "signal", "sync"] }
+clap = { version = "4", features = ["derive"] }
+humantime = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+indexing_slicing = "warn"

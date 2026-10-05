@@ -1,0 +1,26 @@
+# Link-layer frames, byte for byte on the wire. Format: <type> <seq> | <payload> | <frame>
+# ACK and NAK rows are the table in docs/protocol/link-layer.md section 6.4.
+ack 0 |  | 81 49 62 90 82
+ack 1 |  | 81 68 72 91 82
+ack 2 |  | 81 0b 42 92 82
+ack 3 |  | 81 2a 52 93 82
+ack 4 |  | 81 cd 22 94 82
+ack 5 |  | 81 ec 32 95 82
+ack 6 |  | 81 8f 02 96 82
+ack 7 |  | 81 ae 12 97 82
+nak 0 |  | 81 78 70 80 82
+nak 1 |  | 81 59 60 81 82
+nak 2 |  | 81 3a 50 82 82
+nak 3 |  | 81 1b 40 83 82
+nak 4 |  | 81 fc 30 84 82
+nak 5 |  | 81 dd 20 85 82
+nak 6 |  | 81 be 10 86 82
+nak 7 |  | 81 9f 00 87 82
+# DATA rows were computed with an independent bitwise CRC-16/CCITT-FALSE.
+data 0 | 03 22 04 10 | 81 83 bc 00 03 22 04 10 82
+data 1 | 02 81 1b | 81 32 7a 01 02 1b 81 1b 1b 82
+data 7 | ff 00 01 | 81 af 0a 07 ff 00 01 82
+data 2 | 82 | 81 bf cc 02 1b 82 82
+data 0 |  | 81 f0 e1 00 82
+# The first frame the stock client sent in DOSBox-X: a Login message, see docs/protocol/captures.md.
+data 0 | 21 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00 | 81 58 d8 00 21 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00 82
