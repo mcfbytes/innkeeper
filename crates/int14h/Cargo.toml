@@ -1,0 +1,13 @@
+[package]
+name = "int14h"
+description = "TSNEXEC's 17-export INT 14h API as typed Rust, plus the API-level transport codec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[lints]
+workspace = true

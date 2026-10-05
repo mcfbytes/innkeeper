@@ -1,0 +1,15 @@
+# INT 14h transport envelopes, hand-built from docs/protocol/int14h-transport.md section 5.
+# Format: <example name> | <bytes on the stream, length prefix included>
+hello         | 10 00 00 00 01 00 00 49 31 34 48 01 07 73 63 75 6d 6d 76 6d
+welcome       | 0f 00 00 00 02 00 00 01 0a 69 6e 6e 6b 65 65 70 65 72 64
+connect       | 0a 00 00 00 10 01 00 03 05 41 54 44 54 30
+connected     | 05 00 00 00 11 01 00 03 00
+send          | 09 00 00 00 10 02 00 04 03 00 22 04 10
+queued        | 05 00 00 00 11 02 00 04 01
+poll          | 04 00 00 00 10 03 00 08
+poll-ok       | 05 00 00 00 11 03 00 08 00
+receive       | 04 00 00 00 10 04 00 05
+received      | 09 00 00 00 11 04 00 05 01 02 00 07 41
+receive-empty | 05 00 00 00 11 05 00 05 00
+cancel-next   | 05 00 00 00 10 06 00 09 00
+status        | 06 00 00 00 11 07 00 00 03 80
