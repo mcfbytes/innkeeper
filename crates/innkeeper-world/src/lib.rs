@@ -9,6 +9,7 @@ mod host_time;
 mod ids;
 mod land;
 mod logon;
+mod mail;
 mod message;
 mod objects;
 mod player;
@@ -25,10 +26,12 @@ pub use ids::{
 };
 pub use land::LandCatalog;
 pub use message::{
-    Ack, ChangePassword, ClientMessage, EncodedPassword, GroupJoin, GroupLeave, GroupMembers,
-    GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory,
-    LandEntry, Login, LoginAck, LoginNakReason, LoginStatus, Multicast, Nak, Notice, ObjExists,
-    ObjectKind, ObjectLocated, Occupancy, PasswordSource, SendMessage, SetInt, SetPersona, SetStr,
+    Ack, ChangePassword, ClientMessage, EncodedPassword, Envelope, GroupJoin, GroupLeave,
+    GroupMembers, GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet,
+    LandDirectory, LandEntry, LetterRef, ListedLetter, Login, LoginAck, LoginNakReason,
+    LoginStatus, MailFault, MailReply, MailRequest, MailboxAnswer, MailboxRequest, Multicast, Nak,
+    Notice, ObjExists, ObjectKind, ObjectLocated, Occupancy, OutgoingLetter, PasswordSource,
+    SendMessage, SetInt, SetPersona, SetStr,
 };
 pub use objects::{ConnectionId, Delivery, GroupKey, ObjectStore};
 pub use player::PlayerSession;

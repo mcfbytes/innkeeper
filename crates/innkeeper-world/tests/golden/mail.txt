@@ -1,0 +1,34 @@
+# Mail (messages.md 3.3 rows 37 and 45): layouts decoded from hub/script.145 class_c8, script.140 EMailBox
+# and script.011 RoomZeroHandler. A box is `w low, w high`; a send body is `w box`, ten reserved bytes, `w from`,
+# subject, flags, addressee, sender, text. "> name | hex" client, "< name | hex" host; docs/server/mail.md.
+> assign mailbox 45/1 | 2d 01 00 01
+< mailbox assigned, box 1 | 2d 01 00 01 01 01 00 00 00
+< mailbox assigned, box 65538 | 2d 01 00 01 01 02 00 01 00
+< mailbox refused, status 2 (no account) | 2d 01 00 01 02 00 00 00 00
+< mailbox refused, status 4 (store busy) | 2d 01 00 01 04 00 00 00 00
+> new mail check 37/18 | 25 12 00 01 01 00 00 00
+< new mail, icon and box bits | 25 12 00 01 01 00 00 00 03 00
+< no new mail | 25 12 00 01 01 00 00 00 00 00
+> boxes of an account 37/17 | 25 11 00 01 a1 86 01 00
+< boxes of the account, one box | 25 11 00 01 a1 86 01 00 01 00 00 00
+< nak not your account 37/17 | 01 00 00 01 25 11 0c a2 86 01 00
+> list box 37/19 | 25 13 00 01 01 00 00 00
+< listing with one letter | 25 13 00 01 01 00 00 00 00 07 00 00 00 01 00 00 00 48 69 00 00 00 00 00 00 00 00 41 6c 69 63 65 00 00 00 00 00 00 00 5e 01 02 03 04 05 42 6f 62 00 00 00 00 00 00 00
+< listing, empty | 25 13 00 01 01 00 00 00
+> send letter 37/24 | 25 18 00 01 02 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 48 69 00 00 00 00 00 00 00 00 00 00 42 6f 62 00 00 00 00 00 00 00 41 6c 69 63 65 00 00 00 00 00 48 65 6c 6c 6f 00
+< letter delivered, ack 37/24 | 00 00 00 01 25 18 00 02 00 00 00
+> send letter 37/21 | 25 15 00 01 02 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 48 69 00 00 00 00 00 00 00 00 00 00 42 6f 62 00 00 00 00 00 00 00 41 6c 69 63 65 00 00 00 00 00 48 65 6c 6c 6f 00
+> read letter 37/25 | 25 19 00 01 02 00 00 00 07 00 00 00
+< letter text | 25 19 00 01 02 00 00 00 07 00 00 00 48 65 6c 6c 6f 00
+> delete letter 37/26 | 25 1a 00 01 02 00 00 00 07 00 00 00
+> forward letter 37/27 | 25 1b 00 01 02 00 00 00 07 00 00 00 03 00 00 00 43 61 72 6f 6c 00 00 00 00 00 48 6d 6d 6d 2e 2e 2e 00
+< letter forwarded, ack 37/27 | 00 00 00 01 25 1b 00 03 00 00 00
+> form to a service box 37/30 | 25 1e 00 01 00 00 01 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 4d 65 6d 62 65 72 53 65 72 76 55 73 65 72 00 00 00 00 00 00 50 6c 65 61 73 65 20 62 69 6c 6c 20 6d 65 2e 00
+> services 37/31 | 25 1f 00 01 01 00 00 00
+< services, empty listing | 25 13 00 01 01 00 00 00
+> system list 37/32 | 25 20 00 00 00 00 00 00
+< system list, empty | 25 20 00 00 00 00 00 00
+< nak not your box 37/25 | 01 00 00 01 25 19 0c 02 00 00 00
+< nak no such box 37/24 | 01 00 00 01 25 18 06 09 00 00 00
+< nak no such letter 37/26 | 01 00 00 01 25 1a 0e 02 00 00 00
+< nak post office closed 37/18 | 01 00 00 01 25 12 15 01 00 00 00

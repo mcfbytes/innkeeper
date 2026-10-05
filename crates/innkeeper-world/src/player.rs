@@ -1,7 +1,7 @@
 use tracing::{info, info_span, warn};
 
 use crate::{
-    logon, presence, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
+    logon, mail, presence, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
     HostMessage, Login, ObjectStore, World,
 };
 
@@ -81,6 +81,12 @@ impl PlayerSession {
             ClientMessage::SetPersona(ref set) => {
                 self.set_persona(&set.name);
                 Vec::new()
+            }
+            ClientMessage::NewMailbox(request) => self.when_logged_in(|account| {
+                reply(vec![mail::assign_mailbox(world, account, request)])
+            }),
+            ClientMessage::Mail(ref request) => {
+                self.when_logged_in(|account| reply(mail::answer(world, account, request)))
             }
             ClientMessage::SetInt(_) | ClientMessage::SetStr(_) | ClientMessage::ObjExists(_) => {
                 info!(?message, "decoded, no handler yet: ignored");

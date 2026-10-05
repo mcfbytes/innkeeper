@@ -1,7 +1,7 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags, LoginNakReason, ObjectKind};
+use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, ObjectKind};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -50,3 +50,17 @@ pub(crate) const GROUP_SEND_ECHOES_SENDER_ASSUMED: bool = true;
 /// carries on without one (section 3.3). The name lives for the session; the store is not written.
 #[allow(dead_code)]
 pub(crate) const PERSONA_SET_UNANSWERED_ASSUMED: bool = true;
+/// Byte 6 of the Ack for a delivered letter: the client reads the box words from byte 7 (section 3.3).
+pub(crate) const ACK_UNREAD_BYTE_ASSUMED: u8 = 0;
+/// Byte 0 of a listing row: only bit 0x80 (a system letter) changes what the client does (section 3.3).
+pub(crate) const LISTED_LETTER_STATUS_ASSUMED: u8 = 0;
+/// The two words after the header of the empty system list; the client reads from byte 8 (section 3.3).
+pub(crate) const SYSTEM_LIST_UNREAD_WORDS_ASSUMED: [u16; 2] = [0, 0];
+/// The box words of a refused mailbox assignment; the client reads them only with status 1 (section 3.3).
+pub(crate) const REFUSED_MAILBOX_ASSUMED: MailboxNumber = MailboxNumber(0);
+/// Status of a refused assignment when the account is not in the store, as on the open book (section 3.3).
+pub(crate) const NO_ACCOUNT_MAILBOX_STATUS_ASSUMED: u8 = 2;
+/// Status of a refused assignment when the store fails: "busy creating a mail box", retried at the next logon.
+pub(crate) const STORE_FAULT_MAILBOX_STATUS_ASSUMED: u8 = 4;
+/// Mail requests name a box, and only the requester's own box may be checked, listed, read or emptied.
+pub(crate) const OTHER_BOXES_ARE_PRIVATE_ASSUMED: bool = true;

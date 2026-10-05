@@ -2,8 +2,8 @@ use std::fmt;
 
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
-    Command, GroupLeave, GroupMembersRequest, Multicast, ObjExists, ObjectKind, SendMessage,
-    SetInt, SetPersona, SetStr,
+    Command, GroupLeave, GroupMembersRequest, MailRequest, MailboxRequest, Multicast, ObjExists,
+    ObjectKind, SendMessage, SetInt, SetPersona, SetStr,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -25,6 +25,8 @@ pub enum ClientMessage {
     ChangePassword(ChangePassword),
     SetPersona(SetPersona),
     LandOccupancyRequest,
+    Mail(MailRequest),
+    NewMailbox(MailboxRequest),
 }
 
 /// Command 53, or 59 with a Prodigy ID: the first message after every Connect.
@@ -150,6 +152,8 @@ impl ClientMessage {
                 reader.word("fromSID")?;
                 ClientMessage::LandOccupancyRequest
             }
+            Command::Mail => ClientMessage::Mail(MailRequest::parse(&mut reader)?),
+            Command::NewBox => ClientMessage::NewMailbox(MailboxRequest::parse(&mut reader)?),
             Command::Ack | Command::Nak | Command::ObjId | Command::Notice => {
                 return Err(MessageError::UnsupportedCommand(command.byte()))
             }
@@ -185,6 +189,8 @@ impl ClientMessage {
                 writer.byte(Command::WaitGroup.byte()).byte(LAND_OCCUPANCY);
                 writer.word(0).word(0);
             }
+            ClientMessage::Mail(request) => request.write(&mut writer),
+            ClientMessage::NewMailbox(request) => request.write(&mut writer),
         }
         writer.into_bytes()
     }

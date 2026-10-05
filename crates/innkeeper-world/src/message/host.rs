@@ -4,7 +4,8 @@ use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
-    Ack, Command, GroupLeave, GroupMembers, Notice, ObjectLocated, SendMessage, SetInt, SetStr,
+    Ack, Command, GroupLeave, GroupMembers, MailReply, MailboxAnswer, Notice, ObjectLocated,
+    SendMessage, SetInt, SetStr,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -41,6 +42,8 @@ pub enum HostMessage {
     HostTime(HostTime),
     LandDirectory(LandDirectory),
     LandOccupancy(Vec<Occupancy>),
+    Mail(MailReply),
+    Mailbox(MailboxAnswer),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -122,6 +125,7 @@ pub struct Occupancy {
     pub current: u8,
 }
 
+const MAIL_COMMAND: u8 = Command::Mail.byte();
 const HOST_NUMBER_TYPE: u8 = 5;
 const HOST_TIME_TYPE: u8 = 2;
 const OCCUPANCY_TYPE: u8 = 1;
@@ -188,6 +192,8 @@ impl HostMessage {
                 writer.word(0).word(0).word(row_count(rows));
                 rows.iter().for_each(|row| row.write(&mut writer));
             }
+            HostMessage::Mail(reply) => reply.write(&mut writer),
+            HostMessage::Mailbox(answer) => answer.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -205,10 +211,14 @@ impl HostMessage {
                         status: LoginStatus(reader.byte("status")?),
                         rating: reader.word("rating")?,
                     }),
+                    MAIL_COMMAND => {
+                        let sub = reader.byte("whichSub")?;
+                        HostMessage::Mail(MailReply::parse_ack_after(&mut reader, to, sub)?)
+                    }
                     which_cmd => HostMessage::Ack(Ack::parse_after(&mut reader, to, which_cmd)?),
                 }
             }
-            Command::Nak => HostMessage::Nak(Nak::parse(&mut reader)?),
+            Command::Nak => parse_nak(&mut reader)?,
             Command::Send => HostMessage::Send(SendMessage::parse(&mut reader)?),
             Command::ObjId => {
                 reader.byte("flags")?;
@@ -267,6 +277,8 @@ impl HostMessage {
                 }
             }
             Command::WaitGroup => parse_wait_group(&mut reader)?,
+            Command::Mail => HostMessage::Mail(MailReply::parse(&mut reader)?),
+            Command::NewBox => HostMessage::Mailbox(MailboxAnswer::parse(&mut reader)?),
             Command::JoinNet
             | Command::Multicast
             | Command::ChangePassword
@@ -312,12 +324,28 @@ fn parse_wait_group(reader: &mut WireReader) -> Result<HostMessage, MessageError
     }
 }
 
+fn parse_nak(reader: &mut WireReader) -> Result<HostMessage, MessageError> {
+    reader.byte("flags")?;
+    let to = Sid(reader.word("toSID")?);
+    let which_cmd = reader.byte("whichCmd")?;
+    let which_sub = reader.byte("whichSub")?;
+    match which_cmd {
+        MAIL_COMMAND => Ok(HostMessage::Mail(MailReply::parse_nak_after(
+            reader, to, which_sub,
+        )?)),
+        _ => Ok(HostMessage::Nak(Nak::parse_after(
+            reader, to, which_cmd, which_sub,
+        )?)),
+    }
+}
+
 impl Nak {
-    fn parse(reader: &mut WireReader) -> Result<Self, MessageError> {
-        reader.byte("flags")?;
-        let to = Sid(reader.word("toSID")?);
-        let which_cmd = reader.byte("whichCmd")?;
-        let which_sub = reader.byte("whichSub")?;
+    fn parse_after(
+        reader: &mut WireReader,
+        to: Sid,
+        which_cmd: u8,
+        which_sub: u8,
+    ) -> Result<Self, MessageError> {
         reader.byte("unused")?;
         let num_tries = reader.byte("numTries")?;
         let text = match reader.is_empty() {
