@@ -30,5 +30,5 @@ mount c "$drive_c_dir"
 c:
 cd \INN
 $autotype
-dx-capture /v /-a command /c inn.bat
+dx-capture /v /-a command /c $command
 exit

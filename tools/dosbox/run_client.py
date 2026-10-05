@@ -12,8 +12,10 @@ from pathlib import Path
 from string import Template
 
 from install_client import (
-    CLIENT_DIR_NAME, DRIVE_C_DIR, HARNESS_DIR, PERSONA_DIR, REPO_ROOT, ClientChoices, save_persona)
+    CLIENT_DIR_NAME, DRIVE_C_DIR, HARNESS_DIR, PERSONA_DIR, REPO_ROOT, ClientChoices,
+    install_game, launch_program_name, save_persona)
 from key_scripts import KEY_SCRIPTS, KeyScript
+from launcher.games import GAME_LAUNCHES
 
 CONFIG_TEMPLATE = Path(__file__).resolve().parent / "dosbox-inn.conf.in"
 DOSBOX_CAPTURE_DIR = HARNESS_DIR / "capture"
@@ -31,6 +33,7 @@ DEFAULT_KEYS_WAIT_SECONDS = 20.0
 DEFAULT_KEYS_PACE_SECONDS = 1.0
 DEFAULT_RUN_SECONDS = 90
 MAX_AUTOTYPE_WAIT_SECONDS = 30
+CLIENT_COMMAND = "inn.bat"
 SECONDS_TOKEN = re.compile(r"(\d+(?:\.\d+)?)s")
 TEXT_PREFIX = "="
 PAUSE_BUTTON = ","
@@ -50,6 +53,7 @@ class RunPlan:
     seconds: int
     label: str
     shot_interval: float
+    command: str
 
 
 def serial_setting(mode: str, address: str) -> str:
@@ -88,6 +92,7 @@ def write_config(plan: RunPlan, dial_number: str) -> Path:
         "serial1": serial_setting(plan.serial_mode, plan.server_address),
         "phonebook_file": phonebook,
         "autotype": autotype_line(plan),
+        "command": plan.command,
     }
     config = HARNESS_DIR / "dosbox-inn.conf"
     config.write_text(Template(CONFIG_TEMPLATE.read_text()).substitute(settings))
@@ -168,7 +173,20 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--shot-interval", type=float, default=5.0,
                         help="seconds between screenshots")
     parser.add_argument("--dial-number", default=ClientChoices.dial_number)
+    parser.add_argument("--launch", choices=sorted(GAME_LAUNCHES),
+                        help="start this DOS game through the launcher instead of the client")
     return parser.parse_args(argv)
+
+
+def client_command(launch: str | None) -> str:
+    """The stock client's batch file, or TSNEXEC started on the launcher's program block."""
+    if launch is None:
+        return CLIENT_COMMAND
+    return f"tsnexec {launch_program_name(GAME_LAUNCHES[launch])}"
+
+
+def launch_label(launch: str | None) -> str:
+    return f"launch-{launch.lower()}" if launch else "run"
 
 
 def plan_from_arguments(args: argparse.Namespace) -> RunPlan:
@@ -183,8 +201,9 @@ def plan_from_arguments(args: argparse.Namespace) -> RunPlan:
         keys_wait=args.keys_wait or script.wait,
         keys_pace=args.keys_pace or script.pace,
         seconds=args.seconds or script.seconds,
-        label=args.label or args.script or "run",
+        label=args.label or args.script or launch_label(args.launch),
         shot_interval=args.shot_interval,
+        command=client_command(args.launch),
     )
 
 
@@ -194,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
     if not client.exists():
         print("no client tree; run tools/dosbox/install_client.py first", file=sys.stderr)
         return 1
+    if args.launch:
+        install_game(client, args.launch, ClientChoices(dial_number=args.dial_number), None)
     if not args.no_server and not SERVER_BINARY.exists():
         print("no innkeeperd binary; run `cargo build -p innkeeperd` first", file=sys.stderr)
         return 1

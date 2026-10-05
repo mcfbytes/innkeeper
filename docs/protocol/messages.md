@@ -446,7 +446,8 @@ GOLF's `src\tsn\hostcomm.c` builds messages with the same header (command byte, 
 | `32 b w w` | image `0x135F9` | none (50 is not used by LSCI) | CONFIRMED bytes |
 
 The DOS games never call Connect; they inherit the session and identity through the shared block
-(`docs/protocol/int14h-api.md` section 10). Whether they log in again is unknown.
+(`docs/protocol/int14h-api.md` section 10). They do not log in again (census README section 4); a test
+launcher logs in on their behalf (`docs/dosbox.md` section 6).
 
 ## 10. Version differences
 

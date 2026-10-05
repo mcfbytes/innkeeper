@@ -33,6 +33,7 @@ DOSBox-X, stops the server and cuts the screenshots into `work/dosbox/shots/<lab
 | `--label NAME` | screenshot prefix (default: the script name) |
 | `--no-server`, `--server HOST:PORT` | use a server that is already running, or one on another address |
 | `install_client.py --com-driver NOBRK.DRV` | install the no-break modem driver instead of `MODEM.DRV` |
+| `--launch GAME`, `install_client.py --game GAME` | start a DOS game through the launcher instead of the client (section 6) |
 
 To look at a run, tile the screenshots: `ffmpeg -pattern_type glob -i 'play_*.png' -vf scale=300:-1,tile=6x5
 -frames:v 1 montage.png` in `work/dosbox/shots/`.
@@ -53,8 +54,8 @@ the CD installer runs. CONFIRMED from that file; the CD's `INN.BAT` is only the 
 | `lsciget lsci.cfg sl\lsci.cfg ...` | `render_land_cfg`: the keys `mouseDrv prefix id modem pFlag prodPath virtualDir swapSize LOGONVOL SEASONS` copied, driver paths prefixed with `..\`, `pathStr = ..\` and `hostID` appended |
 | `VMF` directories | created in root, `SL`, `LL` (`virtualDir = VMF`) |
 
-The games under `BARON`, `GOLF`, `YSERBIUS`, `TWINION` and `SHOPADV` are not installed; the harness only needs
-the SCI client.
+The games under `BARON`, `GOLF`, `YSERBIUS`, `TWINION` and `SHOPADV` are not installed by default; `--game`
+adds one with its launcher (section 6).
 
 Generated values (a `ClientChoices` in `install_client.py`; what the installer's menus would have stored):
 
@@ -165,3 +166,79 @@ Notes:
 - In `modem` mode the escapes `+++`, `AT H0` and a UART BREAK stay inside DOSBox-X, so the server never sees
   them (not yet exercised: the client has not tried to switch land).
 - `--dial-number` changes the number in `LSCI.CFG` and the phonebook together.
+
+## 6. Launching a DOS game (`launcher/`)
+
+The DOS games never dial or log in: they inherit the session and a 256-byte shared block from the land that
+starts them (`docs/protocol/int14h-census/README.md`). To test a game without driving the LSCI land, a
+small DOS program does the land's part and then hands over to the game through `TSN.PRG`.
+
+```
+cargo build -p innkeeperd
+.venv/bin/python tools/dosbox/run_client.py --launch GOLF       # 90 s, no keys needed
+.venv/bin/python -m unittest discover -s tools/dosbox           # opcode table and layout tests
+```
+
+`install_client.py --game GOLF` copies `work/games/GOLF` to `C:\INN\GOLF`, writes `C:\INN\LAUNCH\GOLF.COM`
+and inserts a block before the shipped file's closing `program DummyDontRemove`:
+
+```
+program LaunchGolf
+        LAUNCH\GOLF.COM
+```
+
+`run_client.py --launch GOLF` does the same on the installed client (the copy only once, the launcher every
+time, so it always matches the tools) and runs `tsnexec LaunchGolf` instead of `inn.bat`. `--block FILE` on `install_client.py` replaces the hand-made
+shared block with the raw bytes of a file.
+
+### 6.1 What the launcher does
+
+Each step is one export of `docs/protocol/int14h-api.md` section 3, called far and cdecl through the
+table that INT 14h returns.
+
+| # | Step | Export |
+|---|---|---|
+| 1 | `xor dx,dx; int 14h`; a zero segment means no TSNEXEC (exit code 1) | lookup |
+| 2 | install alloc, deref and free callbacks: a handle is a far pointer into an arena after the program, freeing does nothing | 15 SetCallbacks |
+| 3 | retransmit timeout 90, as the DOS games set it; the BIOS tick is copied into the returned counter before every Poll | 6 SetAckTimeout |
+| 4 | if a previous program exists, a game has returned here: exit 0 without a next program, which ends the session | 11 GetPreviousProgram |
+| 5 | dial with LSCI's string, `prefix` + `t` + `hostID` + `modem` (`messages.md` section 7.1) | 3 Connect |
+| 6 | send the Login built from the persona, the same 33 bytes the stock client sends (`captures.md` section 4) | 4 Send, 14 Flush |
+| 7 | Poll and Receive until a message with byte 4 = 22: command 0 (Ack) goes on, command 1 (Nak) exits with code 5; nothing in 70 s exits with code 6 | 8 Poll, 5 Receive |
+| 8 | one more Poll to acknowledge the reply's frame, then store the block | 2 SetSharedData |
+| 9 | name the game's `TSN.PRG` block, Poll, Flush, exit 0 | 9 SetNextProgram |
+
+Failures print `launch: ...` and exit with codes 2 (Connect), 3 (Send) or 4 (Poll status); TSNEXEC then
+shows "INNExec: Error N in LaunchGolf." and waits for a key.
+
+The hand-made GOLF block (`launcher/games.py`, layout in `docs/protocol/int14h-census/golf.md` section 5):
+user SID `0x0100` at `+0`, group SID `0x0200` at `+4` (a group the host does not know), the persona name at
+`+0x10`, and 14 launch bytes at `+0x80` with byte 4 = 1 player. Length `0x8E`.
+
+### 6.2 How the bytes are built
+
+No assembler is installed, so `launcher/assembler.py` holds an opcode table: each row maps an 8086
+instruction, spelled exactly as capstone prints it, to its encoding. Encodings are hex bytes plus slots:
+
+| Slot | Bytes | Filled with |
+|---|---|---|
+| `ib`, `iw` | 1, 2 | an immediate |
+| `mw` | 2 | an address: a number or a label |
+| `rb`, `rw` | 1, 2 | the distance from the end of the instruction to a label |
+
+A conditional jump to a far label is a `branch`: the opposite short jump (low opcode bit flipped) over a
+near `jmp`. `assemble` lays the items out from origin `0x100` (a `.COM`), then encodes with every label
+known. `launcher/program.py` is the listing; `launcher/messages.py` builds the Login and the shared block.
+
+The tests assemble every table row with sample operands and require capstone to print the row's own
+form, so a wrong encoding fails; they also compare the Login with the captured bytes and check the order
+of the export calls in the image.
+
+### 6.3 Result (observed 2026-10-05)
+
+`work/captures/golf-launch.hexlog`: Connect and the PAD call as with the client, the Login at 5.5 s, the
+Ack, then at 13.0 s GOLF's joinNet `07 00 00 00 00 00 01 66 ff ff 01 00` (cookie 0, kind 1, land type
+`0x66`, parameter `0xFFFF`, size 1), `ObjId` SID `0x0100`, and its GrpAdd `0a 00 00 02 00 01` for the
+hand-made group. No LSCITV ran. The screen shows the GOLF title with "GETTING PLAYER DATA...": GOLF waits for
+its GrpAdd echo, which `innkeeperd` does not send yet, and gives up after 120 s (`golf.md` section 7.2).
+`innkeeperd` took the launcher's Login like the client's; nothing before the Login was dropped.
