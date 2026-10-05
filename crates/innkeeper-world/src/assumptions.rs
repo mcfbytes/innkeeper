@@ -1,7 +1,7 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, ObjectKind};
+use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, ObjectKind, Sid};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -64,3 +64,9 @@ pub(crate) const NO_ACCOUNT_MAILBOX_STATUS_ASSUMED: u8 = 2;
 pub(crate) const STORE_FAULT_MAILBOX_STATUS_ASSUMED: u8 = 4;
 /// Mail requests name a box, and only the requester's own box may be checked, listed, read or emptied.
 pub(crate) const OTHER_BOXES_ARE_PRIVATE_ASSUMED: bool = true;
+/// The host does not publish a conference control object: a published one makes the client poll
+/// getProp for its properties, which nothing answers yet (section 3.2.1).
+pub(crate) const CONFERENCE_CONTROL_PUBLISHED_ASSUMED: bool = false;
+/// The SID of the Clubhouse's conference control object when it is published; below the first
+/// object SID, which stays free for well-known objects (section 3.2.1).
+pub(crate) const CONFERENCE_CONTROL_SID_ASSUMED: Sid = Sid(0x00C0);

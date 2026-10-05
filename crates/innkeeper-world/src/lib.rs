@@ -4,6 +4,7 @@
 
 mod account;
 mod assumptions;
+mod chat;
 mod error;
 mod host_time;
 mod ids;
@@ -19,6 +20,7 @@ mod store;
 mod world;
 
 pub use account::{Account, AccountBook, Enrolment, Refusal};
+pub use chat::{lookup_name, Conferences};
 pub use error::MessageError;
 pub use host_time::{Clock, FixedClock, HostTime, SystemClock};
 pub use ids::{

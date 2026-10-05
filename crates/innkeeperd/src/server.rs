@@ -13,6 +13,7 @@ use tracing::{info, warn};
 use crate::config::Config;
 use crate::connection::{serve_connection, ConnectionSettings};
 use crate::int14h_listener::serve_transport;
+use crate::operator::spawn_console;
 use crate::sqlite_store::SqliteStore;
 
 const DATABASE_FILE: &str = "innkeeper.db";
@@ -28,6 +29,8 @@ pub(crate) enum ServerError {
     DataDir { dir: String, source: io::Error },
     #[error("cannot open the account database: {0}")]
     Database(#[from] StoreError),
+    #[error("cannot start the operator console: {0}")]
+    Console(io::Error),
 }
 
 /// The stock world, with its accounts kept under `data_dir` when one is given.
@@ -52,6 +55,7 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
     };
     let settings = ConnectionSettings::new(config.session_config(), world, config.capture_dir());
     let settings = Arc::new(settings);
+    spawn_console(Arc::clone(&settings)).map_err(ServerError::Console)?;
     info!(bind = %config.bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
     let transport = async {
         match transport {
@@ -105,7 +109,7 @@ pub(crate) mod tests {
     use std::time::Instant;
 
     use innkeeper_session::SessionConfig;
-    use innkeeper_world::{AccountId, AccountRecord, EncodedPassword};
+    use innkeeper_world::{AccountId, AccountRecord, EncodedPassword, HostMessage, Notice};
     use pad_thai::{HayesConfig, LineKind};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
@@ -367,6 +371,7 @@ pub(crate) mod tests {
     struct Listeners {
         legacy: SocketAddr,
         transport: SocketAddr,
+        settings: Arc<ConnectionSettings>,
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -393,6 +398,7 @@ pub(crate) mod tests {
             let listeners = Listeners {
                 legacy: legacy.local_addr().unwrap(),
                 transport: transport.local_addr().unwrap(),
+                settings: Arc::clone(&settings),
             };
             let shared = Arc::clone(&settings);
             tokio::spawn(accept_forever(legacy, shared, serve_connection));
@@ -462,5 +468,34 @@ pub(crate) mod tests {
     async fn a_legacy_and_a_transport_client_meet_in_one_waiting_room() {
         meet(Kind::Legacy, Kind::Transport).await;
         meet(Kind::Transport, Kind::Legacy).await;
+    }
+
+    #[tokio::test]
+    async fn room_chat_and_an_operator_notice_reach_a_legacy_and_a_transport_client() {
+        const FIRST_LINE: &str = "02 00 01 01 00 01 01 00 0f 00 01 68 69 00";
+        const SECOND_LINE: &str = "02 00 01 01 02 01 01 00 0f 00 01 79 6f 00";
+        let listeners = Listeners::start().await;
+        let mut first = listeners.client(Kind::Legacy).await;
+        first.enter_waiting_room("00").await;
+        let mut second = listeners.client(Kind::Transport).await;
+        second.enter_waiting_room("02").await;
+        first.expect("0a 00 01 01 02 01").await;
+
+        first.send(FIRST_LINE).await;
+        first.expect(FIRST_LINE).await;
+        second.expect(FIRST_LINE).await;
+        second.send(SECOND_LINE).await;
+        first.expect(SECOND_LINE).await;
+        second.expect(SECOND_LINE).await;
+
+        let text = Notice {
+            text: "hello".into(),
+        };
+        listeners
+            .settings
+            .switchboard
+            .broadcast(&HostMessage::Notice(text));
+        first.expect("30 00 68 65 6c 6c 6f 00").await;
+        second.expect("30 00 68 65 6c 6c 6f 00").await;
     }
 }

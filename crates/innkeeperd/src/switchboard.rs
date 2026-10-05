@@ -43,6 +43,17 @@ impl Switchboard {
         }
     }
 
+    /// Queues a copy of the message for every connection on the board; a closed inbox is skipped.
+    pub(crate) fn broadcast(&self, message: &HostMessage) -> usize {
+        let inboxes = self.lock();
+        let reached = inboxes
+            .values()
+            .filter(|inbox| inbox.send(message.clone()).is_ok())
+            .count();
+        debug!(reached, "broadcast");
+        reached
+    }
+
     fn lock(&self) -> MutexGuard<'_, Inboxes> {
         self.inboxes.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -69,7 +80,7 @@ impl Drop for Inbox<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use innkeeper_world::Sid;
+    use innkeeper_world::{Notice, Sid};
 
     #[tokio::test]
     async fn a_delivery_reaches_the_registered_inbox_only_while_it_lives() {
@@ -81,5 +92,21 @@ mod tests {
         drop(inbox);
         switchboard.deliver(Delivery::new(ConnectionId(1), freed));
         assert!(switchboard.lock().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_broadcast_reaches_every_open_inbox_and_skips_a_closed_one() {
+        let switchboard = Switchboard::default();
+        let notice = HostMessage::Notice(Notice {
+            text: "hello".into(),
+        });
+        let mut first = switchboard.register(ConnectionId(1));
+        let mut second = switchboard.register(ConnectionId(2));
+        let mut closed = switchboard.register(ConnectionId(3));
+        closed.messages.close();
+        assert_eq!(switchboard.broadcast(&notice), 2);
+        assert_eq!(first.next().await, Some(notice.clone()));
+        assert_eq!(second.next().await, Some(notice));
+        assert!(closed.drain().is_empty());
     }
 }

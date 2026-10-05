@@ -2,7 +2,7 @@ use tracing::{info, info_span, warn};
 
 use crate::{
     logon, mail, presence, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
-    HostMessage, Login, ObjectStore, World,
+    HostMessage, Login, ObjExists, ObjectStore, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -88,7 +88,14 @@ impl PlayerSession {
             ClientMessage::Mail(ref request) => {
                 self.when_logged_in(|account| reply(mail::answer(world, account, request)))
             }
-            ClientMessage::SetInt(_) | ClientMessage::SetStr(_) | ClientMessage::ObjExists(_) => {
+            ClientMessage::ObjExists(ObjExists::Name { from, ref name, .. }) => self
+                .when_logged_in(|_| {
+                    let located = world.conferences.locate(from, name);
+                    reply(vec![HostMessage::ObjectLocated(located)])
+                }),
+            ClientMessage::SetInt(_)
+            | ClientMessage::SetStr(_)
+            | ClientMessage::ObjExists(ObjExists::Service { .. }) => {
                 info!(?message, "decoded, no handler yet: ignored");
                 Vec::new()
             }

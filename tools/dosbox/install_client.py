@@ -2,6 +2,7 @@
 """Assemble an installed INN client under work/dosbox/c/INN from the extracted CD install set.
 Follows work/sets/inn_cd/INSTALL.SCR; the harness is described in docs/dosbox.md."""
 import argparse
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -16,7 +17,7 @@ from unpuff import unpuff  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WORK_DIR = REPO_ROOT / "work"
-HARNESS_DIR = WORK_DIR / "dosbox"
+HARNESS_DIR = Path(os.environ.get("INNKEEPER_HARNESS_DIR", WORK_DIR / "dosbox"))
 PERSONA_DIR = HARNESS_DIR / "persona"
 DRIVE_C_DIR = HARNESS_DIR / "c"
 GAMES_DIR = WORK_DIR / "games"

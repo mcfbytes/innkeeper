@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::account::Enrolment;
 use crate::assumptions::STORED_BOOK_ENROLS_ASSUMED;
 use crate::host_time::{Clock, SystemClock};
-use crate::{AccountBook, HostNumber, LandCatalog, MemoryStore, Store};
+use crate::{AccountBook, Conferences, HostNumber, LandCatalog, MemoryStore, Store};
 
 /// The first host of the stock `HOSTADDR` (`Sierra7`); every stock land runs here.
 const STOCK_HOST: HostNumber = HostNumber(7);
@@ -14,6 +14,7 @@ pub struct World {
     pub host: HostNumber,
     pub accounts: AccountBook,
     pub lands: LandCatalog,
+    pub conferences: Conferences,
     pub clock: Box<dyn Clock>,
     pub store: Arc<dyn Store>,
 }
@@ -25,6 +26,7 @@ impl World {
             host: STOCK_HOST,
             accounts: AccountBook::anyone(),
             lands: LandCatalog::stock(),
+            conferences: Conferences::stock(),
             clock: Box::new(SystemClock),
             store: Arc::new(MemoryStore::new()),
         }
