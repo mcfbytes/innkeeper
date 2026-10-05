@@ -50,6 +50,23 @@ fn scoping_follows_kind_and_parameter() {
     assert_ne!(sid(A, ObjectKind::Object, 1), sid(B, ObjectKind::Object, 1));
 }
 
+#[test]
+fn a_shared_group_is_found_by_its_sid_and_nothing_else_is() {
+    let mut store = ObjectStore::new();
+    let room = granted(&store.join(A, request(1, ObjectKind::LandGroup, 1)));
+    let party = granted(&store.join(A, request(2, ObjectKind::PrivateGroup, 0xFFFD)));
+    let player = granted(&store.join(A, request(3, ObjectKind::Object, 0xFFFF)));
+    let key = GroupKey {
+        kind: ObjectKind::LandGroup,
+        land_type: LandType(1),
+        parameter: 1,
+    };
+    assert_eq!(store.group_key(room), Some(key));
+    assert_eq!(store.group_key(party), None);
+    assert_eq!(store.group_key(player), None);
+    assert_eq!(store.group_key(Sid(0x7777)), None);
+}
+
 /// A tiny xorshift generator, so the property run is the same every time.
 struct Seeded(u64);
 

@@ -48,6 +48,7 @@ enum GroupJoinRefusal {
     InvalidGroup = 1,
     Full = 2,
     InvalidObject = 3,
+    WrongVersion = 6,
 }
 
 /// Every networked object on the host, who holds it, and the members of each group.
@@ -129,6 +130,14 @@ impl ObjectStore {
         }
     }
 
+    /// The key of the shared group with this SID; none for an object, an own group or a free SID.
+    pub fn group_key(&self, sid: Sid) -> Option<GroupKey> {
+        match Scope::of(&self.objects.get(&sid)?.request) {
+            Scope::SharedGroup(key) => Some(key),
+            Scope::Object | Scope::OwnGroup => None,
+        }
+    }
+
     /// True when no connection holds anything.
     pub fn is_empty(&self) -> bool {
         self.objects.is_empty()
@@ -196,6 +205,17 @@ impl ObjectStore {
         };
         let echo = Delivery::new(connection, joined.clone());
         iter::once(echo).chain(tell(audience, joined)).collect()
+    }
+
+    /// The Nak that turns a GrpJoin away because the client's version is outside the land's range.
+    pub(crate) fn refuse_wrong_version(
+        &self,
+        connection: ConnectionId,
+        join: GroupJoin,
+    ) -> Vec<Delivery> {
+        let refusal = GroupJoinRefusal::WrongVersion;
+        warn!(?join, ?refusal, "group join refused");
+        vec![Delivery::new(connection, refusal.nak(join.group))]
     }
 
     /// GrpDel: the member leaves, and the remaining members hear of it.

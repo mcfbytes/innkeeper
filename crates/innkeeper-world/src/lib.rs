@@ -12,6 +12,7 @@ mod logon;
 mod message;
 mod objects;
 mod player;
+mod presence;
 pub mod router;
 mod store;
 mod world;
@@ -27,7 +28,7 @@ pub use message::{
     Ack, ChangePassword, ClientMessage, EncodedPassword, GroupJoin, GroupLeave, GroupMembers,
     GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory,
     LandEntry, Login, LoginAck, LoginNakReason, LoginStatus, Multicast, Nak, Notice, ObjExists,
-    ObjectKind, ObjectLocated, Occupancy, PasswordSource, SendMessage, SetInt, SetStr,
+    ObjectKind, ObjectLocated, Occupancy, PasswordSource, SendMessage, SetInt, SetPersona, SetStr,
 };
 pub use objects::{ConnectionId, Delivery, GroupKey, ObjectStore};
 pub use player::PlayerSession;

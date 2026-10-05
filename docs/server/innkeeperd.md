@@ -113,11 +113,12 @@ DATA frame per client message.
 
 | Module | Holds |
 |---|---|
-| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `object_kind`); the type names are in `messages.md` section 3.2.1 |
+| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `object_kind`); the type names are in `messages.md` section 3.2.1 |
 | `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the dev default; `listed(...)` checks number and encoded password; `stored(store, Enrolment)` reads the `AccountRecord` and gives the `Account` its `user_flags`, `rating` and `LoginStatus` (11 while the record's password is expired), and `change_password` updates the record |
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
-| `land` | `LandCatalog`: the land directory and occupancy |
-| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store |
+| `land` | `LandCatalog`: the land directory with each row's version range, `admits(land_type, version)` against that range, and occupancy counted from the object store (`current` is the member count of the land's waiting room, `maximum` the catalog's 64) |
+| `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
+| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4) |
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
@@ -132,20 +133,21 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 44 | Ack 44/1 to the request's SID after the password is stored and the expired flag cleared; Nak 44 when the store refuses. The open book stores nothing and still acks |
 | joinNet (7) | `ObjID` with the cookie echoed and a host-wide SID counting up from `0x0100`; a group of kind 2, 4 or 5 is shared by `(kind, landType, parameter)`, so every joiner of the same waiting room gets the same SID; a game object joined again with the same cookie replaces the old one ([objects.md](objects.md) section 3) |
 | leaveNet (9) | nothing to the sender; releases one reference, and the last one frees the object: `GrpDel` and `ObjFree` to the other connections that see it |
-| add (10) to a group | `GrpJoin` for the member to the joiner and to every other connection with a member in the group; Nak 10 with code 1 (no such group), 2 (full) or 3 (not the sender's object) |
+| add (10) to a group | `GrpJoin` for the member to the joiner and to every other connection with a member in the group; Nak 10 with code 1 (no such group), 2 (full), 3 (not the sender's object) or 6 (the version bytes of a waiting-room join lie outside the land's range, see `admits`; the member is not added, and a join without version bytes is not gated) |
 | delete (11) | `GrpDel` to the connections of the remaining members |
 | `GrpMem` (12) | the member list, from byte 6 in joining order |
 | `Send` (2) | the same `Send` to every connection that holds the object `to`, or a member of the group `to`, the sender's own connection included (INFERRED); nothing for a SID nobody holds, and no Nak |
 | multicast (28) | one `Send` of the body per recipient SID, in list order, under the same rules |
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
-| 47/1 | occupancy for the same lands: maximum 64, current 0 |
+| 47/1 | occupancy for the same lands: maximum 64, current the number of members in the land's waiting room (0 for a land nobody entered; the room itself holds 128, the size of the stock joinNet) |
+| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`); the name replaces the account's persona for the session and is not written to the store |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |
 
 Commands 13, 14 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply until
 the property replication and the service lookup handle them. Every other command is logged as "not decoded" and gets no reply. At
-logon that is 34/4, 45/1, 37/32 and 40/4, and in the Clubhouse 26; the client carries on without answers
+logon that is 34/4, 45/1 and 37/32, and in the Clubhouse 26; the client carries on without answers
 (`captures.md` section 9).
 
 ## 6. Capture files

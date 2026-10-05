@@ -270,6 +270,7 @@ impl HostMessage {
             Command::JoinNet
             | Command::Multicast
             | Command::ChangePassword
+            | Command::UserInfo
             | Command::Login
             | Command::LoginWithProdigyId => {
                 return Err(MessageError::UnsupportedCommand(command.byte()))

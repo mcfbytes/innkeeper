@@ -17,6 +17,7 @@ pub(crate) enum Command {
     SetStr = 14,
     Multicast = 28,
     HostInfo = 36,
+    UserInfo = 40,
     ObjExists = 41,
     ChangePassword = 44,
     WaitGroup = 47,
@@ -25,7 +26,7 @@ pub(crate) enum Command {
     LoginWithProdigyId = 59,
 }
 
-pub(crate) const COMMANDS: [Command; 19] = [
+pub(crate) const COMMANDS: [Command; 20] = [
     Command::Ack,
     Command::Nak,
     Command::Send,
@@ -39,6 +40,7 @@ pub(crate) const COMMANDS: [Command; 19] = [
     Command::SetStr,
     Command::Multicast,
     Command::HostInfo,
+    Command::UserInfo,
     Command::ObjExists,
     Command::ChangePassword,
     Command::WaitGroup,

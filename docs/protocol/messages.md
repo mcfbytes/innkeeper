@@ -215,7 +215,7 @@ Kind 6 and every other value are errors.
 | 37 | `EMMsg` | both | C→H `b 37, b sub, w sid, w…`; H→C `b 37, b whichCmd, w toSID, w lowWord @4, w highWord @6, w status @8, …` | 17, 18 new-mail check (mailbox low/high), 20, 21, 24 send letter (`"bbwwwawwawaaa"` envelope), 25 read, 26 delete, 27 forward, 30 form to a service box (`"AcctUpdate"`, `"MemberServ"`), 31 services, 32 system list (H→C records from 8, saved as `syslst.dat`) | CONFIRMED layouts |
 | 38 | `HintMsg` | both | C→H `b 38, b sub, w roomSID, b ×4`; H→C `b 38, b whichCmd, w toSID, b which @4, a @5` | hint room (`script.135`) | CONFIRMED |
 | 39 | `HostFile` | H→C | `b 39, b whichCmd, body @2` | — (no handler found) | CONFIRMED layout |
-| 40 | `UserInfoMsg` | both | C→H `b 40, b sub, …`; H→C `b 40, b whichCmd, w msgType @4, w whichSub @6` | 4 set name (`s` at 2), 3 read money, 2 save money (`w sid, w 1, w 1, w low, w high`, CasinoLand `script.000`) | CONFIRMED |
+| 40 | `UserInfoMsg` | both | C→H `b 40, b sub, …`; H→C `b 40, b whichCmd, w msgType @4, w whichSub @6` | 4 set name (`s` at 2), 3 read money, 2 save money (`w sid, w 1, w 1, w low, w high`, CasinoLand `script.000`). Host: sub 4 decodes as `ClientMessage::SetPersona` (`golden/user_info.txt`), `innkeeperd` renames the session's persona and sends no reply (the live client carried on, `captures.md` 6.185, `PERSONA_SET_UNANSWERED_ASSUMED`); subs 2 and 3 are not decoded | CONFIRMED; host reply INFERRED |
 | 41 | `ObjExists` | both | C→H `b 41, b 0, w sid, w sid, a name`; H→C body @6 | conference name check (`GotoConference::init`) | CONFIRMED |
 | 44 | password | C→H | `b 44, b 2, w sid, a[10] encoded password` | change password (`script.095` export 5); Ack 44/1 or 44/2 makes `RoomZeroHandler` store it in `PASS_SET.DTA`. Host: `ClientMessage::ChangePassword`; `innkeeperd` stores it, clears the expired flag and answers Ack 44/1 to the SID (`golden/logon_policy.txt`) | CONFIRMED layout; host reply INFERRED |
 | 45 | `NewBoxHandler` | both | C→H `b 45, b 1, w sid`; H→C `b 45, b whichCmd, w toSID, b status @4, w low @5, w high @7` | 1 assign mailbox: status 1 = mailbox number low/high (written to `mail.cfg`), 2–6 errors | CONFIRMED |
@@ -385,6 +385,12 @@ Reading the `LandAddr` file back (`hub/script.055` export 1 and `proc_20`), CONF
   of the land object (`class_97`) is 1.
 - Flag bits `0x0C` choose the CasinoLand disclaimer: 4 "Unrestricted", 0 "Restricted" (`hub/script.055
   proc_37`). Other bits are unknown.
+
+`innkeeperd` counts `current` as the members of the land's waiting room (the shared kind 5 group of the land
+type and number, `captures.md` section 11) and keeps the catalog's `maximum` of 64, although the room's own
+capacity is the joinNet `size`, 128 live: the byte shows the intended size and the group enforces the real
+one (INFERRED, no capture of the original host). A join with version bytes outside the directory row's `min`
+and `max` gets Nak 10 code 6, "Incompatible Land Version." (`int14h-census/yserbius.md` section 4.3).
 
 `ProcessLandInfo` sets every known land's maximum to -2 before applying an occupancy reply, and
 `PlaceButton::draw` shows a special cel for -2, so a land missing from the reply is shown as not

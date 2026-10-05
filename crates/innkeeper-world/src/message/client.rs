@@ -3,7 +3,7 @@ use std::fmt;
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
     Command, GroupLeave, GroupMembersRequest, Multicast, ObjExists, ObjectKind, SendMessage,
-    SetInt, SetStr,
+    SetInt, SetPersona, SetStr,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -23,6 +23,7 @@ pub enum ClientMessage {
     HostInfo(HostInfoRequest),
     ObjExists(ObjExists),
     ChangePassword(ChangePassword),
+    SetPersona(SetPersona),
     LandOccupancyRequest,
 }
 
@@ -142,6 +143,7 @@ impl ClientMessage {
             Command::ChangePassword => {
                 ClientMessage::ChangePassword(ChangePassword::parse(&mut reader)?)
             }
+            Command::UserInfo => ClientMessage::SetPersona(SetPersona::parse(&mut reader)?),
             Command::WaitGroup => {
                 expect_sub(&mut reader, command, LAND_OCCUPANCY)?;
                 reader.word("toSID")?;
@@ -178,6 +180,7 @@ impl ClientMessage {
             ClientMessage::HostInfo(request) => request.write(&mut writer),
             ClientMessage::ObjExists(lookup) => lookup.write(&mut writer),
             ClientMessage::ChangePassword(change) => change.write(&mut writer),
+            ClientMessage::SetPersona(persona) => persona.write(&mut writer),
             ClientMessage::LandOccupancyRequest => {
                 writer.byte(Command::WaitGroup.byte()).byte(LAND_OCCUPANCY);
                 writer.word(0).word(0);

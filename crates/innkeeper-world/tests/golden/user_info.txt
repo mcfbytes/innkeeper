@@ -1,0 +1,4 @@
+# UserInfoMsg (command 40) sub 4, the persona name: captured live in docs/protocol/captures.md 6.185
+# and 295.332, plus a short name. Rows: "> name | hex" from the client; every row round-trips byte for byte.
+> set persona, as captured | 28 04 67 75 79 62 72 75 73 68 00
+> set persona, short name | 28 04 4d 65 00

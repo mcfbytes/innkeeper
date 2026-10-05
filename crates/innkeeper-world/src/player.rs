@@ -1,8 +1,8 @@
 use tracing::{info, info_span, warn};
 
 use crate::{
-    logon, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage,
-    Login, ObjectStore, World,
+    logon, presence, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
+    HostMessage, Login, ObjectStore, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -54,9 +54,8 @@ impl PlayerSession {
             }
             ClientMessage::JoinNet(join) => self.when_logged_in(|_| objects.join(connection, join)),
             ClientMessage::LeaveNet(sid) => self.when_logged_in(|_| objects.leave(connection, sid)),
-            ClientMessage::GroupJoin(join) => {
-                self.when_logged_in(|_| objects.join_group(connection, join))
-            }
+            ClientMessage::GroupJoin(join) => self
+                .when_logged_in(|_| presence::join_group(&world.lands, objects, connection, join)),
             ClientMessage::GroupLeave(leave) => {
                 self.when_logged_in(|_| objects.leave_group(connection, leave))
             }
@@ -70,9 +69,8 @@ impl PlayerSession {
                 self.when_logged_in(|_| reply(answer_host_info(world, request)))
             }
             ClientMessage::LandOccupancyRequest => self.when_logged_in(|_| {
-                reply(vec![HostMessage::LandOccupancy(
-                    world.lands.occupancy(world.host),
-                )])
+                let occupancy = world.lands.occupancy(world.host, objects);
+                reply(vec![HostMessage::LandOccupancy(occupancy)])
             }),
             ClientMessage::Send(ref relayed) => {
                 self.when_logged_in(|_| router::send(objects, connection, relayed))
@@ -80,10 +78,32 @@ impl PlayerSession {
             ClientMessage::Multicast(ref relayed) => {
                 self.when_logged_in(|_| router::multicast(objects, connection, relayed))
             }
+            ClientMessage::SetPersona(ref set) => {
+                self.set_persona(&set.name);
+                Vec::new()
+            }
             ClientMessage::SetInt(_) | ClientMessage::SetStr(_) | ClientMessage::ObjExists(_) => {
                 info!(?message, "decoded, no handler yet: ignored");
                 Vec::new()
             }
+        }
+    }
+
+    /// The persona the player plays now; none before the Login is accepted.
+    pub fn persona(&self) -> Option<&str> {
+        match &self.state {
+            PlayerState::LoggedIn(player) => Some(&player.account.persona),
+            PlayerState::AwaitingLogin => None,
+        }
+    }
+
+    fn set_persona(&mut self, name: &str) {
+        match &mut self.state {
+            PlayerState::LoggedIn(player) => {
+                info!(from = %player.account.persona, to = name, "persona renamed");
+                name.clone_into(&mut player.account.persona);
+            }
+            PlayerState::AwaitingLogin => warn!("message before Login ignored"),
         }
     }
 
