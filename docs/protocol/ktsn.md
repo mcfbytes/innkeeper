@@ -300,6 +300,10 @@ Feb-94 (hub + SL + LL, sites per sub-op):
 - Land switching becomes "remember `TSN(9)`'s name, end the game, restart in the land's directory with
   the shared block preserved". There is no `TSN.PRG` interpreter in the engine.
 
+Status (2026-10-05): the fork implements this with an offline executive; the design and the
+remaining differences (land switching, sub-ops above 16) are in `docs/lsci/scummvm-integration.md`
+sections 10 and 13.
+
 ## 11. Open questions
 
 - Encoding of the strings passed to Connect (`TSN(3)`) and SwitchHost (`TSN(13)`). They are built in
