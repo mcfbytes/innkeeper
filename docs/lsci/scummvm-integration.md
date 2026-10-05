@@ -1,12 +1,14 @@
 # LSCI in ScummVM: integration groundwork
 
-How the ScummVM fork (`scummvm/`, branch `lsci`) recognises the LSCI clients, opens their resources
-and selects LSCI's kernel table, why it is done that way, and how the script loader will be built.
+How the ScummVM fork (`scummvm/`, branch `lsci`) recognises the LSCI clients, opens their resources,
+selects LSCI's kernel table and loads LSCI scripts, and why it is done that way. The script loader
+has its own document, `docs/lsci/script-loader.md`.
 Original-software facts come from `docs/lsci/interpreter.md`, `docs/lsci/script-format.md`,
 `docs/lsci/kernel-usage.md` and `docs/protocol/ktsn.md`; their labels are repeated here.
 
-Status (2026-10-04): detection, resource loading for every land of the three builds, and kernel-table
-selection work. Starting a game stops on purpose at the first script load.
+Status (2026-10-05): detection, resource loading for every land of the three builds, kernel-table
+selection and script loading work. Every land boots into its game object's `init` and stops at the
+first kernel whose stub breaks the script, `TSN(0)` (section 7).
 
 ## 1. What the fork does now
 
@@ -18,7 +20,7 @@ selection work. Starting a game stops on purpose at the first script load.
 | Lands | Clubhouse, SierraLand, CasinoLand from one game entry; `RESOURCE.002` shared | `ResourceManager::addAppropriateSources`, `engines/sci/resource/lsci_land.cpp` |
 | "Is LSCI" | data-detected predicate `ResourceManager::isLsci()`; version stays `SCI_VERSION_1_EARLY` | `ResourceManager::detectLsci` |
 | Kernels | LSCI's own 89 names plus 4 DLL kernels, mapped through an LSCI-only table | `engines/sci/engine/lsci_kernel_tables.h`, `Kernel::loadKernelNames` |
-| Scripts | intentional `error()` in `Script::load` | `engines/sci/engine/script.cpp` |
+| Scripts | each item container becomes an SCI0 block image in `Script::load`; the unchanged SCI0/SCI1 script, object, VM and debugger code runs on it (`docs/lsci/script-loader.md`) | `engines/sci/engine/lsci_container.*`, `lsci_script_image.*`, `script.cpp` |
 
 Every resource of every land loads and decompresses byte-identically to `tools/dcl.py` (section 8).
 
@@ -125,7 +127,7 @@ There is no `vocab.999` (CONFIRMED).
 - No version adjustment is needed after the LSCI names load: `loadKernelNames` has no case for
   `SCI_VERSION_1_EARLY`, the version detected for LSCI. A later sub-version choice must keep that true.
 - `SciEngine::run` loads the LSCI table before `initGame`, because it needs no script-based feature
-  detection; the debugger can therefore list it at the intentional stop.
+  detection; the debugger can therefore list it even if script loading fails.
 
 Mapping rule: a kernel is mapped to an existing ScummVM function only when its result depends on its
 integer arguments or on generic object queries, its argument counts in the scripts fit the ScummVM
@@ -145,13 +147,29 @@ Notable stubs: `Sqrt` and `Wait` are called with 2 arguments where ScummVM's tak
 `ObjectFree` probably equal `kClone` and `kDisposeClone` (INFERRED), but wait for the loader.
 `ModuleDispose` queues scripts for later disposal (CONFIRMED) unlike the immediate `kDisposeScript`.
 
-## 7. The intentional stop
+## 7. How far the game runs
 
-`Script::load` calls `error("Script %d is an LSCI item container, which is not supported yet")` for
-any LSCI script, before the SCI0 block parser can misread one. ScummVM's error handler then opens the
-SCI debugger with resources, vocabularies and the kernel table loaded, so `list`, `hexdump`,
-`resource_info`, `integrity_dump`, `kernfunctions` and `selectors` work. `version` does not, because
-feature detection reads scripts.
+The intentional stop in `Script::load` (an `error()` for every LSCI script) is gone: the script loader
+replaced it (`docs/lsci/script-loader.md`, commit F5). Script 0, its class modules and `script.003`
+load, the game object is export 0 of script 0, and `play` runs. Unimplemented kernels are `kStub`,
+which logs the call and leaves the accumulator unchanged. Boot log of the Feb-1994 Clubhouse
+(`SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./scummvm --path=../work/ex/inn_cd inn`), every
+`Dummy function` warning in order:
+
+| # | Kernel | Calls | Arguments | Caller |
+|---|---|---|---|---|
+| 1 | `SetCursor` (0x2B) | 1 | `0x381, 0, 2` | `CC::setCursor`, sent by `play` after the mapped `HaveMouse` |
+| 2 | `Resource` (0x09) | 8 | `0, 135, 0` / `0, 135, 3` / `0, 135, 999` / `2, 135, 0` / `2, 135, 3` / `2, 135, 999` / `0, 128, 897` / `2, 128, 897` | `CC::init` |
+| 3 | `Palette` (0x59, DLL) | 16 | sub-op 5 and three colour indices each | export 0 of module 615 (`calle 0xEA67 0`), from `CC::init` |
+| 4 | `TSN` (0x54) | 1 | `0` (GetStatus) | `CC::init` |
+
+`CC::init` then shifts the `TSN(0)` result right by 8 to get the connection byte. The stub returned
+the object left in the accumulator, so the VM stops with
+`[inn 0 CC::init @ 03f7]: Invalid arithmetic operation (shift right - params: 0012:07d4 and 0000:0008)`
+and opens the debugger, where `bt` shows `CC::play` calling `CC::init`. The other eight set and land
+pairs log the same four kernels in the same order and stop at the same shift in `SL::init` or
+`LL::init`. The next kernel to implement is therefore `kTsn` sub-op 0, then `Resource`, `Palette` and
+`SetCursor`.
 
 ## 8. Verification
 
@@ -160,9 +178,9 @@ feature detection reads scripts.
   fork's base and building after each).
 - Detection: `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./scummvm --detect --path=../work/ex/inn_cd`
   reports `sci:inn`; `inn_v2317` reports `sci:inn` "Dec 1993"; `tsn21_031293` reports `sci:tsn`.
-- Start-up: `./scummvm --path=../work/ex/inn_cd inn` logs "Detected Early SCI1", "Detected VGA graphic
-  resources", one "unmapped" warning for each of the 67 stubbed kernels, and stops with the error
-  above.
+- Start-up (2026-10-04, before the loader): `./scummvm --path=../work/ex/inn_cd inn` logged "Detected
+  Early SCI1", "Detected VGA graphic resources", one "unmapped" warning for each of the 67 stubbed
+  kernels, and stopped at the intentional stop. Since the loader it runs to the stop in section 7.
 - Resources: a build configured with `--enable-text-console` reads debugger commands from standard
   input. For each of the 9 set and land pairs (a target per pair with `lsci_land` set, and land
   directories without their own `RESOURCE.002`), `integrity_dump <file>` at the stop listed every
@@ -177,58 +195,18 @@ feature detection reads scripts.
 
 - Land fallback: `lsci_land=Yserbius` and a missing `SL/resource.map` both warn and start the Clubhouse.
 
-## 9. Plan for the script loader
+## 9. The script loader
 
-Goal: keep ScummVM's VM, object model, garbage collector, debugger and savegame code unchanged by
-turning each LSCI container into the SCI0/SCI1 script image they already understand. The deepest
-difference is that LSCI code runs from per-procedure handles (CONFIRMED, interpreter.md section 5.3):
-`call` operands, method dictionaries and export tables hold handles of Code items, branches are
-relative inside an item, and objects and strings are blocks of their own. Every word that holds such a
-reference has a fixup on disk and no other word does (CONFIRMED by data, script-format.md section
-4.3), so all handles can be replaced by offsets at load time and the handle concept disappears.
+Built as designed in `docs/lsci/script-loader.md`, which replaces the plan that was here: each
+container is converted in `Script::load` into an SCI0 block image, one block per item in item order,
+with every item reference resolved at load time. That doc holds the layout, the code rewrites, the
+engine touch points, the commit sequence and the measured results (byte parity with
+`tools/lsci_image.py` in all nine set and land pairs, and disassembler parity with
+`tools/lsci_disasm.py --image`).
 
-Shape: a new `LsciScriptTranscoder` (new files under `engines/sci/engine/`) called from the LSCI branch
-of `Script::load` where the error is now. It parses the container into items (parse at the boundary),
-then writes an SCI0/SCI1 block image and hands the buffer to the existing `Script` code.
-
-1. **Layout.** Keep item order, word-align each item, record item number → offset. Emit one object or
-   class block per Object/Class item, one code block per Code item, a string block holding the text of
-   the String items, an exports block from the Dispatch Table and a locals block from the last
-   Variables item (CONFIRMED that the last one wins, script-format.md section 4.5).
-2. **Fixups.** Each fixup word becomes the target's offset: a Code item's first byte, an object's
-   variables, or a String item's text (4 bytes after the item start, past `kind` and `size`). Offsets
-   that need the segment added go to the relocation block, as `relocateSci0Sci21` expects.
-3. **Code rewrite.** `call` (always the word form, CONFIRMED) gets `target - next instruction`, so
-   `op_call` works unchanged. `loadID` (0x5A) becomes `lofsa` (0x72) and `pushID` (0x74) stays `lofss`;
-   both with absolute offsets (`detectLofsType` must report `SCI_VERSION_1_MIDDLE` for LSCI).
-   Instruction lengths do not change.
-4. **Opcode formats.** An LSCI branch in `script_adjust_opcode_formats`: `calle` export index is a byte
-   in both forms, `&rest` is a byte in both forms, 0x4C and 0x4E take a word and do nothing in the VM
-   (they only feed the compiled-out debugger, CONFIRMED). `lofsa` and `line` are invalid in LSCITV and
-   absent from the data (CONFIRMED), so the rewritten `lofsa` cannot clash with an original one.
-5. **Objects.** Emit the SCI0/1 object header (`0x1234`, locals offset, function-area offset, variable
-   count), all properties from slot 0 (`-env-`), the class's Property Dictionary as base variables, and
-   the method block with ScummVM's zero terminator. Property opcodes address from slot 0, so `Object`
-   needs one change: `_offset = 2` for LSCI, which puts species, superclass, `-info-` and `name` on slots
-   2..5 (script-format.md section 9). Each instance gets its class number (slot 3) in slot 2 as its
-   species, the counterpart of LSCITV copying the class's slot 2 into every instance (CONFIRMED,
-   `0358:0511`).
-6. **Exports and locals.** The export count is the LSCI highest index + 1. The whole Variables payload
-   is the locals block, so local `k` stays word `k` (word 0 is the unused count, CONFIRMED).
-7. **Classes and modules.** `SegManager::createClassTable` reads `vocab.996` unchanged, and
-   `getClassAddress` loads modules by their `0xE800 + n` script numbers, which the resource layer
-   already serves. The off-by-one class-table entries (scripts 781 and 1061, script-format.md section
-   8) resolve because the class is registered by the script that precedes them.
-8. **Start-up.** `findGameObject` returns export 0 of the transcoded script 0; the game starts with
-   selector `play` (0x1A, INFERRED name) as LSCITV does (CONFIRMED selector number).
-9. **Data anomalies.** The 8 out-of-item branches (script-format.md section 8) would land in a
-   neighbouring item after linearisation; they get `script_patches.cpp` entries for `GID_INN` and
-   `GID_TSN` that retarget them to the `toss` the compiler meant (INFERRED intent). The 42 view-format
-   resources stored under CasinoLand script numbers are not containers and must never reach the loader.
-
-After the loader: implement the object kernels (`ObjectNew`, `ObjectFree`, `ObjPropOffset`,
-`ObjOffsetProp`, `InvokeMethod`), then the boot-path kernels in the order of kernel-usage.md section 8,
-then `kTsn` against a virtual TSNEXEC (ktsn.md section 10).
+After the loader: implement `kTsn` against a virtual TSNEXEC (ktsn.md section 10), then the
+boot-path kernels in the order of kernel-usage.md section 8, starting with the four in section 7,
+and the object kernels (`ObjectNew`, `ObjectFree`, `ObjPropOffset`, `ObjOffsetProp`, `InvokeMethod`).
 
 ## 10. Open questions
 
