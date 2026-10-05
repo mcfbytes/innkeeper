@@ -17,6 +17,7 @@ cargo build -p innkeeperd
 .venv/bin/python tools/dosbox/install_client.py --force
 .venv/bin/python tools/dosbox/run_client.py --script create-persona     # once, about 4.5 minutes
 .venv/bin/python tools/dosbox/run_client.py --script play               # about 2 minutes
+.venv/bin/python tools/dosbox/run_client.py --script clubhouse          # about 9 minutes
 ```
 
 `run_client.py` starts `innkeeperd` (log in `work/dosbox/innkeeperd.log`, captures in `work/captures/`), runs
@@ -103,6 +104,7 @@ wait is limited to 30 s, so `run_client.py` turns a script into a single command
 |---|---|---|
 | `create-persona` | welcome `OK`, "INN Guide" `No`, Create, name `guybrush`, age 30, `maine`, `Go On` through appearance, skills and hobbies, then `Save` | 260 s |
 | `play` | `Play` on the "Select Player" screen; the client then dials | 120 s |
+| `clubhouse` | `Play`, then on the town map 13 tabs round to the Clubhouse, `enter`, `enter` on the place list, `enter` on "Want To Play" | 520 s |
 
 What the menus need (all observed on the Feb-94 client, no mouse):
 
@@ -118,6 +120,18 @@ What the menus need (all observed on the Feb-94 client, no mouse):
   reading the screen.
 - The "Error #999" alert after a login timeout does not react to `enter` or `tab`; it wants the mouse. A
   script cannot dismiss it, and a run simply ends at the time limit.
+
+A pause lasts about twice its nominal length (observed): a script `enter 80s tab ...` pressed `tab` about
+190 s after the start, not 110 s, and `tab 3s` steps were 6 s apart. The `,` buttons seem to wait one pace
+each on top of the pace between buttons. The named scripts were tuned with this behaviour, so it is left
+as it is.
+
+On the town map (observed, details in `docs/protocol/captures.md` section 10):
+
+- `tab` moves the cursor to the next place and shows its label; the cursor glides there in about a second.
+  `enter` opens the place under the cursor. Thirteen tabs go once round, starting after the Clubhouse.
+- In the place list the place button starts highlighted and `tab` moves to `CANCEL`, so `enter` alone selects
+  the place; with an extra `tab` the outcome depended on timing (both seen). In "Want To Play", `enter` presses `OK`.
 
 Flakiness: once in about 20 runs the client stopped in the middle of typing (the screen froze and the
 remaining keys had no effect). Re-run it.

@@ -31,4 +31,12 @@ KEY_SCRIPTS = {
         creates_persona=True,
     ),
     "play": KeyScript(keys="enter 40s", wait=30, pace=0.5, seconds=120),
+    # Thirteen tabs walk the map's places back round to the Clubhouse, where the cursor starts;
+    # then enter it, accept the place list and the "Want To Play" dialog.
+    "clubhouse": KeyScript(
+        keys="enter 40s " + "tab 5s " * 13 + "enter 12s enter 30s enter 150s",
+        wait=30,
+        pace=0.5,
+        seconds=520,
+    ),
 }
