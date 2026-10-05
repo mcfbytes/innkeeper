@@ -1,0 +1,74 @@
+# MODEM.DRV and NOBRK.DRV on a null-modem cable, so the server plays the Hayes modem too.
+# Steps follow docs/protocol/link-layer.md sections 4, 2.5 and 5; the prefix is from MODEM.TXT.
+# Syntax: "> text" client sends, "< text" server answers, "x" variants are hex,
+# "+N" advances the clock by N ms, "m hex" is a message delivered from the client.
+> \rAT\r
+< \rAT\r
+< \r\nOK\r\n
++1000
+> +++
+< +++
++1500
+> ATZ\r
+< ATZ\r
+< \r\nOK\r\n
+> AT&D2\r
+< AT&D2\r
+< \r\nOK\r\n
+> AT&C1\r
+< AT&C1\r
+< \r\nOK\r\n
+> ATDT5551234\r
+< ATDT5551234\r
+< \r\nCONNECT 2400\r\n
++1000
+> @
++500
+> D
++500
+> \r
+< \r\nTERMINAL=
++500
+> \r
+< \r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
+# NOBRK.DRV escape to the PAD: ~~~+++~~~AT!~AT\B!~ATO!~
++1500
+> +++
++1500
+< \r\nOK\r\n
+> AT\r
+< AT\r
+< \r\nOK\r\n
+> AT\\B\r
+< AT\\B\r
+< \r\nOK\r\n
+< \r\n@
+> ATO\r
+< ATO\r
+< \r\nCONNECT 2400\r\n
+> \r
+< \r\n@
+> SET? 0:0,32:0\r
+< \r\n@
+> D\r
+< \r\nSIERRA DISCONNECTED\r\n@
+> c 83420207\r
+< \r\n83420207 CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
+# MODEM.DRV hangup: +++, one second, AT H0
++1500
+> +++
++1500
+< \r\nOK\r\n
+> AT H0\r
+< AT H0\r
+< \r\nOK\r\n

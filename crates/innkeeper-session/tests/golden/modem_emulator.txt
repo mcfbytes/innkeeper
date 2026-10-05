@@ -1,0 +1,32 @@
+# DOSBox modem emulation answers AT itself, so the server first hears the PAD wake-up.
+# Then a duplicate frame, a land switch by CR between frames (link-layer.md checklist 12),
+# and a fresh link with sequence 0 on the new call. Syntax as in raw_serial.txt.
+> @
+> D
+> \r
+< \r\nTERMINAL=
+> \r
+< \r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+>x 81 32 7a 01 02 1b 81 1b 1b 82
+<x 81 68 72 91 82
+m 81 1b
+> \r
+< \r\n@
+> SET? 0:0,32:0\r
+< \r\n@
+> D\r
+< \r\nSIERRA DISCONNECTED\r\n@
+> c 83420207\r
+< \r\n83420207 CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
