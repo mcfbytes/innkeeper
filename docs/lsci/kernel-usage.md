@@ -206,7 +206,7 @@ Notes on kernels outside the sub-op family:
 |---|---|---|
 | TSN, Array, List, Seq, String, Memory, Sound, FileSystem, SID, Graph, Long | sub-op; an immediate at 98% to 100% of the sites, 86% for `List` (the rest forward a parameter) | CONFIRMED (handler jump table plus call sites) |
 | Resource | mode 0 Load, 1 Unload, 2 Lock, 3 Reserve, 4 SetRoom, then a resource type and numbers | CONFIRMED 0 and 1, INFERRED 2 to 4 |
-| Block | mode 0 New, 1 Free, 2 Lock | CONFIRMED 0 and 1, INFERRED 2 |
+| Block | mode 0 Copy, 1 Free, 2 Lock | CONFIRMED (handler `0130:0512`, file `0x048f2`; section 6, Block) |
 | GetTime | mode 1 12-hour packed time, 2 24-hour packed time, 3 packed date (calls with no argument, 39 sites, read the tick counter) | CONFIRMED (`INT 21h` time and date handlers) |
 | Palette | 1 or 5 | INFERRED |
 | Menu | 0, 1 or 2 | INFERRED |
@@ -311,6 +311,13 @@ Sub-op semantics worth stating in prose:
   unused by the scripts.
 - INFERRED `Memory` 0 to 6 and 10: the handler returns heap figures. Sub-ops 2 to 6 are called only from
   `class_88`, which reports memory use; 7 `Require` and 8 `FreeHandle` are CONFIRMED by their callers.
+- CONFIRMED `Graph` 3 takes its points as (y, x): the bevel routine `export_12` of `script.010` draws
+  lines between (argument 1, argument 2) and (argument 3, argument 4) and is called by
+  `GameWindow::open` with `top, left, bottom, right`. This is SCI's order for `kGraph` `DrawLine`.
+- CONFIRMED `Block` 0 is Copy, not New: the handler (`0130:0512`, file `0x048f2`) passes argument 1 to
+  `0130:048C` (file `0x0486c`), which returns 0 for a null handle and otherwise allocates a block of the
+  source's size and copies it. `Str` passes a string handle. Sub-op 2 returns the block's flag
+  (`0130:0742`) and, when a third argument is given, sets it (`0130:0764`).
 
 ### TSN
 
@@ -473,7 +480,7 @@ Sub-op semantics worth stating in prose:
 | 0 LoadBits | `(...), DLL hook slot 16` | CONFIRMED | 0 | - | - |  |
 | 1 GetColorCount | `() -> 256` | CONFIRMED | 35 | 1x35 | class_56 (type31.678) 6; class_30 (type31.681) 6 | compared 91%, stored in temp 8% |
 | 2 SetResPal | `(a, b), DLL hook slot 18` | CONFIRMED | 0 | - | - |  |
-| 3 DrawLine | `(x1, y1, x2, y2, color, priority, control), DLL Line` | CONFIRMED | 220 | 8x220 | BBSBtnView (script.130) 36; class_56 (type31.678) 24 | discarded 96%, returned 3% |
+| 3 DrawLine | `(y1, x1, y2, x2, color, priority, control), DLL Line` | CONFIRMED | 220 | 8x220 | BBSBtnView (script.130) 36; class_56 (type31.678) 24 | discarded 96%, returned 3% |
 | 4 (reserved) | `no-op` | CONFIRMED | 0 | - | - |  |
 | 5 DrawBrush | `(6 values), DLL hook slot 20` | CONFIRMED | 0 | - | - |  |
 | 6 SaveBits | `(rect, flags) -> handle` | INFERRED | 45 | 3x45 | class_15 (type31.615) 6; class_16 (type31.646) 6 | stored in property/local 100%, returned 8%, passed 4% |
@@ -521,9 +528,9 @@ Sub-op semantics worth stating in prose:
 
 | Sub-op | Signature | Evidence | Calls | argc | Typical callers | Result use |
 |---|---|---|---|---|---|---|
-| 0 New | `(size) -> handle` | CONFIRMED | 6 | 2x6 | Str (type31.609) 3; class_3 (type31.610) 3 | passed 100% |
+| 0 Copy | `(handle) -> new handle, 0 for a null handle` | CONFIRMED | 6 | 2x6 | Str (type31.609) 3; class_3 (type31.610) 3 | passed 100% |
 | 1 Free | `(handle)` | CONFIRMED | 54 | 2x54 | export_3 (script.005) 6; proc_80 (script.101) 6 | discarded 68%, unseen 22%, tested 5% |
-| 2 Lock | `(handle, flag) -> result` | INFERRED | 0 | - | - |  |
+| 2 Lock | `(handle[, flag]) -> previous flag` | CONFIRMED | 0 | - | - |  |
 
 ### GetTime
 

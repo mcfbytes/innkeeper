@@ -166,7 +166,7 @@ SUBOP_TABLES: dict[str, tuple[SubOp, ...]] = {
         confirmed(0, "LoadBits", "(...), DLL hook slot 16"),
         confirmed(1, "GetColorCount", "() -> 256"),
         confirmed(2, "SetResPal", "(a, b), DLL hook slot 18"),
-        confirmed(3, "DrawLine", "(x1, y1, x2, y2, color, priority, control), DLL Line"),
+        confirmed(3, "DrawLine", "(y1, x1, y2, x2, color, priority, control), DLL Line"),
         confirmed(4, "(reserved)", "no-op"),
         confirmed(5, "DrawBrush", "(6 values), DLL hook slot 20"),
         inferred(6, "SaveBits", "(rect, flags) -> handle"),
@@ -203,9 +203,9 @@ SUBOP_TABLES: dict[str, tuple[SubOp, ...]] = {
         inferred(4, "SetRoom", "(room), purges until memory suffices"),
     ),
     "Block": (
-        confirmed(0, "New", "(size) -> handle"),
+        confirmed(0, "Copy", "(handle) -> new handle, 0 for a null handle"),
         confirmed(1, "Free", "(handle)"),
-        inferred(2, "Lock", "(handle, flag) -> result"),
+        confirmed(2, "Lock", "(handle[, flag]) -> previous flag"),
     ),
     "GetTime": (
         confirmed(1, "Time12", "() -> hour<<12 | minute<<6 | second"),
