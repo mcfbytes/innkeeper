@@ -111,6 +111,10 @@ switchboard, and a delivery for a connection that is gone is dropped.
 | `PRIVATE_PARAMETER_MIN_ASSUMED` | `0x8000` | the personal party sends -3 and the player -1; land and map numbers are small | `int14h-census/yserbius.md` 4.1, `SL/script.120` |
 | `GROUP_JOIN_TELLS_MEMBERS_ASSUMED` | true | waiting-room members fetch the newcomer's name from `addMember` (`hub/script.003 WaitingRoomGroup::addMember`) | `messages.md` 11 |
 | `REJOIN_REPLACES_KIND_ASSUMED` | kind 129 | the Clubhouse entry re-joins the game object with no leaveNet | `captures.md` 11 |
+| `UNLOCK_IS_ACKNOWLEDGED_ASSUMED` | false | no script waits for a reply to an unlock | `messages.md` 3.2 |
+| `REPLICAS_INCLUDE_GROUP_FELLOWS_ASSUMED` | true | `WaitingRoomGroup::addMember` builds a replica of each newcomer and reads its properties, so a later change must reach it | `messages.md` 3.2 |
+| `UNSET_INT_PROPERTY_ASSUMED` | 0 | a `GrpGetProp` row needs a value in every column; text columns get empty text | `messages.md` 3.2 |
+| `PROPERTIES_UNREAD_WORD_ASSUMED` | 0 | the word at byte 4 of `SetMsg`, which the client skips | `messages.md` 3.2 |
 
 Also INFERRED but not constants, because no alternative is plausible: the shared key is
 `(kind, landType, parameter)`; a release by a connection takes its own members out of the group; a destroyed
@@ -122,5 +126,44 @@ object's peers get `ObjFree`; GrpDel is accepted from any connection for a membe
   number would share a map group (`int14h-census/yserbius.md` section 8); R2 decides the RPG scoping.
 - LSCI's `GameGroup` sends kind 2 with a parameter from its caller; whether two tables of one game share that
   parameter is not known (D1).
-- No capture of the original host exists, so the echo policy and the re-join rule rest on the client's
-  handlers and the live run.
+- No capture of the original host exists, so the echo policy, the re-join rule, the lock refusal word and
+  the replica set rest on the client's handlers and the live run.
+- What a `SetStr` array with a zero byte should look like in a `SetMsg`: the client reads text records only
+  to the first NUL, so the mirror keeps the bytes before it (the live looks array ends in its only zero).
+
+## 8. Locks
+
+`lock` (4) and `unlock` (6) name one or more 16-bit lock words (`LockId`); the invitation scripts lock the
+player SIDs of the inviter and every guest, so two invitations cannot claim the same player
+(`docs/protocol/messages.md` section 3.2). The store keeps a `LockTable` from word to connection:
+
+| Client sends | The store does | Reply |
+|---|---|---|
+| lock, every word free or already the connection's | takes them all | Ack, `whichCmd` 4, to the request's `fromSID` |
+| lock, a word held by another connection | takes none | Nak, `whichCmd` 4, the first such word at byte 5 (`LockRefused`) |
+| unlock | frees the named words the connection holds; another connection's stay | none |
+| hang-up or Login again | frees every word the connection holds (`disconnect`) | none |
+
+A connection, not a SID, holds a lock: the inviting script has no SID and sends `fromSID` 0, so the Ack
+reaches the game object and through it the room's script.
+
+## 9. The property mirror and replicas
+
+`SetInt` (13) and `SetStr` (14) change the properties of an object's replicas. The store keeps the last value
+of every property of every live object in a `PropertyMirror`, by byte offset, and forgets an object when it is
+freed. Text is kept up to its first NUL, since that is all a `SetMsg` can carry.
+
+`ObjectStore::replicas(sid)` names the connections with a copy of an object: its holders, the holders of its
+members when it is a group, and the connections with a member in a group it belongs to. `router::set_int`,
+`router::set_str` and `router::invoke_method` send the message unchanged to every replica but the sender's
+connection; the sender has applied it already. An update for a SID nobody holds is neither mirrored nor sent.
+
+| Client sends | Reply, to the requester only |
+|---|---|
+| getProp (32) for a live object | `SetMsg` (33) addressed to the object, one record per requested property the mirror has, in request order |
+| getProp for a SID nobody holds | none |
+| `GrpGetProp` (31) for a group | `GrpGetProp` with one column per requested offset and one row per member in joining order; a column is text when any member has text there, and a missing cell is 0 or empty text |
+| `GrpGetProp` for something that is not a group | none |
+
+So a player who arrives late reads what the others published before it came: the waiting room asks each
+newcomer's name, game and room with getProp, and `GrpGetProp` fetches every member at once.
