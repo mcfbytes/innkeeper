@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from lsci_bytecode import OPCODE_TABLE, TERMINATING_OPCODES, Instruction, Operand, decode_code
+from lsci_image import ImageError, ScriptImage, build_image
 from lsci_format import (
     MODULE_PREFIX,
     NO_SUPER_CLASS,
@@ -91,8 +92,10 @@ class MethodOwner:
 class ModuleListing:
     """Renders one parsed module; problems found while rendering go to the coverage record."""
 
-    def __init__(self, land: Land, module: Module, where: str, coverage: Coverage):
+    def __init__(self, land: Land, module: Module, where: str, coverage: Coverage,
+                 image: ScriptImage | None = None):
         self.land, self.module, self.where, self.coverage = land, module, where, coverage
+        self.image = image
         self.vocabulary = land.vocabulary
         self.local_classes = classes_in(module)
         self.objects = self._parse_objects()
@@ -139,6 +142,8 @@ class ModuleListing:
 
     def item_lines(self, item: Item) -> list[str]:
         header = f"item {item.index} {item.tag_name} @0x{item.file_offset:04x}"
+        if self.image and self.image.item_offsets[item.index] is not None:
+            header += f" image 0x{self.image.item_offsets[item.index]:04x}"
         if item.kind is None:
             self.coverage.report("unknown-tag", self.where, header)
         renderer = {
@@ -267,10 +272,16 @@ class ModuleListing:
         if instructions and instructions[-1].opcode not in TERMINATING_OPCODES:
             self.coverage.report("falls-off-end", where, f"last opcode {instructions[-1].row.name}")
 
+    def code_base(self, item: Item) -> int:
+        """Where offset 0 of a Code item is: 0 in the item, or its ScummVM image offset."""
+        return self.image.item_offsets[item.index] if self.image else 0
+
     def instruction_line(self, item: Item, owner: MethodOwner | None, ins: Instruction) -> str:
-        raw = item.payload[ins.offset : ins.next_offset].hex(" ")
+        address = self.code_base(item) + ins.offset
+        code = self.image.data if self.image else item.payload
+        raw = code[address : address + ins.size].hex(" ")
         operands, comment = self.operand_text(item, owner, ins)
-        text = f"  {ins.offset:04x}: {raw:<15} {self.mnemonic(ins):<9} {operands}"
+        text = f"  {address:04x}: {raw:<15} {self.mnemonic(ins):<9} {operands}"
         return f"{text.rstrip():<56} ; {comment}" if comment else text.rstrip()
 
     def mnemonic(self, ins: Instruction) -> str:
@@ -287,7 +298,7 @@ class ModuleListing:
             return special(self, ins)
         texts = [self.plain_operand(owner, kind, value)
                  for kind, value in zip(ins.row.operands, ins.operands)]
-        return ", ".join(texts), self.operand_comment(ins)
+        return ", ".join(texts), self.operand_comment(item, ins)
 
     def reference_operands(self, item: Item, ins: Instruction):
         texts = []
@@ -311,10 +322,10 @@ class ModuleListing:
         index = offset // 2
         return f"{names[index]}" if index < len(names) else f"prop[0x{offset:x}]"
 
-    def operand_comment(self, ins: Instruction) -> str:
+    def operand_comment(self, item: Item, ins: Instruction) -> str:
         target = ins.branch_target()
         if target is not None:
-            return f"-> {target:04x}"
+            return f"-> {self.code_base(item) + target:04x}"
         if ins.row.name == "pushi" and 0 <= ins.operands[0] < len(self.vocabulary.selector_names):
             return self.selector_name(ins.operands[0])
         return ""
@@ -359,7 +370,8 @@ def hex_lines(item: Item, start: int = 0) -> list[str]:
     return [f"  {row:04x}: {item.payload[row : row + HEX_BYTES_PER_LINE].hex(' ')}" for row in rows]
 
 
-def list_resource(land: Land, prefix: str, number: int, coverage: Coverage) -> list[str]:
+def list_resource(land: Land, prefix: str, number: int, coverage: Coverage,
+                  with_image: bool = False) -> list[str]:
     where = f"{land.resources.path.name}/{prefix}.{number:03d}"
     data = land.resources.read(prefix, number)
     if data is None:
@@ -375,7 +387,14 @@ def list_resource(land: Land, prefix: str, number: int, coverage: Coverage) -> l
     if module.trailing_bytes:
         coverage.report("trailing-bytes", where, f"{module.trailing_bytes} bytes")
     header = f"; {where}: {len(module.items)} items; {KERNEL_NUMBERING_NOTE}"
-    return [header, ""] + ModuleListing(land, module, where, coverage).lines()
+    image = None
+    if with_image:
+        try:
+            image = build_image(module)
+            header += "; code at ScummVM image offsets and image bytes"
+        except ImageError as error:
+            coverage.report("no-image", where, str(error))
+    return [header, ""] + ModuleListing(land, module, where, coverage, image).lines()
 
 
 def find_lands(root: Path) -> list[Path]:
@@ -412,7 +431,7 @@ def run_land(path: Path, args: argparse.Namespace, kernel_names: tuple[str, ...]
     land = Land(ResourceDir(path), kernel_names)
     coverage = Coverage()
     for prefix, number in selected_resources(land, args):
-        lines = list_resource(land, prefix, number, coverage)
+        lines = list_resource(land, prefix, number, coverage, args.image)
         if not args.stats:
             print("\n".join(lines))
     return coverage
@@ -426,6 +445,8 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     selection.add_argument("--module", type=int, help="only this type-31 module number")
     parser.add_argument("--stats", action="store_true", help="print coverage statistics only")
     parser.add_argument("--verbose", action="store_true", help="list every diagnostic")
+    parser.add_argument("--image", action="store_true",
+                        help="show image offsets and bytes as ScummVM's disasm prints them")
     parser.add_argument("--kernel-names", type=Path, default=DEFAULT_KERNEL_NAMES)
     return parser.parse_args(argv)
 
