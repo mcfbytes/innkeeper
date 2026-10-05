@@ -57,7 +57,8 @@ offsets, so two sets can be compared with `diff`.
      object-to-object message that carries all chat and game traffic. Commands 2 to 33.
 - CONFIRMED: **the client speaks first.** Right after Connect it sends Login (command 53, or 59 for an
   account with a Prodigy ID) and starts a 70-second timeout. The host answers with `AckMsg` for
-  command 22 (not 53) or with `NakMsg`.
+  command 22 (not 53) or with `NakMsg`. The live client accepted such an Ack and went on to the map and
+  the Clubhouse (`docs/protocol/captures.md` sections 9 to 11).
 - CONFIRMED: a game's own traffic is `Send` (command 2) to the SID of the game's group object, with a
   game-specific `msgType` word. The host relays it; it never interprets game state.
 - CONFIRMED: changing land is "write the 256-byte shared block, name the next program, exit". The new
@@ -92,9 +93,11 @@ prints it as "routed to". CONFIRMED (`hub/type31.559`, the `init` of each class)
 | w@2 used directly as an object handle | `ObjID` (8, the cookie from joinNet), `NakMsg` when `whichCmd` is 55, `ObjFreeList` (52) |
 | w@4 used directly as an object handle | `ObjNewList` (51) |
 
-INFERRED: the variable behind `SID(3, 0)` holds the game object, so replies addressed to SID 0 reach
-`CC` and through it `RoomZeroHandler` (`hub/script.011`), whose name fits. This matters before the
-game object has a SID: the login Ack (section 4.2) can only be delivered with `toSID` 0.
+Replies addressed to SID 0 reach the game object, so `CC` and through it the current room and
+`RoomZeroHandler` (`hub/script.011`), whose name fits. This matters before the game object has a SID:
+the login Ack (section 4.2) can only be delivered with `toSID` 0. CONFIRMED live: an Ack, a `HostInfo`
+and two `WaitGrpRequest` replies with `toSID` 0 all reached `Dialing` (`docs/protocol/captures.md`
+section 9). That the variable behind `SID(3, 0)` is the game object itself remains INFERRED.
 
 Several classes call `move` in `init` to drop their header, so offsets used later by handlers are
 relative to the new start ("body rebased" in the tool output). For example `Send` rebases at 8, so a
@@ -145,18 +148,18 @@ puts the holder's SID at w@5 (`hub/script.121 inviteScript::handleMsg +0x00AD`).
 | 4 | lock | C→H | `w 4, w fromSID, w lockId, w…` or `…, a[n]` | `class_61::lock`, invite scripts | take a named host lock; Ack on success, Nak with holder SID at w@5 | CONFIRMED |
 | 5 | lockQueue | C→H | `w 5, w toSID, w fromSID` | `class_61::lockQueue` (never called) | unknown | CONFIRMED layout, unused |
 | 6 | unlock | C→H | as lock | `class_61::unlock`, `LL/script.905 inviteRoom::init` | release a lock | CONFIRMED |
-| 7 | joinNet | C→H | `w 7, w 0, w cookie, b kind, b landType, w param, w size` (12 bytes) | `Obj::joinNet`, `GameGroup::joinNet`, `WaitingRoomGroup::joinNet` | create a networked object; `cookie` is the client's object handle, `kind` 1 = object, 2 = game group, 5 = waiting-room group (param = land number, size = maximum), 129 = the game object at logon, 4 = Red Baron (`SL/script.120 runRedBaronScript`) | CONFIRMED layout; kinds from callers |
-| 8 | `ObjID` | H→C | `b 8, b ?, w cookie @2, w ? @4, w sid @6` | `class_66::init`; `Obj::handleMsg +0x003F` | reply to joinNet: the object whose handle is `cookie` gets SID `sid` and registers it with `SID(1, …)` | CONFIRMED |
+| 7 | joinNet | C→H | `w 7, w 0, w cookie, b kind, b landType, w param, w size` (12 bytes) | `Obj::joinNet`, `GameGroup::joinNet`, `WaitingRoomGroup::joinNet` | create a networked object; `cookie` is the client's object handle, `kind` 1 = object, 2 = game group, 5 = waiting-room group (param = land number, size = maximum), 129 = the game object at logon, 4 = Red Baron (`SL/script.120 runRedBaronScript`) | CONFIRMED layout; kinds from callers; 129, 1 (param `0xFFFF`, size 30) and 5 seen live |
+| 8 | `ObjID` | H→C | `b 8, b ?, w cookie @2, w ? @4, w sid @6` | `class_66::init`; `Obj::handleMsg +0x003F` | reply to joinNet: the object whose handle is `cookie` gets SID `sid` and registers it with `SID(1, …)` | CONFIRMED, live with bytes 1 and 4..5 zero |
 | 9 | leaveNet / `ObjFree` | both | C→H `w 9, w sid, w 0`; H→C header only | `Obj::leaveNet`; `Obj::handleMsg +0x0068` | free an object; on receive the target object disposes itself | CONFIRMED |
-| 10 | add / `GrpJoin` | both | C→H `w 10, w groupSID, w memberSID` (+ `b major, b minor, b revision` from waiting rooms); H→C `…, w who @4` | `class_83::add`, `WaitingRoomGroup::add`; `class_83::handleMsg` | add a member to a group / a member joined | CONFIRMED |
+| 10 | add / `GrpJoin` | both | C→H `w 10, w groupSID, w memberSID` (+ `b major, b minor, b revision` from waiting rooms); H→C `b 10, b 0, w groupSID @2, w who @4` | `class_83::add`, `WaitingRoomGroup::add`; `class_83::handleMsg` | add a member to a group / a member joined; the H→C form is delivered to the group, which calls `addMember: who` | CONFIRMED, both directions live (`captures.md` section 11) |
 | 11 | delete / `GrpDel` | both | C→H `w 11, w groupSID, w memberSID`; H→C `…, w who @4` | `class_83::delete`; `class_83::handleMsg` | remove a member / a member left | CONFIRMED |
 | 12 | `GrpMem` | both | C→H `w 12, w groupSID, w userSID`; H→C `…, w member[n] @6…` | `Conference::init`, SierraLand invite rooms; `class_83::handleMsg` | request / deliver the member list (n = (len-6)/2) | CONFIRMED |
-| 13 | setInt / `SetIntMsg` | both | `w 13, w targetSID, w fromSID, {w propOffset, w value}…` | `Obj::setInt`; `SetIntMsg::doit` | set integer properties of the replicas of an object; on receive each pair is applied with `ObjOffsetProp` | CONFIRMED |
-| 14 | setStr / `SetStrMsg` | both | `w 14, w targetSID, w fromSID, w propOffset, s value` | `Obj::setStr`; `SetStrMsg::doit` | set a string or array property | CONFIRMED |
+| 13 | setInt / `SetIntMsg` | both | `w 13, w targetSID, w fromSID, {w propOffset, w value}…` | `Obj::setInt`; `SetIntMsg::doit` | set integer properties of the replicas of an object; on receive each pair is applied with `ObjOffsetProp` | CONFIRMED; C→H live |
+| 14 | setStr / `SetStrMsg` | both | `w 14, w targetSID, w fromSID, w propOffset, s value` | `Obj::setStr`; `SetStrMsg::doit` | set a string or array property | CONFIRMED; C→H live (persona name, looks, home) |
 | 18–21 | getObj, add, setEq, setNe | C→H | `w n, w toSID, w fromSID, …` | `class_61` (never called) | host object-store operations | CONFIRMED layout, unused |
 | 22 | login (old) | C→H | `b 22, b 0, w 0, w idLow, w idHigh, s name, b 2, b flag, a[10] password` | `class_61::login` (never called) | the original login, replaced by 53 | CONFIRMED layout, unused |
 | 25 | invokeMethod / `RMI` | both | `w 25, w sid, w selector, w args…`; H→C `…, w selector @4, args @6…` | `Obj::invokeMethod`; `RMI::doit` (`InvokeMethod` kernel) | remote method call on an object's replicas | CONFIRMED |
-| 26 | — | C→H | `w 26, w sid, w sid` | `type31.561 class_84::handleMsg` | unknown | CONFIRMED layout |
+| 26 | — | C→H | `w 26, w sid, w sid` | `type31.561 class_84::handleMsg` | unknown; live: sent with the new player object's SID twice, right after its `ObjID` | CONFIRMED layout |
 | 28 | multicast | C→H | `b 28, w fromSID @1, w n @3, a[n] recipients @5, w msgType, b fg, b bg, b flag, a text` | `script.005` export 1, `script.155 proc_60` (msgType 50), `script.010` exports 14/20 | one message to a list of SIDs; recipients presumably receive a `Send` | CONFIRMED layout; delivery INFERRED |
 | 30 | register | C→H | `b 30, w sid…` | `class_61::register` (`script.120 proc_208`, `script.408 Clock::setSid`) | unknown | CONFIRMED layout |
 | 31 | getMembers / `GrpGetProp` | both | C→H `w 0x011F, w groupSID, w groupSID, w propOffset…` (byte 1 = 1); H→C words at 6 and 8, then per-member property values | `WaitingRoomGroup::getMembers`; `GrpGetProp::init` | read chosen properties of every member of a group | CONFIRMED (H→C layout partly) |
@@ -221,16 +224,16 @@ All CONFIRMED in `hub/script.101` unless noted.
 |---|---|---|---|---|
 | 1 | C→H | **Login** `b 53, b 0, w 0, b landType, b major, b minor, b revision, w idLow, w idHigh, b fromFile, a[11] password, s name` (59 adds `s prodigyId` from `C:\prodtsn.pid` when `LSCI.CFG` has `pFlag`) | `script.196` export 2 `+0x00DA`/`+0x0092`, called by `proc_7 +0x001B` right after Connect | CONFIRMED |
 | 2 | — | client starts `LoginTimeout` (70 s); on expiry it shows error 999 "There seems to be a problem logging in. If you still have a problem, call 1-800-IMAGIN-1." (`proc_116`). "We are not receiving any messages from the network." belongs to a different path, `dialScript::changeState +0x008E`. | `LoginTimeout::changeState +0x000C`..`+0x001E`; live run: `docs/protocol/captures.md` section 5 | CONFIRMED |
-| 3 | H→C | **AckMsg** `b 0, b ?, w 0, b 22, w userFlags @5, b status @7, w rating @8` (target SID 0, section 2.1) | `Dialing::handleMsg +0x02F3`..`+0x039A` | CONFIRMED layout; field names INFERRED |
+| 3 | H→C | **AckMsg** `b 0, b ?, w 0, b 22, w userFlags @5, b status @7, w rating @8` (target SID 0, section 2.1) | `Dialing::handleMsg +0x02F3`..`+0x039A`; live: `00 00 00 00 16 00 00 00 00 00` accepted | CONFIRMED layout; field names INFERRED |
 | 3' | H→C | or **NakMsg** `b 1, b ?, w 0, b 22, b reason @5, b ?, b numTries @7, text @8` | `+0x03A2`..`+0x0427`: the text is shown; reason 9 counts a retry and the client hangs up after `numTries` | CONFIRMED |
-| 4 | C→H | joinNet for the game object: `w 7, w 0, w cookie, b 129, b landType, w 0, w propertyCount` | `dialScript::changeState +0x00BE` → `Obj::joinNet +0x0027` | CONFIRMED |
-| 5 | H→C | **ObjID** `b 8, b ?, w cookie, w ?, w sid` | `Obj::handleMsg +0x003F`; the script waits until the game object has a SID (state 2) | CONFIRMED |
-| 6 | C→H | `34/4 sid` current rates (skipped with `LSCI.CFG ShutUp`), `36/5` host number, `45/1 sid` mailbox (only without `mail.cfg` and outside demo mode), `36/1` and `36/6` with the stamps from `hostaddr.tim` and `landaddr.tim`, `37/18 sid box` new mail (with a mailbox), `37/32 0 0 0` system list, `40/4 name` | `dialScript::changeState` state 3, `+0x010C`..`+0x0231` | CONFIRMED order |
+| 4 | C→H | joinNet for the game object: `w 7, w 0, w cookie, b 129, b landType, w 0, w propertyCount` | `dialScript::changeState +0x00BE` → `Obj::joinNet +0x0027`; live: `07 00 00 00 60 01 81 01 00 00 0c 00`, 125 ms after the Ack | CONFIRMED |
+| 5 | H→C | **ObjID** `b 8, b ?, w cookie, w ?, w sid` | `Obj::handleMsg +0x003F`; the script waits until the game object has a SID (state 2) | CONFIRMED, live |
+| 6 | C→H | `34/4 sid` current rates (skipped with `LSCI.CFG ShutUp`), `36/5` host number, `45/1 sid` mailbox (only without `mail.cfg` and outside demo mode), `36/1` and `36/6` with the stamps from `hostaddr.tim` and `landaddr.tim`, `37/18 sid box` new mail (with a mailbox), `37/32 0 0 0` system list, `40/4 name` | `dialScript::changeState` state 3, `+0x010C`..`+0x0231`; live: all but 37/18 in one frame, in this order | CONFIRMED order |
 | 7 | H→C | replies in any order: `AccountMsg` 4, `HostInfo` type 5, `NewBoxHandler` 1, `HostInfo` type 1 (only when HOSTADDR changed, INFERRED), `WaitGrpRequest` msgType 2 or `NakMsg` 36/6, `EMMsg` 18, `EMMsg` 32 | `Dialing::handleMsg`, `RoomZeroHandler::handleMsg` | CONFIRMED handlers |
 | 8 | — | state 4 waits for the land directory (`WaitGrpRequest` msgType 2 or `NakMsg` 36/6) | `+0x0242` (local 4) | CONFIRMED |
 | 9 | C→H | `47/1 0 0` land occupancy | state 5 `+0x0264` | CONFIRMED |
 | 10 | H→C | `WaitGrpRequest` msgType 1 or `NakMsg` 47/1; state 6 waits for either | `+0x0275` (local 3) | CONFIRMED |
-| 11 | — | when no land is known yet (land number 0, the normal first logon) the player is sent to the map, room 50 (`proc_5`); otherwise, for example with the debug keys `landNum`/`hostNum` (`proc_48`), a land descriptor is built and `attachScript` runs (section 5.2, step 3) | state 7 `+0x028B`..`+0x0300` | CONFIRMED |
+| 11 | — | when no land is known yet (land number 0, the normal first logon) the player is sent to the map, room 50 (`proc_5`); otherwise, for example with the debug keys `landNum`/`hostNum` (`proc_48`), a land descriptor is built and `attachScript` runs (section 5.2, step 3) | state 7 `+0x028B`..`+0x0300`; live: "Fall Map" | CONFIRMED |
 
 Fields in step 3: bit `0x04` of `userFlags` gives level 3, `0x80` level 2, `0x02` level 1 (global 82);
 `status` 11 means "Your password is out of date", which prompts for a new one and sends command 44
@@ -240,11 +243,12 @@ The Login's 11-byte password field is copied from a 10-byte array (`a` with coun
 is whatever follows the array in the interpreter's heap. CONFIRMED (`script.196` export 2,
 `hub/script.101 proc_57 +0x0036`); a server must ignore byte 11. INFERRED.
 
-What a server must produce, in order: Ack(22) for Login, `ObjID` for the joinNet, a reply to every
-request in step 6 (at least `HostInfo` type 5 and either a land directory or `NakMsg` 36/6), then a
-reply to 47/1. Replies to requests that carry no SID (Login, 36, 47) are addressed to SID 0. Missing
-replies stall the client in states 2, 4 or 6, and no Ack within 70 s ends the session. INFERRED from
-the waits and the routing above.
+What a server must produce, in order: Ack(22) for Login, `ObjID` for the joinNet, `HostInfo` type 5 and
+a land directory (or `NakMsg` 36/6) for step 6, then a reply to 47/1. Replies to requests that carry no
+SID (Login, 36, 47) are addressed to SID 0. Missing replies stall the client in states 2, 4 or 6, and no
+Ack within 70 s ends the session. CONFIRMED live: exactly these five replies, with 34/4, 45/1, 36/1,
+37/32 and 40/4 left unanswered, took the stock client to the map (`docs/protocol/captures.md`
+sections 9 and 10). That a land directory Nak works as well is INFERRED from the code.
 
 ## 5. Land switch
 
@@ -291,6 +295,26 @@ the waits and the routing above.
 The DOS games read words at +0 and +4 and an 11-byte string at +10 (`docs/protocol/int14h-api.md`
 section 9.3), which does not match this layout; see section 9.
 
+### 5.4 Entering a land on the same host (live)
+
+Choosing the Clubhouse on the map while logged in to the host that runs it sent no Login, no leaveNet,
+no BREAK and no `c <host>`; the client stayed in the same `LSCITV`. Its messages, in order
+(`docs/protocol/captures.md` section 11, CONFIRMED on the wire):
+
+1. joinNet for the game object again, same cookie, which gets a new SID.
+2. After the player answers the "Want To Play" dialog: `40/4 name`, joinNet for the player object
+   (kind 1, param `0xFFFF`, size 30), command 26 with that SID twice, `setStr` name (offset 5), looks
+   (offset `0x11`) and home (offset `0x17`), one `setInt` with eight pairs.
+3. joinNet for the waiting-room group (kind 5, land type, land number, maximum 128), then `add` of the
+   player to it with the version bytes.
+4. The room stays at "Entering Clubhouse..." until the group has a SID and contains the player:
+   `hub/script.120 PlayerLogin::changeState` state 3 (`+0x00C3`..`+0x00DC`). A `GrpJoin` naming the player
+   ends the wait; state 4 then waits for every member's name, and state 5 sends `setInt` with the
+   current game and room.
+
+Which script sends step 1 is INFERRED (the place list of `hub/script.055`, not `attachScript`, since
+no 36/5 followed).
+
 ## 6. Land tables
 
 Both arrive as `WaitGrpRequest` (47); offsets are after the rebase at message byte 6. CONFIRMED
@@ -298,12 +322,33 @@ Both arrive as `WaitGrpRequest` (47); offsets are after the rebase at message by
 
 | msgType | Body | Client use |
 |---|---|---|
-| 1 occupancy | `w ?, w ?, w n`, then n × `b host, b landType, b landNumber, b maximum, b current` | updates the place list; polled every 60 s (20 s on the map) by `ProcessLandInfo` |
-| 2 directory | `w stampLow, w stampHigh, w n`, then n × `b host, b landType, b landNumber, b min[3], b max[3], b flags, s description` | stamp saved to `landaddr.tim`, records written to the `LandAddr` file as `%20s %3d %3d %3d %03d.%03d.%03d %03d.%03d.%03d %3d` |
+| 1 occupancy | `w ?, w ?, w n`, then n × `b host, b landType, b landNumber, b maximum, b current` | updates the place list; polled every 60 s (20 s on the map) by `ProcessLandInfo`, both intervals seen live |
+| 2 directory | `w stampLow, w stampHigh, w n`, then n × `b host, b landType, b landNumber, b ?, b ?, b min[3], b max[3], b flags, s description` | stamp saved to `landaddr.tim`, records written to the `LandAddr` file as `%20s %3d %3d %3d %03d.%03d.%03d %03d.%03d.%03d %3d` |
+
+The two bytes after the land number are read into locals that nothing uses (`Dialing::handleMsg`
+`+0x00BE`..`+0x00D4`, temps 9 and 10). CONFIRMED by the code and live: without them the client shifted
+every later field (`docs/protocol/captures.md` section 10). Whether the host put a maximum and a count
+there, as in an occupancy row, is unknown; the server writes zeros.
 
 `min` and `max` are interpreter versions (major, minor, revision) allowed in that land. INFERRED from
-the `minVer`/`maxVer` properties (`hub/script.055 proc_20`). `HostInfo` type 1 carries the `HOSTADDR`
-file itself; the client saves it verbatim and the stamp to `hostaddr.tim`. CONFIRMED.
+the `minVer`/`maxVer` properties (`hub/script.055 proc_20`); the range 0.0.0 to 255.255.255 was accepted
+live. `HostInfo` type 1 carries the `HOSTADDR` file itself; the client saves it verbatim and the stamp
+to `hostaddr.tim`. CONFIRMED.
+
+Reading the `LandAddr` file back (`hub/script.055` export 1 and `proc_20`), CONFIRMED by the code:
+
+- Fields are split at space, `.` and tab, so the description is one word; `_` is shown as a space and
+  the description is cut to 16 characters (export 1 `+0x00D2`..`+0x0108`).
+- A row with land type 0, land number 0 or **flags 0** is dropped (`proc_20` `+0x0072`..`+0x01C1`); live,
+  a directory with zero flags gave "There are no places available right now for this land." The default
+  of the land object (`class_97`) is 1.
+- Flag bits `0x0C` choose the CasinoLand disclaimer: 4 "Unrestricted", 0 "Restricted" (`hub/script.055
+  proc_37`). Other bits are unknown.
+
+`ProcessLandInfo` sets every known land's maximum to -2 before applying an occupancy reply, and
+`PlaceButton::draw` shows a special cel for -2, so a land missing from the reply is shown as not
+available. The first two words of the occupancy body are not read. CONFIRMED (`hub/script.000
+ProcessLandInfo::handleMsg`, `hub/script.055 PlaceButton::draw +0x00EF`).
 
 ## 7. Connect and SwitchHost arguments
 
@@ -386,7 +431,10 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
 - `notify`: a `class_61` flag ORed into byte 1 of object commands; never set by any script.
 - Whether the host fans a `Send` to a group SID out to every member, and whether it echoes it to the
   sender. Game handlers suggest every member including the sender gets it; a capture would settle it.
-- The meaning of `userFlags`, `status` and `rating` in the login Ack beyond the bits the client tests.
+- The meaning of `userFlags`, `status` and `rating` in the login Ack beyond the bits the client tests;
+  all zero works.
+- The two unread bytes of a land directory row, and the land flags beyond bits `0x0C`.
+- What command 26 asks for; the client sends it for its player object and needs no reply.
 - Which object the interpreter variable behind `SID(3, 0)` holds; the game object is INFERRED.
 - Field meanings of `GrpGetProp` (31) and `SetMsg` (33) replies, and the record format of the system
   list (`EMMsg` 32).
@@ -411,5 +459,6 @@ A second pass (2026-10-04) checked the tool's results against the raw disassembl
 - The login Ack handling (`Dialing::handleMsg +0x0319`..`+0x039C`), including the level bits.
 - GOLF's message bytes, disassembled with capstone at the four image offsets in section 9.
 
-Not reproduced: no capture of real traffic exists, so every "meaning" column and the host-side
-behaviour (replies, fan-out) remain INFERRED.
+Live (2026-10-05, `docs/protocol/captures.md` sections 9 to 11): the logon of section 4.2, the land
+tables of section 6 and the Clubhouse entry of section 5.4 against the stock client. No capture of the
+original host exists, so meanings of host-side behaviour (fan-out, unanswered requests) remain INFERRED.

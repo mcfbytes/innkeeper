@@ -178,7 +178,7 @@ Crates form a downward-only graph. A crate may depend on those below it, never a
 
 ```
 innkeeperd           bin: argument parsing, runtime, sockets, capture files, wiring only
-innkeeper-world      games, rooms, chat, accounts (domain behaviour; not written yet)
+innkeeper-world      accounts, logon, land tables; games, rooms, chat to come (domain behaviour)
 innkeeper-session    connection state machines, no I/O
 pad_thai, tsn-link,  modem and PAD dialogue, link framing, INT 14h API and transport:
 int14h               wire types, parse and encode, no I/O

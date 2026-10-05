@@ -1,18 +1,26 @@
 # innkeeperd
 
-The host daemon. Version 0 is a capture tool: it accepts the stock DOS client over TCP, answers the
-modem, PAD and link layer well enough for the client to reach the host and start sending, and records
-everything. It has no application logic yet; it acknowledges frames and logs the messages inside them.
+The host daemon. It accepts the stock DOS client over TCP, answers the modem, PAD and link layer, plays
+the host side of the logon, and records everything. With it the stock client logs in, reaches the town map
+and enters the Clubhouse waiting room (`docs/protocol/captures.md` sections 9 to 11). It serves one player
+at a time: nothing is shared between connections yet.
 
 ## 1. Crates
 
 ```
-innkeeperd           bin: command line, tokio runtime, TCP, capture files
+innkeeperd           bin: command line, tokio runtime, TCP, capture files, wiring
+  ├ innkeeper-world    host behaviour: typed messages, accounts, logon, land tables, no I/O
   └ innkeeper-session  one connection: line then link, no I/O
       ├ pad_thai         Hayes modem (hayes_fever), SprintNet PAD dialogue, line detection, no I/O
       └ tsn-link         TSNEXEC framing, CRC, ACK/NAK, resends, message packing, no I/O
 int14h               the 17 INT 14h exports and the transport codec (int14h-transport.md), no I/O
 ```
+
+`innkeeper-world` does not depend on the session crates: it turns message bodies into replies, and
+`innkeeperd` (`src/host.rs`, `Host`) carries them between the two. A delivered client message is parsed
+into a `ClientMessage`, handed to the connection's `PlayerSession` with the shared `World`, and every
+`HostMessage` that comes back is encoded, queued with `Session::send_message` and sent with
+`Session::flush`, which closes the frame.
 
 Every crate below `innkeeperd` is synchronous and deterministic: bytes and an `Instant` go in, bytes and
 events come out, and timers are a `next_deadline()` that the caller sleeps on. `innkeeperd` depends on
@@ -78,9 +86,37 @@ The INFERRED parts (prompt texts, the CR escape heuristic, the `DIRECT` detectio
 
 Host-side link timing (`tsn_link::LinkConfig`): no DATA frame for 1.5 s after a call connects unless the
 client sends first, a resend after 3 s without an ACK, and at most 10 resends. These are server choices,
-not facts about the original. Version 0 sends no DATA frames, only ACK and NAK.
+not facts about the original. In practice the client always sends first, so replies leave at once, one
+DATA frame per client message.
 
-## 5. Capture files
+## 5. The host side (`innkeeper-world`)
+
+| Module | Holds |
+|---|---|
+| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes |
+| `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the stand-in while nothing persists; `listed(...)` checks number and encoded password |
+| `land` | `LandCatalog`: the land directory and occupancy |
+| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; owns the client's SIDs and group memberships |
+| `world` | `World`: host number, accounts and lands, shared read-only by every connection |
+| `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
+
+What the host answers (`docs/protocol/messages.md` for the layouts):
+
+| Client sends | Host replies |
+|---|---|
+| Login (53, 59) | Ack `whichCmd` 22 with all fields 0; a refused account gets Nak 22: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account |
+| joinNet (7) | `ObjID` with the next free SID, counting up from `0x0100` per connection and skipping SIDs still in use after the wrap |
+| leaveNet (9) | nothing; the SID and its group memberships are forgotten |
+| add (10) to a group | `GrpJoin` for the member, delivered to the group |
+| 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
+| 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
+| 47/1 | occupancy for the same lands: maximum 64, current 0 |
+| 36/1, 36/2 | nothing; the client keeps its files |
+
+Every other command is logged as "not decoded" and gets no reply. At logon that is 34/4, 45/1, 37/32 and
+40/4, and in the Clubhouse 13, 14 and 26; the client carries on without answers (`captures.md` section 9).
+
+## 6. Capture files
 
 One file per connection under the capture directory (default `work/captures/`, which git ignores), named
 `<UTC start time>-session<N>.hexlog`. The first line is `# innkeeperd session N from <peer>, started <time>`.
@@ -92,7 +128,7 @@ delivers a byte every 4 ms), and an event ends the group:
 |---|---|
 | `tx` | bytes the client transmitted, up to 16 per line, as hex plus an ASCII column |
 | `rx` | bytes the client receives from the server, same layout |
-| `ev` | a decoded event: line detection, AT or PAD command, call state, link frame, or `message len=N <bytes>` |
+| `ev` | a decoded event: line detection, AT or PAD command, call state, link frame, `message len=N <bytes>`, then `client <decoded message>` (or `client message not decoded: <reason>`; the encoded password is shown as `..`) and one `host <reply>` per reply |
 
 `tx` and `rx` are named from the client's point of view, as everywhere in this project.
 Example, the end of a real session (`docs/protocol/captures.md`):
@@ -110,8 +146,13 @@ Example, the end of a real session (`docs/protocol/captures.md`):
      5.594 ev message len=33 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00
 ```
 
-## 6. Not done yet
+## 7. Not done yet
 
-- Any application message. The client's Login is captured (`docs/protocol/captures.md`), but nothing answers
-  it, so the logon script times out after 70 s (`script.101` "LoginTimeout", error 999).
+- Anything shared between players: each connection has its own `PlayerSession`, SIDs are only unique per
+  connection, and a `Send` (2) or a group change is not routed to anyone. The next step is a world task that
+  owns SIDs and groups, fed by the connections through a channel.
+- Persistent accounts: `AccountBook::anyone()` admits everybody; a store on disk comes with a second
+  `AccountBook` source.
+- Replies to 34/4 (rates), 45/1 (mailbox), 37 (mail), 40/4 (name), `getProp` (32) and the other services of
+  `messages.md` section 3.3.
 - Serving the INT 14h transport.

@@ -414,7 +414,9 @@ Which side speaks first, and what the first message bodies contain, is decided b
 **client speaks first**. 1.65 s after ` CONNECTED` it sent DATA 0 with a 33-byte Login message (`35 00 00 00 01
 02 03 12 ...`) and waited for the host; the ACK made it neither resend nor send more, and after 70 s without a
 reply it showed error 999. The frame and the message are decoded in `docs/protocol/captures.md` sections 3 and 4.
-Whether the host may also speak first is not known.
+Whether the host may also speak first is not known. A second live run answered the Login: host DATA frames
+packed by `tsn_link` were acknowledged at once, host and client sequence numbers both wrapped from 7 to 0
+without a resend, and the session lasted eight minutes (`captures.md` sections 9 to 11).
 
 ## 7. Checklist: a server that emulates the PAD and host for the stock client
 
@@ -468,9 +470,8 @@ Assumes DOSBox modem emulation, or any byte pipe that looks like a Hayes modem t
 
 ## 8. Open questions
 
-- What the application payloads are beyond the first one. The client's Login is captured; the host's replies
-  and the messages the client sends after them are not. This belongs to the `kTSN`/script analysis and the
-  next capture (`captures.md` section 8).
+- What the original host sent. The client's side of the logon and the replies that satisfy it are captured
+  (`captures.md` sections 9 to 11); the original host's own bytes are not.
 - Exact meaning of the `HOSTADDR` columns `CC n`, and of `hostaddr.tim` / `landaddr.tim`. Which script passes which
   address to SwitchHost.
 - What X.3 parameters `SET? 0:0,32:0` sets, and the real SprintNet response text. The client needs only an `@`.
