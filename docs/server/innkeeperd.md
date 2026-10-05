@@ -112,7 +112,8 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
 | 47/1 | occupancy for the same lands: maximum 64, current 0 |
-| 36/1, 36/2 | nothing; the client keeps its files |
+| 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
+| 36/1 | nothing; the client keeps its files |
 
 Commands 2, 11, 12, 13, 14, 28 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply
 until the object store routes them. Every other command is logged as "not decoded" and gets no reply. At

@@ -185,12 +185,13 @@ fn holds_members(kind: ObjectKind) -> bool {
 fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage> {
     match request {
         HostInfoRequest::HostNumber => vec![HostMessage::HostNumber(world.host)],
+        HostInfoRequest::HostTime => vec![HostMessage::HostTime(world.clock.now())],
         HostInfoRequest::LandDirectory { .. } => {
             vec![HostMessage::LandDirectory(
                 world.lands.directory(world.host),
             )]
         }
-        HostInfoRequest::HostAddressFile { .. } | HostInfoRequest::HostTime => {
+        HostInfoRequest::HostAddressFile { .. } => {
             info!(?request, "no reply: the client keeps what it has");
             Vec::new()
         }
@@ -229,9 +230,10 @@ mod tests {
 
     fn world_with_one_account() -> World {
         World {
+            host: World::stock().host,
             accounts: AccountBook::listed([(AccountId(100_001), EncodedPassword([7; 10]))]),
             lands: LandCatalog::stock(),
-            ..World::stock()
+            clock: Box::new(crate::host_time::SystemClock),
         }
     }
 

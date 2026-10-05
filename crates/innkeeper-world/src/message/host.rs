@@ -1,4 +1,5 @@
 use crate::assumptions::DIRECTORY_UNREAD_BYTES_ASSUMED;
+use crate::host_time::HostTime;
 use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
@@ -37,6 +38,7 @@ pub enum HostMessage {
     ObjectLocated(ObjectLocated),
     Notice(Notice),
     HostNumber(HostNumber),
+    HostTime(HostTime),
     LandDirectory(LandDirectory),
     LandOccupancy(Vec<Occupancy>),
 }
@@ -119,6 +121,7 @@ pub struct Occupancy {
 }
 
 const HOST_NUMBER_TYPE: u8 = 5;
+const HOST_TIME_TYPE: u8 = 2;
 const OCCUPANCY_TYPE: u8 = 1;
 const DIRECTORY_TYPE: u8 = 2;
 
@@ -161,6 +164,14 @@ impl HostMessage {
             HostMessage::HostNumber(host) => {
                 writer.byte(Command::HostInfo.byte()).byte(HOST_NUMBER_TYPE);
                 writer.word(u16::from(host.0));
+            }
+            HostMessage::HostTime(time) => {
+                writer.byte(Command::HostInfo.byte()).byte(HOST_TIME_TYPE);
+                writer
+                    .byte(time.year_1900)
+                    .byte(time.month0)
+                    .byte(time.mday);
+                writer.byte(time.hour).byte(time.minute).byte(time.second);
             }
             HostMessage::LandDirectory(directory) => {
                 let lands = fitting_count(&directory.lands);
@@ -221,13 +232,37 @@ impl HostMessage {
             Command::ObjExists => HostMessage::ObjectLocated(ObjectLocated::parse(&mut reader)?),
             Command::Notice => HostMessage::Notice(Notice::parse(&mut reader)?),
             Command::HostInfo => {
-                expect_byte(&mut reader, "type", HOST_NUMBER_TYPE)?;
-                let host = reader.word("host")?;
-                let host = u8::try_from(host).map_err(|_| MessageError::UnknownValue {
-                    field: "host",
-                    value: host,
-                })?;
-                HostMessage::HostNumber(HostNumber(host))
+                let host_info_type = reader.byte("type")?;
+                match host_info_type {
+                    HOST_NUMBER_TYPE => {
+                        let host = reader.word("host")?;
+                        let host = u8::try_from(host).map_err(|_| MessageError::UnknownValue {
+                            field: "host",
+                            value: host,
+                        })?;
+                        HostMessage::HostNumber(HostNumber(host))
+                    }
+                    HOST_TIME_TYPE => {
+                        let year_1900 = reader.byte("year_1900")?;
+                        let month0 = reader.byte("month0")?;
+                        let mday = reader.byte("mday")?;
+                        let hour = reader.byte("hour")?;
+                        let minute = reader.byte("minute")?;
+                        let second = reader.byte("second")?;
+                        HostMessage::HostTime(HostTime {
+                            year_1900,
+                            month0,
+                            mday,
+                            hour,
+                            minute,
+                            second,
+                        })
+                    }
+                    sub => Err(MessageError::UnsupportedSub {
+                        command: Command::HostInfo.byte(),
+                        sub,
+                    })?,
+                }
             }
             Command::WaitGroup => parse_wait_group(&mut reader)?,
             Command::JoinNet
@@ -239,20 +274,6 @@ impl HostMessage {
         };
         reader.finish()?;
         Ok(message)
-    }
-}
-
-fn expect_byte(
-    reader: &mut WireReader,
-    field: &'static str,
-    expected: u8,
-) -> Result<(), MessageError> {
-    match reader.byte(field)? {
-        found if found == expected => Ok(()),
-        found => Err(MessageError::UnknownValue {
-            field,
-            value: u16::from(found),
-        }),
     }
 }
 
@@ -383,5 +404,42 @@ mod tests {
         for message in messages {
             assert_eq!(HostMessage::parse(&message.encode()), Ok(message));
         }
+    }
+
+    #[test]
+    fn host_time_golden_bytes_match_census_layout() {
+        let time = HostTime {
+            year_1900: 94, // 1994
+            month0: 1,     // February (0-based)
+            mday: 15,
+            hour: 10,
+            minute: 30,
+            second: 45,
+        };
+        let message = HostMessage::HostTime(time);
+        let bytes = message.encode();
+        // Layout: b 36 (HostInfo), b 2 (type=HostTime), then 6 bytes
+        assert_eq!(bytes[0], 36);
+        assert_eq!(bytes[1], 2);
+        assert_eq!(bytes[2], 94); // year_1900
+        assert_eq!(bytes[3], 1); // month0
+        assert_eq!(bytes[4], 15); // mday
+        assert_eq!(bytes[5], 10); // hour
+        assert_eq!(bytes[6], 30); // minute
+        assert_eq!(bytes[7], 45); // second
+    }
+
+    #[test]
+    fn host_time_round_trip_through_encode_and_parse() {
+        let time = HostTime {
+            year_1900: 94,
+            month0: 1,
+            mday: 15,
+            hour: 10,
+            minute: 30,
+            second: 45,
+        };
+        let message = HostMessage::HostTime(time);
+        assert_eq!(HostMessage::parse(&message.encode()), Ok(message));
     }
 }

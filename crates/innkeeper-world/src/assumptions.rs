@@ -17,3 +17,8 @@ pub(crate) const MEMBER_LIST_UNREAD_WORD_ASSUMED: u16 = 0;
 pub(crate) const LOCATED_UNREAD_WORD_ASSUMED: u16 = 0;
 /// Byte 1 of a notice: both DOS handlers show the text from byte 2 and never read it (section 3.2.1).
 pub(crate) const NOTICE_UNREAD_BYTE_ASSUMED: u8 = 0;
+/// Host time in HostInfoRequest reply (messages.md 3.3): sent as UTC, matching SystemTime::now().
+/// The original host's time zone is unknown and has no observable effect on the DOS clients.
+/// This constant exists to document the assumption; its value is true and not used in code.
+#[allow(dead_code)]
+pub(crate) const HOST_TIME_ZONE_UTC_ASSUMED: bool = true;
