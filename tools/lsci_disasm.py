@@ -29,11 +29,10 @@ from lsci_format import (
     parse_variables,
     resource_for_script_number,
 )
+from lsci_kernels import DEFAULT_KERNEL_NAMES, load_kernel_names
 from lsci_land import Land, classes_in, object_name
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_KERNEL_NAMES = REPO_ROOT / "work/exe/LSCITV_inn_cd.kernel.txt"
-KERNEL_NUMBERING_NOTE = "kernel names follow the LSCITV name table order (provisional)"
+KERNEL_NUMBERING_NOTE = "kernel names follow the LSCITV name table order, then the DLL kernels"
 CODE_RESOURCE_PREFIXES = (SCRIPT_PREFIX, MODULE_PREFIX)
 MAX_QUOTED_STRING = 60
 SMALL_NUMBER = 255
@@ -377,10 +376,6 @@ def list_resource(land: Land, prefix: str, number: int, coverage: Coverage) -> l
         coverage.report("trailing-bytes", where, f"{module.trailing_bytes} bytes")
     header = f"; {where}: {len(module.items)} items; {KERNEL_NUMBERING_NOTE}"
     return [header, ""] + ModuleListing(land, module, where, coverage).lines()
-
-
-def load_kernel_names(path: Path) -> tuple[str, ...]:
-    return tuple(path.read_text().split()) if path.exists() else ()
 
 
 def find_lands(root: Path) -> list[Path]:

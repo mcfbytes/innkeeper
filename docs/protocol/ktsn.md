@@ -91,7 +91,7 @@ export index. CONFIRMED (jump table words `00A5 00B1 011E 0167 01C2 0318 0318 01
 | 0x01 | `TSN(1)` | `16B1:00B1` (`0x19CA1`) | 1 GetSharedData | new byte array holding a copy of the stored shared block (at most 256 bytes), or 0 when the stored length is 0 | allocates `ArrayNew(len,2)` and copies with `034F:000E` | 3 | CONFIRMED |
 | 0x02 | `TSN(2, array, len)` | `16B1:011E` (`0x19D0E`) | 2 SetSharedData | acc kept | copies `len` bytes from element 0 of `array`. If either argument is 0, calls `SetSharedData(NULL,0)`, which clears the block. | 9 | CONFIRMED |
 | 0x03 | `TSN(3, string)` | `16B1:0167` (`0x19D57`) | 3 Connect | 1 = connected or already connected; 0 = failed | if `GetStatus` `AH≠0`, returns 1 immediately. Otherwise calls Connect(`StrPtrGet(string)`). On error: `ErrorEvent(0, code)`. On success: `InstallServer(16B1:03F1, 20)`. On both of these paths it adds the poll hook `16B1:0358`. | 10 | CONFIRMED |
-| 0x04 | `TSN(4, format, values...)` | `16B1:01C2` → `16B1:042E` (`0x1A01E`) | 4 Send | Send result (1 queued, 0 failed); 0 if the formatted body is empty | builds a byte array from `format` (section 3.1) and passes it as `Send(0:h, size)`. The executive frees it later. | 377 | CONFIRMED |
+| 0x04 | `TSN(4, format, values...)` | `16B1:01C2` → `16B1:042E` (`0x1A01E`) | 4 Send | Send result (1 queued, 0 failed); 0 if the formatted body is empty | builds a byte array from `format` (section 3.1) and passes it as `Send(0:h, size)`. The executive frees it later. | 381 | CONFIRMED |
 | 0x05, 0x06 | — | `16B1:0318` | — | acc kept | none. Exports 5 and 6 are internal (sections 4.1, 2.2). | 0 | CONFIRMED |
 | 0x07 | `TSN(7)` | `16B1:01D8` (`0x19DC8`) | 7 Disconnect | acc kept | `DisposeServer(16B1:03F1)`, remove the poll hook, then Disconnect | 33 | CONFIRMED |
 | 0x08 | `TSN(8)` | `16B1:01FF` (`0x19DEF`) | 8 Poll (+ 5 Receive) | acc kept | runs the event pump `16B1:0358` once (section 4.1) | 59 | CONFIRMED |
@@ -130,8 +130,8 @@ export index. CONFIRMED (jump table words `00A5 00B1 011E 0167 01C2 0318 0318 01
   `bbwwwa`, `w+`. CONFIRMED as string data in `script.101`, `.010` and `.005`. Each call pushes its format
   as a string literal (`pushID "bbw"`), which `tools/lsci_disasm.py` prints, for example
   `TSN(4, "bbw", 34, 4, sid)` at `hub/script.101` item 4 and `TSN(4, "bb", 36, 5)`. CONFIRMED.
-- The first value after the format is a small constant at almost every site (34 distinct values,
-  0x02–0x3B and 0x11F). Feb-94 counts: `0x02`×86, `0x25`×51, `0x1B`×35, `0x22`×15, `0x0D`×14, `0x1C`×14…
+- The first value after the format is a small constant at almost every site (33 distinct values,
+  0x02–0x3B and 0x11F). Feb-94 counts: `0x02`×86, `0x25`×54, `0x1B`×35, `0x22`×15, `0x0D`×14, `0x1C`×14…
   This matches the DOS games, which put an opcode in the first message byte (int14h-api.md section 10).
   CONFIRMED (scan); "message opcode" INFERRED.
 
@@ -260,17 +260,18 @@ CONFIRMED. The sub-op histogram in section 9 has the same set of sub-ops in ever
 
 ## 9. Script usage scan
 
-`tools/ktsn_callsites.py work/res/<set>` finds `callk 0x54` (`43 54 nn` or `42 54 00 nn`) in every
-`script.*` and `type31.*`. For each hit it takes the closest preceding `push argc, push sub-op` start that
-meets three tests: it decodes cleanly with LSCI operand widths, it lands exactly on the `callk`, and its
-stack balances to `argc+1` words. `dup` as the second push means sub-op = argc. CONFIRMED method;
-residual false positives are hits inside string data.
+`tools/ktsn_callsites.py work/res/<set>` lists every `callk 0x54` in every `script.*` and `type31.*`
+item. It decodes with `tools/lsci_bytecode.py` and follows the stack and accumulator through the
+item (`tools/lsci_callflow.py`), so the sub-op and the argument list of each call are read off the
+frame that `callk` really pops, not guessed from the bytes before it. CONFIRMED method; the earlier
+byte-pattern scan had 11 unresolved hits (7 of them inside string data) and is superseded.
+Usage across all kernels: `docs/lsci/kernel-usage.md`.
 
 Feb-94 (hub + SL + LL, sites per sub-op):
 
 | Sub-op | 0 | 1 | 2 | 3 | 4 | 7 | 8 | 9 | 0x0C | 0x0D | 0x0E | 0x10 | unresolved |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| sites | 55 | 3 | 9 | 10 | 377 | 33 | 59 | 6 | 22 | 6 | 259 | 5 | 11 |
+| sites | 55 | 3 | 9 | 10 | 381 | 33 | 59 | 6 | 22 | 6 | 259 | 5 | 0 |
 | argc | 1 | 1 | 3 | 2 | 3–20 | 1 | 1 | 2 | 1 | 2 | 1 | 1 | — |
 
 - Connection management (sub-ops 1, 2, 3, 9, 13) is confined to `script.101` in each land, plus
@@ -278,12 +279,14 @@ Feb-94 (hub + SL + LL, sites per sub-op):
   `Net Connect`, `teleport`, `ReconnectToPrevious`, `hostaddr`, `landaddr.tim` and the modem/PAD error texts.
   CONFIRMED (strings).
 - Sub-op 16 (GetLineRate) is used only in `script.097`, `script.905` and `script.908`.
-- Dec-93 has the same counts except sub-op 4 (376 sites against 377). TSN 2.1 has the same sub-op set with fewer sites (sub-op 4: 338,
-  sub-op 14: 204). The single-disk TSN "basic" set also uses the same sub-op set. CONFIRMED.
-- Of the 11 unresolved hits, 7 are the two bytes `43 54` ("CT" or part of a string) inside string items of
-  `script.130`, hub `script.012` and `type31.628`. The other 4 are real calls whose argument lists contain
-  branches or computed values: `script.145` (argc 20, once per land) and `SL/script.120` (argc 9, inside
-  `runRedBaronScript::changeState`). CONFIRMED (`lsci_disasm` item containing each offset).
+- Dec-93 has the same counts except sub-op 4 (380 sites against 381). TSN 2.1 has the same sub-op set
+  with fewer sites (sub-op 4: 342, sub-op 14: 204). The single-disk TSN "basic" set (hub only) uses the
+  same sub-op set. CONFIRMED.
+- The 11 hits the old scan could not resolve were 7 false hits (the two bytes `43 54` inside string items
+  of `script.130`, hub `script.012` and `type31.628`) and 4 real sends whose argument lists contain
+  branches or computed values. They resolve now and raise sub-op 4 from 377 to 381 and message code
+  `0x25` from 51 to 54. The argc 20 sends are 12 sites: `script.050` (2), `script.142` and `script.145`
+  per land. CONFIRMED (`tools/ktsn_callsites.py`).
 
 ## 10. Consequences for the ScummVM `kTsn`
 
@@ -336,8 +339,7 @@ Corrected in this pass:
 - Script `ConfigStr` keys are now decoded rather than inferred. `dialScript`, `attachScript` and
   `LoginTimeout` are class names, not config keys, and many more keys exist (section 6).
 - The tick rate is 60 Hz by default and no script changes it (section 4.2).
-- Dec-93 differs by one sub-op 4 site, and the unresolved-hit explanation named `script.050` wrongly
-  (section 9).
+- Dec-93 differs by one sub-op 4 site, and the unresolved hits are gone (section 9).
 - The poll-hook table has no duplicate check (section 4.1). The shared-block copy returns the stored
   length, not always 256 bytes (section 3).
 

@@ -77,7 +77,8 @@ regenerated with `tools/lsci_tables.py <exe>`.
 - CONFIRMED: the VM stack grows **upward** in DGROUP and `BP` addresses the top word. The caller
   pushes argc, then the arguments; `callk`'s second operand is the byte size of the arguments.
   After `sub bp,framesize`, `DS:BP` points at the argc word and is passed as the only argument.
-- CONFIRMED: kernel numbers are checked with a signed compare against 0x58, so 0..0x58 are valid.
+- CONFIRMED: kernel numbers are checked with a signed compare against the word at `[1EC2]`, which is
+  0x58 in the file and grows when DLLs register kernels (section 3.5).
 - CONFIRMED: `&rest` adds its extra words to argc before the call (`09c8:0562`), as in SCI.
 - CONFIRMED: handler signature is `void far kName(uint16 far *argv)`; handlers start with
   `les bx,[bp+6]` and read `es:[bx]` (argc) and `es:[bx+2*i]` (parameter i). Example `Abs`
@@ -291,6 +292,22 @@ Handler addresses in the older builds (same index and name in every row):
 | 56 | ObjOffsetProp | 15df:0b77 | 0x198e7 | 126a:0b1c | 0x1566c |
 | 57 | SID | 15df:0799 | 0x19509 | 126a:074e | 0x1529e |
 | 58 | InvokeMethod | 15df:0b1b | 0x1988b | 126a:0ac0 | 0x15610 |
+
+### 3.5 Kernels registered by DLLs (0x59..0x5C)
+
+- CONFIRMED: `AddKernel` (`16B1:0BFA`, also reachable as `1770:000A`) does `inc [1EC2]`, stores the
+  handler far pointer at `[1CE6 + n*4]` and the name far pointer at `[310A + n*4]`. The handler array
+  has room for about 119 entries. The DLL loader spans image addresses `0x13D01`..`0x13F89` (file
+  `+0x30E0`) and reads the `dll` keys of `LSCI.CFG` (key strings at `DGROUP:0D4E` and `0D52`, used at
+  image `0x13D27` and `0x13D5D`).
+- CONFIRMED: a DLL file is `u16 paragraphs, u16 relocation count, u16 relocations[], image`. The image
+  starts with four far pointers: a hook table (10-byte entries: function, name, hash), a kernel list
+  (8-byte entries: function, name), an import table and the host-services structure.
+- CONFIRMED (DLL contents): `NLNULL.DLL` hooks `NLInit` and `Said` and lists kernels `Said`, `Parse` and
+  `SetSynonyms`. `GRAPH256.DLL` lists kernel `Palette` and hooks 30 graphics routines (`DrawCel` to
+  `FillPoly`); `Graph` (0x47, table at `06E4:0621`) calls them through hook slots at `DGROUP:11D0 + 10k`.
+- INFERRED: load order GRAPH256 then NLNULL, which gives 0x59 `Palette`, 0x5A `Said`, 0x5B `Parse`,
+  0x5C `SetSynonyms`. Scripts call exactly these numbers (`docs/lsci/kernel-usage.md`).
 
 ## 4. VM register map (Feb-1994)
 

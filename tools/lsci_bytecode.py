@@ -26,6 +26,7 @@ class Operand(enum.Enum):
 
 class Evidence(enum.Enum):
     CONFIRMED = "confirmed"
+    INFERRED = "inferred"
     SCI_BASELINE = "sci-baseline"
     INVALID = "invalid"
 
@@ -104,7 +105,6 @@ OPCODE_TABLE = (
     tuple(row(name) for name in STACK_OPERATORS) + CONTROL_OPCODES + variable_access_rows()
 )
 assert len(OPCODE_TABLE) == 128
-
 
 
 def opcode_number(name: str) -> int:
