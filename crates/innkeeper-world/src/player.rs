@@ -1,8 +1,8 @@
 use tracing::{info, info_span, warn};
 
 use crate::{
-    logon, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, Login,
-    ObjectStore, World,
+    logon, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage,
+    Login, ObjectStore, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -74,11 +74,13 @@ impl PlayerSession {
                     world.lands.occupancy(world.host),
                 )])
             }),
-            ClientMessage::Send(_)
-            | ClientMessage::SetInt(_)
-            | ClientMessage::SetStr(_)
-            | ClientMessage::Multicast(_)
-            | ClientMessage::ObjExists(_) => {
+            ClientMessage::Send(ref relayed) => {
+                self.when_logged_in(|_| router::send(objects, connection, relayed))
+            }
+            ClientMessage::Multicast(ref relayed) => {
+                self.when_logged_in(|_| router::multicast(objects, connection, relayed))
+            }
+            ClientMessage::SetInt(_) | ClientMessage::SetStr(_) | ClientMessage::ObjExists(_) => {
                 info!(?message, "decoded, no handler yet: ignored");
                 Vec::new()
             }
@@ -138,8 +140,9 @@ fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage>
 mod tests {
     use super::*;
     use crate::{
-        AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, JoinNet, LandCatalog,
-        LandType, LoginNakReason, ObjectKind, PasswordSource, SendMessage, Sid,
+        AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, IntProperty, JoinNet,
+        LandCatalog, LandType, LoginNakReason, ObjectKind, PasswordSource, SendMessage, SetInt,
+        Sid,
     };
 
     const ME: ConnectionId = ConnectionId(1);
@@ -239,16 +242,37 @@ mod tests {
     }
 
     #[test]
-    fn decoded_shared_object_commands_are_ignored_until_a_handler_exists() {
+    fn property_commands_are_ignored_until_replication_exists() {
         let world = World::stock();
         let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();
         let _ = player.handle(&world, &mut objects, ME, &login(7));
-        let relay = ClientMessage::Send(SendMessage {
+        let _ = player.handle(&world, &mut objects, ME, &join_game_object());
+        let set = ClientMessage::SetInt(SetInt {
+            target: Sid(0x0100),
+            from: Sid(0x0100),
+            properties: vec![IntProperty {
+                offset: 1,
+                value: 2,
+            }],
+        });
+        assert!(player.handle(&world, &mut objects, ME, &set).is_empty());
+    }
+
+    #[test]
+    fn a_send_to_a_held_object_comes_back_to_its_holder() {
+        let world = World::stock();
+        let mut objects = ObjectStore::new();
+        let mut player = PlayerSession::new();
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
+        let _ = player.handle(&world, &mut objects, ME, &join_game_object());
+        let relay = SendMessage {
             to: Sid(0x0100),
             from: Sid(0),
             payload: vec![1, 0],
-        });
-        assert!(player.handle(&world, &mut objects, ME, &relay).is_empty());
+        };
+        let sent = ClientMessage::Send(relay.clone());
+        let replies = messages(player.handle(&world, &mut objects, ME, &sent));
+        assert_eq!(replies, vec![HostMessage::Send(relay)]);
     }
 }

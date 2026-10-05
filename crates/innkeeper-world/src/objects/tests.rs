@@ -166,3 +166,53 @@ fn assert_consistent(store: &ObjectStore) {
         }
     }
 }
+
+/// A waiting room with a player object of each connection in it.
+fn waiting_room() -> (ObjectStore, Sid, Sid, Sid) {
+    let mut store = ObjectStore::new();
+    let room = request(1, ObjectKind::LandGroup, 1);
+    let group = granted(&store.join(A, room));
+    assert_eq!(granted(&store.join(B, room)), group);
+    let a_player = granted(&store.join(A, request(2, ObjectKind::Object, 0xFFFF)));
+    let b_player = granted(&store.join(B, request(2, ObjectKind::Object, 0xFFFF)));
+    for (connection, member) in [(A, a_player), (B, b_player)] {
+        let join = GroupJoin {
+            group,
+            member,
+            version: None,
+        };
+        let _ = store.join_group(connection, join);
+    }
+    (store, group, a_player, b_player)
+}
+
+#[test]
+fn an_object_goes_to_its_holders_and_a_group_to_the_holders_of_its_members() {
+    let (store, group, a_player, b_player) = waiting_room();
+    assert_eq!(store.recipients(a_player), BTreeSet::from([A]));
+    assert_eq!(store.recipients(b_player), BTreeSet::from([B]));
+    assert_eq!(store.recipients(group), BTreeSet::from([A, B]));
+    assert!(store.recipients(Sid(0x7777)).is_empty());
+}
+
+#[test]
+fn a_member_that_left_the_group_no_longer_brings_its_connection() {
+    let (mut store, group, a_player, _) = waiting_room();
+    let leave = GroupLeave {
+        group,
+        member: a_player,
+    };
+    let _ = store.leave_group(A, leave);
+    assert_eq!(store.recipients(group), BTreeSet::from([B]));
+    assert_eq!(store.recipients(a_player), BTreeSet::from([A]));
+}
+
+#[test]
+fn a_hang_up_removes_the_connection_from_every_recipient_set() {
+    let (mut store, group, a_player, b_player) = waiting_room();
+    let _ = store.disconnect(B);
+    assert_eq!(store.recipients(group), BTreeSet::from([A]));
+    assert!(store.recipients(b_player).is_empty());
+    let _ = store.disconnect(A);
+    assert!(store.recipients(group).is_empty() && store.recipients(a_player).is_empty());
+}

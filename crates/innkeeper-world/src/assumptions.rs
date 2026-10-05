@@ -43,3 +43,6 @@ pub(crate) const GROUP_JOIN_TELLS_MEMBERS_ASSUMED: bool = true;
 /// A joinNet of this kind with a cookie the connection already holds replaces that object: the
 /// Clubhouse entry re-joins the game object with no leaveNet (section 5.4, section 11).
 pub(crate) const REJOIN_REPLACES_KIND_ASSUMED: ObjectKind = ObjectKind::GameObject;
+/// A `Send` also reaches the sender's own connection when it holds the target: the GOLF `CC` and
+/// Red Baron `0xC9` handlers count their own copy (section 11).
+pub(crate) const GROUP_SEND_ECHOES_SENDER_ASSUMED: bool = true;

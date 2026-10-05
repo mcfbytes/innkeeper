@@ -117,6 +117,18 @@ impl ObjectStore {
         group.map_or(0, |&group| self.members_of(group).len())
     }
 
+    /// The connections a `Send` to `sid` reaches: the holders of an object, the connections that hold
+    /// a member of a group; none for a SID nobody holds.
+    pub fn recipients(&self, sid: Sid) -> BTreeSet<ConnectionId> {
+        match self.objects.get(&sid) {
+            None => BTreeSet::new(),
+            Some(object) => match object.role {
+                Role::Object => object.holders.keys().copied().collect(),
+                Role::Group { .. } => self.connections_of(object.members()),
+            },
+        }
+    }
+
     /// True when no connection holds anything.
     pub fn is_empty(&self) -> bool {
         self.objects.is_empty()

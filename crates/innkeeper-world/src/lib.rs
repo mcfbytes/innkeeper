@@ -12,6 +12,7 @@ mod logon;
 mod message;
 mod objects;
 mod player;
+pub mod router;
 mod store;
 mod world;
 
