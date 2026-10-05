@@ -1,0 +1,21 @@
+[package]
+name = "innkeeperd"
+description = "The innkeeper host daemon: TCP listener that answers the stock INN client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+innkeeper-session.workspace = true
+pad_thai.workspace = true
+tsn-link.workspace = true
+clap.workspace = true
+humantime.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
