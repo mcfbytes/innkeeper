@@ -1,0 +1,29 @@
+# A land switch to a host nobody answers at (docs/protocol/link-layer.md 5.1): the PAD clears the
+# call, and the driver's call to its default host then connects a fresh link. Syntax as in link_lost.txt.
+> @
+> D
+> \r
+< \r\nTERMINAL=
+> \r
+< \r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
+> \r
+< \r\n@
+> SET? 0:0,32:0\r
+< \r\n@
+> D\r
+< \r\nSIERRA DISCONNECTED\r\n@
+e link lost: the PAD cleared the call
+> c 83420208\r
+< \r\n83420208 DISCONNECTED\r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10

@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::time::Instant;
 
-use pad_thai::{HayesConfig, Line, LineEvent, LineKind, LineOutput, ModemEvent, PadEvent};
+use pad_thai::{
+    HayesConfig, Line, LineEvent, LineKind, LineOutput, ModemEvent, PadEvent, Reachable,
+};
 use tsn_link::{Link, LinkConfig, LinkEvent, LinkOutput, Message};
 
 use crate::SessionError;
@@ -63,6 +65,13 @@ impl Session {
             host: HostLink::Offline,
             outputs: VecDeque::new(),
         }
+    }
+
+    /// The same session with calls connecting only where a host answers.
+    #[must_use]
+    pub fn with_reachable(mut self, reachable: Reachable) -> Self {
+        self.line = self.line.with_reachable(reachable);
+        self
     }
 
     pub fn handle_input(&mut self, bytes: &[u8], now: Instant) {

@@ -4,6 +4,7 @@
 use std::time::{Duration, Instant};
 
 use innkeeper_session::{Session, SessionConfig, SessionError, SessionEvent, SessionOutput};
+use pad_thai::{HostAddress, Reachable};
 use tsn_link::Message;
 
 fn unescape(text: &str) -> Vec<u8> {
@@ -94,8 +95,11 @@ impl Pending {
 }
 
 fn run_transcript(transcript: &str) {
+    run_transcript_on(Session::new(SessionConfig::default()), transcript);
+}
+
+fn run_transcript_on(mut session: Session, transcript: &str) {
     let mut now = Instant::now();
-    let mut session = Session::new(SessionConfig::default());
     let mut pending = Pending {
         names_every_link_loss: transcript.lines().any(|text| text.starts_with("e ")),
         ..Pending::default()
@@ -161,6 +165,14 @@ fn a_lost_call_is_reported_once() {
 #[test]
 fn host_frames_wait_out_a_program_switch_in_order() {
     run_transcript(include_str!("golden/program_switch.txt"));
+}
+
+#[test]
+fn a_call_to_a_host_nobody_runs_is_cleared_and_the_default_call_connects() {
+    let hosts = ["SIERRA", "83420207"].map(|host| HostAddress::try_new(host).unwrap());
+    let reachable = Reachable::Only(hosts.to_vec());
+    let session = Session::new(SessionConfig::default()).with_reachable(reachable);
+    run_transcript_on(session, include_str!("golden/unreachable_host.txt"));
 }
 
 #[test]

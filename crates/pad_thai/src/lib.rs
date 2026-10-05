@@ -12,6 +12,6 @@ mod typed_line;
 
 pub use error::PadError;
 pub use hayes_fever::{HayesConfig, ModemEvent};
-pub use host::HostAddress;
+pub use host::{HostAddress, Reachable};
 pub use line::{Line, LineEvent, LineKind, LineOutput};
 pub use pad::PadEvent;

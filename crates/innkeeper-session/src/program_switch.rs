@@ -1,4 +1,5 @@
 //! The host's quiet window while the client chains programs (docs/protocol/int14h-api.md 9.3).
+//! The driver arms it when the world says a program ended (`PlayerSession::ends_program`).
 
 use std::time::Instant;
 

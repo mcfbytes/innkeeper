@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use crate::hayes_fever::{HayesConfig, HayesModem, ModemEvent, ModemOutput};
 use crate::pad::{Pad, PadOutput};
-use crate::PadEvent;
+use crate::{PadEvent, Reachable};
 
 /// What sits between the client's UART and us.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -63,8 +63,15 @@ impl Line {
         Line {
             hayes,
             front: Front::for_kind(kind, hayes),
-            pad: Pad::new(),
+            pad: Pad::new(Reachable::Any),
         }
+    }
+
+    /// The same line with calls connecting only where a host answers.
+    #[must_use]
+    pub fn with_reachable(mut self, reachable: Reachable) -> Self {
+        self.pad = Pad::new(reachable);
+        self
     }
 
     #[must_use]
@@ -130,7 +137,7 @@ impl Line {
                 ModemOutput::Event(event) => {
                     let pad_reaction = match event {
                         ModemEvent::Dialled { .. } | ModemEvent::HungUp => {
-                            self.pad = Pad::new();
+                            self.pad.restart();
                             Vec::new()
                         }
                         ModemEvent::Break => self.pad.escape(),

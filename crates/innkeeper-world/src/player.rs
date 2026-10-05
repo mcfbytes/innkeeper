@@ -1,5 +1,6 @@
 use tracing::{info, info_span, warn};
 
+use crate::assumptions::PROGRAM_ENDS_WITH_LEAVE_OF_ASSUMED;
 use crate::{
     logon, mail, presence, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
     HostMessage, Login, ObjectStore, World,
@@ -48,7 +49,7 @@ impl PlayerSession {
         let reply = |messages: Vec<HostMessage>| replies_to(connection, messages);
         match *message {
             ClientMessage::Login(ref login) => {
-                let mut deliveries = objects.disconnect(connection);
+                let mut deliveries = self.end_call(objects, connection);
                 deliveries.extend(reply(vec![self.log_in(world, login)]));
                 deliveries
             }
@@ -93,6 +94,38 @@ impl PlayerSession {
                 Vec::new()
             }
         }
+    }
+
+    /// The call ended, or a new call or Login replaces it: everything the connection held is
+    /// released, and the next program logs in again (docs/protocol/messages.md 5.2).
+    #[must_use]
+    pub fn end_call(
+        &mut self,
+        objects: &mut ObjectStore,
+        connection: ConnectionId,
+    ) -> Vec<Delivery> {
+        if let PlayerState::LoggedIn(player) = &self.state {
+            info!(persona = %player.account.persona, "call ended, awaiting Login");
+        }
+        self.state = PlayerState::AwaitingLogin;
+        objects.disconnect(connection)
+    }
+
+    /// Whether this message ends the client's program: the land lets go of its game object as it
+    /// hands the line to the next one, which then drops whatever is half received.
+    pub fn ends_program(
+        &self,
+        objects: &ObjectStore,
+        connection: ConnectionId,
+        message: &ClientMessage,
+    ) -> bool {
+        let PlayerState::LoggedIn(_) = self.state else {
+            return false;
+        };
+        let ClientMessage::LeaveNet(sid) = *message else {
+            return false;
+        };
+        objects.kind_held(connection, sid) == Some(PROGRAM_ENDS_WITH_LEAVE_OF_ASSUMED)
     }
 
     /// The persona the player plays now; none before the Login is accepted.

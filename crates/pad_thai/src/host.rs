@@ -30,6 +30,27 @@ impl HostAddress {
     }
 }
 
+/// Which call addresses a host answers at; the PAD clears a call to any other.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Reachable {
+    /// Every address answers: one host behind the PAD and no network to ask.
+    #[default]
+    Any,
+    Only(Vec<HostAddress>),
+}
+
+impl Reachable {
+    /// Mnemonics are matched without regard to case, as the client may write `hostID` either way.
+    pub fn admits(&self, host: &HostAddress) -> bool {
+        match self {
+            Reachable::Any => true,
+            Reachable::Only(hosts) => hosts
+                .iter()
+                .any(|known| known.0.eq_ignore_ascii_case(&host.0)),
+        }
+    }
+}
+
 impl fmt::Display for HostAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -47,5 +68,15 @@ mod tests {
         assert!(HostAddress::try_new("").is_err());
         assert!(HostAddress::try_new("TWO WORDS").is_err());
         assert!(HostAddress::try_new("ABCDEFGHIJKLMNO").is_err());
+    }
+
+    #[test]
+    fn only_listed_addresses_are_reachable() {
+        let sierra = HostAddress::try_new("SIERRA").unwrap();
+        let other = HostAddress::try_new("83420208").unwrap();
+        let only = Reachable::Only(vec![sierra]);
+        assert!(only.admits(&HostAddress::try_new("sierra").unwrap()));
+        assert!(!only.admits(&other));
+        assert!(Reachable::Any.admits(&other));
     }
 }

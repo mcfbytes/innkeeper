@@ -12,3 +12,6 @@ pub(crate) const TERMINAL_PROMPT_ASSUMED: &str = "\r\nTERMINAL=";
 pub(crate) const FRAMING_BIT_ASSUMED: u8 = 0x80;
 /// Bare CRs during wake-up after which the PAD prompts even without `D` (checklist 3).
 pub(crate) const BARE_RETURNS_BEFORE_PROMPT_ASSUMED: u8 = 2;
+/// The PAD's answer to a call no host takes: a SprintNet PAD clears it with the same word as `D`, and
+/// the driver, which waits for ` CONNECTED`, then calls its default host (section 5.1, step 6).
+pub(crate) const UNREACHABLE_CALL_WORD_ASSUMED: &str = " DISCONNECTED";

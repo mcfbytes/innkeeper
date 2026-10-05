@@ -2,10 +2,10 @@ use std::fmt;
 
 use crate::assumptions::{
     BARE_RETURNS_BEFORE_PROMPT_ASSUMED, FRAMING_BIT_ASSUMED, PAD_LINE_BREAK_ASSUMED,
-    PAD_PROMPT_ASSUMED, TERMINAL_PROMPT_ASSUMED,
+    PAD_PROMPT_ASSUMED, TERMINAL_PROMPT_ASSUMED, UNREACHABLE_CALL_WORD_ASSUMED,
 };
 use crate::typed_line::{TypedLine, CR, SEVEN_BITS};
-use crate::HostAddress;
+use crate::{HostAddress, Reachable};
 
 const MAX_COMMAND_LEN: usize = 127;
 /// The driver waits for exactly these words, the leading space included (`MODEM.DRV:0E94`, `0FC0`).
@@ -16,6 +16,8 @@ const DISCONNECTED_WORD: &str = " DISCONNECTED";
 pub enum PadEvent {
     Command(String),
     HostConnected(HostAddress),
+    /// No host answers at the address; the line stays at the prompt.
+    HostUnreachable(HostAddress),
     HostDisconnected(HostAddress),
     /// A BREAK or link-level escape returned the line to the PAD prompt.
     Escaped,
@@ -77,22 +79,23 @@ enum PadCommand<'a> {
 #[derive(Debug)]
 pub(crate) struct Pad {
     state: PadState,
+    reachable: Reachable,
 }
 
-impl Default for Pad {
-    fn default() -> Self {
+impl Pad {
+    pub(crate) fn new(reachable: Reachable) -> Self {
         Pad {
             state: PadState::Wakeup {
                 terminal_requested: false,
                 bare_returns: 0,
             },
+            reachable,
         }
     }
-}
 
-impl Pad {
-    pub(crate) fn new() -> Self {
-        Self::default()
+    /// A new modem call starts the dialogue again; the hosts the network reaches stay.
+    pub(crate) fn restart(&mut self) {
+        *self = Pad::new(std::mem::take(&mut self.reachable));
     }
 
     pub(crate) fn is_transferring(&self) -> bool {
@@ -167,7 +170,14 @@ impl Pad {
         outputs.push(PadOutput::Event(PadEvent::Command(text.to_owned())));
         match parse_pad_command(text) {
             PadCommand::Call(address) => match HostAddress::try_new(address) {
-                Ok(host) => self.connect(host, outputs),
+                Ok(host) if self.reachable.admits(&host) => self.connect(host, outputs),
+                Ok(host) => {
+                    let line =
+                        format!("{PAD_LINE_BREAK_ASSUMED}{host}{UNREACHABLE_CALL_WORD_ASSUMED}");
+                    outputs.push(reply(&line));
+                    outputs.push(PadOutput::Event(PadEvent::HostUnreachable(host)));
+                    self.enter_command(call, outputs);
+                }
                 Err(_) => {
                     outputs.push(PadOutput::Event(PadEvent::InvalidAddress(
                         address.to_owned(),
@@ -230,6 +240,7 @@ impl fmt::Display for PadEvent {
         match self {
             PadEvent::Command(text) => write!(f, "PAD command {text:?}"),
             PadEvent::HostConnected(host) => write!(f, "call to {host} connected"),
+            PadEvent::HostUnreachable(host) => write!(f, "call to {host} cleared: no host there"),
             PadEvent::HostDisconnected(host) => write!(f, "call to {host} cleared"),
             PadEvent::Escaped => write!(f, "escaped to the PAD prompt"),
             PadEvent::UnknownCommand(text) => write!(f, "unknown PAD command {text:?}"),
@@ -256,7 +267,7 @@ mod tests {
 
     #[test]
     fn wake_up_above_1200_bps() {
-        let mut pad = Pad::new();
+        let mut pad = Pad::new(Reachable::Any);
         assert_eq!(replies(&pad.handle_input(b"@D")), "");
         assert_eq!(replies(&pad.handle_input(b"\r")), "\r\nTERMINAL=");
         assert_eq!(replies(&pad.handle_input(b"\r")), "\r\n@");
@@ -265,13 +276,13 @@ mod tests {
 
     #[test]
     fn wake_up_at_1200_bps_starts_with_a_return() {
-        let mut pad = Pad::new();
+        let mut pad = Pad::new(Reachable::Any);
         assert_eq!(replies(&pad.handle_input(b"\rD\r\r")), "\r\nTERMINAL=\r\n@");
     }
 
     #[test]
     fn call_connects_and_later_bytes_are_data() {
-        let mut pad = Pad::new();
+        let mut pad = Pad::new(Reachable::Any);
         let _ = pad.handle_input(b"@D\r\r");
         let outputs = pad.handle_input(b"c SIERRA\r\x81");
         assert_eq!(replies(&outputs), "\r\nSIERRA CONNECTED\r\n");
@@ -281,7 +292,7 @@ mod tests {
 
     #[test]
     fn land_switch_dialogue() {
-        let mut pad = Pad::new();
+        let mut pad = Pad::new(Reachable::Any);
         let _ = pad.handle_input(b"@D\r\rc SIERRA\r");
         assert_eq!(replies(&pad.escape()), "\r\n@");
         assert_eq!(replies(&pad.handle_input(b"SET? 0:0,32:0\r")), "\r\n@");
@@ -296,8 +307,21 @@ mod tests {
     }
 
     #[test]
+    fn a_call_no_host_takes_is_cleared_and_the_default_call_still_connects() {
+        let mut pad = Pad::new(Reachable::Only(vec![sierra()]));
+        let _ = pad.handle_input(b"@D\r\r");
+        let unreachable = HostAddress::try_new("83420208").unwrap();
+        let outputs = pad.handle_input(b"c 83420208\r");
+        assert_eq!(replies(&outputs), "\r\n83420208 DISCONNECTED\r\n@");
+        assert!(outputs.contains(&PadOutput::Event(PadEvent::HostUnreachable(unreachable))));
+        assert!(!pad.is_transferring());
+        let outputs = pad.handle_input(b"c SIERRA\r");
+        assert_eq!(replies(&outputs), "\r\nSIERRA CONNECTED\r\n");
+    }
+
+    #[test]
     fn framing_during_wake_up_means_direct() {
-        let mut pad = Pad::new();
+        let mut pad = Pad::new(Reachable::Any);
         let outputs = pad.handle_input(&[0x81, 0x49]);
         let direct = PadEvent::HostConnected(HostAddress::direct());
         assert_eq!(

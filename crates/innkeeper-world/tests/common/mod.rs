@@ -1,6 +1,6 @@
 //! Scripted players on one object store, every delivery checked byte for byte and in order.
 //! Line syntax: "A > name | hex" is a message from player A, "B < name | hex" a delivery to B
-//! that the latest step caused, and "A ! hang up" drops A's connection.
+//! that the latest step caused, and "A ! hang up" ends A's call, so A logs in again.
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)] // test helpers may abort
 #![allow(dead_code)] // each test binary uses its own part
 
@@ -70,8 +70,9 @@ impl Table {
             }
             "!" => {
                 self.assert_nothing_pending(number);
-                self.pending
-                    .extend(self.objects.disconnect(connection(who)));
+                let player = seat(&mut self.players, who);
+                let released = player.end_call(&mut self.objects, connection(who));
+                self.pending.extend(released);
             }
             other => panic!("line {number}: unknown direction {other:?}"),
         }

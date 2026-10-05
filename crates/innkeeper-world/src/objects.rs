@@ -138,6 +138,15 @@ impl ObjectStore {
         }
     }
 
+    /// What `sid` is, when this connection holds it.
+    pub fn kind_held(&self, connection: ConnectionId, sid: Sid) -> Option<ObjectKind> {
+        let object = self.objects.get(&sid)?;
+        object
+            .holders
+            .contains_key(&connection)
+            .then_some(object.request.kind)
+    }
+
     /// True when no connection holds anything.
     pub fn is_empty(&self) -> bool {
         self.objects.is_empty()

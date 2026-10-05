@@ -25,6 +25,7 @@ pub use ids::{
     AccountId, ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, Sid, Stamp,
 };
 pub use land::LandCatalog;
+pub use logon::CallAddress;
 pub use message::{
     Ack, ChangePassword, ClientMessage, EncodedPassword, Envelope, GroupJoin, GroupLeave,
     GroupMembers, GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet,

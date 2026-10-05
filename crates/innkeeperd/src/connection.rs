@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
-use innkeeper_world::{ConnectionId, HostMessage, ObjectStore, World};
+use innkeeper_world::{CallAddress, ConnectionId, HostMessage, ObjectStore, World};
+use pad_thai::{HostAddress, LineEvent, PadEvent, Reachable};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
@@ -80,9 +81,9 @@ async fn drive(
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
     let mut host = Host::new(settings, id);
-    let session = Session::new(settings.session);
+    let session = Session::new(settings.session).with_reachable(reachable(&settings.world));
     let result = pump(&mut stream, session, &mut host, &mut capture).await;
-    host.hang_up();
+    host.end_call();
     record(&mut capture, Capture::finish_run);
     result
 }
@@ -140,14 +141,35 @@ async fn deliver_outputs(
                         let answer = host.answer(message.body());
                         report(capture, now, answer.exchange);
                         report(capture, now, send_all(session, answer.outgoing, now));
+                        if answer.ends_program {
+                            hold_for_next_program(session, now);
+                        }
                     }
-                    SessionEvent::LinkLost(_) => host.hang_up(),
+                    SessionEvent::LinkLost(_)
+                    | SessionEvent::Line(LineEvent::Pad(PadEvent::HostConnected(_))) => {
+                        host.end_call();
+                    }
                     SessionEvent::Line(_) | SessionEvent::Link(_) => {}
                 }
             }
         }
     }
     Ok(())
+}
+
+/// The PAD connects calls only to the addresses that name this host.
+fn reachable(world: &World) -> Reachable {
+    let addresses = CallAddress::reaching(world).into_iter();
+    let hosts = addresses.filter_map(|address| HostAddress::try_new(address.as_str()).ok());
+    Reachable::Only(hosts.collect())
+}
+
+/// The next program starts with empty queues, so nothing may arrive before it speaks.
+fn hold_for_next_program(session: &mut Session, now: Instant) {
+    match session.begin_program_switch(now) {
+        Ok(()) => info!("program switch: host frames wait for the next program"),
+        Err(error) => warn!(%error, "program switch without a call"),
+    }
 }
 
 fn send_all(session: &mut Session, messages: Vec<HostMessage>, now: Instant) -> Vec<Exchange> {

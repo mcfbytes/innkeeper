@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 use std::mem;
 
-use innkeeper_world::HostMessage;
+use innkeeper_world::{CallAddress, HostMessage};
 use int14h::{
     Call, ConnectResult, ExecStatus, LineRate, LinkStatus, MessageBody, Reply, SharedData,
-    SwitchHostResult,
+    SwitchAddress, SwitchHostResult,
 };
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::host::{Exchange, Host};
 
@@ -84,10 +84,7 @@ impl<'s> Executive<'s> {
             Call::Poll => Reply::Poll(self.link_status()),
             Call::Service => Reply::Service(self.link_status()),
             Call::IsTransmitIdle => Reply::IsTransmitIdle { idle: true },
-            Call::SwitchHost(address) => {
-                debug!(address = address.as_str(), "switch host");
-                Reply::SwitchHost(self.switch_host())
-            }
+            Call::SwitchHost(address) => Reply::SwitchHost(self.switch_host(&address)),
             Call::Flush => Reply::Flush,
             Call::GetLineRate => Reply::GetLineRate(self.line_rate),
             Call::SetAckTimeout(ticks) => {
@@ -125,7 +122,7 @@ impl<'s> Executive<'s> {
 
     /// The transport closed: whatever the call held is released.
     pub(crate) fn hang_up(&mut self) {
-        self.host.hang_up();
+        self.host.end_call();
     }
 
     fn is_connected(&self) -> bool {
@@ -160,7 +157,7 @@ impl<'s> Executive<'s> {
                 waiting = received.len(),
                 "client stopped receiving, call ended"
             );
-            self.host.hang_up();
+            self.host.end_call();
             self.line = Line::Dropped;
         }
     }
@@ -174,7 +171,7 @@ impl<'s> Executive<'s> {
 
     fn disconnect(&mut self) {
         if self.is_connected() {
-            self.host.hang_up();
+            self.host.end_call();
         }
         self.line = Line::Idle;
     }
@@ -189,14 +186,28 @@ impl<'s> Executive<'s> {
         }
     }
 
-    fn switch_host(&mut self) -> SwitchHostResult {
-        match &mut self.line {
-            Line::Connected(received) => {
-                received.clear();
-                SwitchHostResult::Switched
-            }
-            Line::Idle | Line::Dropped => SwitchHostResult::NotConnected,
+    /// MODEM.DRV's reconnect: the old call is cleared, then the new address is called, or the
+    /// driver's default host when the argument names none (link-layer.md 5.1).
+    fn switch_host(&mut self, argument: &SwitchAddress) -> SwitchHostResult {
+        if !self.is_connected() {
+            return SwitchHostResult::NotConnected;
         }
+        self.host.end_call();
+        let address = CallAddress::from_driver_argument(argument.as_str());
+        let new_call = || Line::Connected(VecDeque::new());
+        let (result, line) = match address {
+            Some(address) if self.host.reaches(&address) => {
+                (SwitchHostResult::Switched, new_call())
+            }
+            Some(address) => {
+                warn!(%address, "switch to a host this server does not run");
+                (SwitchHostResult::HostUnreachable, Line::Idle)
+            }
+            None => (SwitchHostResult::Remade, new_call()),
+        };
+        info!(argument = argument.as_str(), ?result, "switch host");
+        self.line = line;
+        result
     }
 }
 
@@ -279,20 +290,63 @@ mod tests {
         assert_eq!(refused, Reply::Send { queued: false });
     }
 
-    #[test]
-    fn switch_host_clears_what_is_waiting() {
-        let settings = settings();
-        let mut executive = connected(&settings);
+    fn switch_host(executive: &mut Executive<'_>, argument: &str) -> SwitchHostResult {
+        let argument = SwitchAddress::try_new(argument).unwrap();
+        let Reply::SwitchHost(result) = executive.handle(Call::SwitchHost(argument)).reply else {
+            panic!("SwitchHost answered something else");
+        };
+        result
+    }
+
+    /// A logged-in client holding its player object, with the Ack still waiting to be received.
+    fn playing(settings: &ConnectionSettings) -> Executive<'_> {
+        let mut executive = connected(settings);
         send(&mut executive, LOGIN);
-        let address = SwitchAddress::try_new("anywhere").unwrap();
-        let switched = executive.handle(Call::SwitchHost(address.clone())).reply;
-        assert_eq!(switched, Reply::SwitchHost(SwitchHostResult::Switched));
+        send(&mut executive, JOIN_PLAYER);
+        assert!(!settings.objects.lock().unwrap().is_empty());
+        executive
+    }
+
+    #[test]
+    fn switching_to_this_host_starts_a_new_call_that_logs_in_again() {
+        let settings = settings();
+        let mut executive = playing(&settings);
+        let switched = switch_host(&mut executive, "311083420207");
+        assert_eq!(switched, SwitchHostResult::Switched);
+        assert!(settings.objects.lock().unwrap().is_empty());
         assert_eq!(receive(&mut executive), None);
         assert_eq!(status(&mut executive), reports_connected(true));
 
-        executive.handle(Call::Disconnect);
-        let refused = executive.handle(Call::SwitchHost(address)).reply;
-        assert_eq!(refused, Reply::SwitchHost(SwitchHostResult::NotConnected));
+        assert_eq!(
+            send(&mut executive, JOIN_PLAYER),
+            Reply::Send { queued: true }
+        );
+        assert_eq!(receive(&mut executive), None, "nothing before the Login");
+        send(&mut executive, LOGIN);
+        assert_eq!(receive(&mut executive), Some(hex(LOGIN_ACK)));
+    }
+
+    #[test]
+    fn a_host_this_server_does_not_run_is_unreachable_and_ends_the_call() {
+        let settings = settings();
+        let mut executive = playing(&settings);
+        let refused = switch_host(&mut executive, "311083420208");
+        assert_eq!(refused, SwitchHostResult::HostUnreachable);
+        assert!(settings.objects.lock().unwrap().is_empty());
+        assert_eq!(status(&mut executive), reports_connected(false));
+        assert_eq!(
+            switch_host(&mut executive, "SIERRA"),
+            SwitchHostResult::NotConnected
+        );
+    }
+
+    #[test]
+    fn an_argument_naming_no_address_remakes_the_call_to_the_default_host() {
+        let settings = settings();
+        let mut executive = playing(&settings);
+        assert_eq!(switch_host(&mut executive, ""), SwitchHostResult::Remade);
+        assert!(settings.objects.lock().unwrap().is_empty());
+        assert_eq!(status(&mut executive), reports_connected(true));
     }
 
     #[test]

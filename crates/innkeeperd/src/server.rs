@@ -106,6 +106,7 @@ pub(crate) mod tests {
 
     use innkeeper_session::SessionConfig;
     use innkeeper_world::{AccountId, AccountRecord, EncodedPassword};
+    use int14h::{Call, ConnectResult, DialString, Reply, SwitchAddress, SwitchHostResult};
     use pad_thai::{HayesConfig, LineKind};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
@@ -227,17 +228,54 @@ pub(crate) mod tests {
             expect_reply(&mut stream, b"\r\nTERMINAL=\r\n@").await;
             stream.write_all(b"c SIERRA\r").await.unwrap();
             expect_reply(&mut stream, b"\r\nSIERRA CONNECTED\r\n").await;
-            let config = LinkConfig {
-                quiet_after_connect: Duration::ZERO,
-                ..LinkConfig::default()
-            };
-            let link = Link::new(config, Instant::now());
-            let received = VecDeque::new();
             LinkedClient {
                 stream,
-                link,
-                received,
+                link: client_link(),
+                received: VecDeque::new(),
             }
+        }
+
+        /// MODEM.DRV's reconnect: escape to the PAD, clear the call to `old`, call `new`.
+        async fn switch_host(&mut self, old: &str, new: &str, answers: bool) {
+            self.stream.write_all(b"\r").await.unwrap();
+            expect_reply(&mut self.stream, b"\r\n@").await;
+            self.stream.write_all(b"SET? 0:0,32:0\r").await.unwrap();
+            expect_reply(&mut self.stream, b"\r\n@").await;
+            self.stream.write_all(b"D\r").await.unwrap();
+            let cleared = format!("\r\n{old} DISCONNECTED\r\n@");
+            expect_reply(&mut self.stream, cleared.as_bytes()).await;
+            self.call_host(new, answers).await;
+        }
+
+        /// A PAD call: a host that answers starts a new link, any other is cleared at once.
+        async fn call_host(&mut self, host: &str, answers: bool) {
+            let command = format!("c {host}\r");
+            self.stream.write_all(command.as_bytes()).await.unwrap();
+            let reply = match answers {
+                true => format!("\r\n{host} CONNECTED\r\n"),
+                false => format!("\r\n{host} DISCONNECTED\r\n@"),
+            };
+            expect_reply(&mut self.stream, reply.as_bytes()).await;
+            self.link = client_link();
+            self.received.clear();
+        }
+
+        /// Only link control arrives for a while: no message reaches the client.
+        async fn expect_silence(&mut self) {
+            let deadline = tokio::time::Instant::now() + SILENCE;
+            let mut chunk = [0; 256];
+            loop {
+                let read = tokio::time::timeout_at(deadline, self.stream.read(&mut chunk)).await;
+                let Ok(read) = read else {
+                    break;
+                };
+                let read = read.unwrap();
+                assert!(read > 0, "server hung up");
+                let escaped = self.link.handle_input(&chunk[..read], Instant::now());
+                assert_eq!(escaped, None);
+                self.write_outputs().await;
+            }
+            assert!(self.received.is_empty(), "arrived: {:02x?}", self.received);
         }
 
         /// MODEM.DRV's hang-up: `+++` after a guard time, then `AT H0`; the socket stays open.
@@ -283,6 +321,15 @@ pub(crate) mod tests {
         }
     }
 
+    /// The client's end of a fresh link; the host's quiet start is the server's concern.
+    fn client_link() -> Link {
+        let config = LinkConfig {
+            quiet_after_connect: Duration::ZERO,
+            ..LinkConfig::default()
+        };
+        Link::new(config, Instant::now())
+    }
+
     pub(crate) fn hex(text: &str) -> Vec<u8> {
         let pairs = text.split_whitespace();
         pairs
@@ -297,6 +344,12 @@ pub(crate) mod tests {
     pub(crate) const JOIN_PLAYER: &str = "07 00 00 00 8c 09 01 01 ff ff 1e 00";
     pub(crate) const JOIN_WAITING_ROOM: &str = "07 00 00 00 c0 01 05 01 01 00 80 00";
     const GUARD_TIME: Duration = Duration::from_millis(50);
+    const JOIN_GAME_OBJECT: &str = "07 00 00 00 60 01 81 01 00 00 0c 00";
+    /// How long a test waits to be sure nothing arrives.
+    const SILENCE: Duration = Duration::from_millis(300);
+    /// This host's X.25 number without the DNIC, and the number of a host nobody runs.
+    const THIS_HOST: &str = "83420207";
+    const OTHER_HOST: &str = "83420208";
 
     async fn serve_on_loopback(session: SessionConfig) -> SocketAddr {
         let settings = ConnectionSettings::new(session, World::stock(), None);
@@ -423,6 +476,34 @@ pub(crate) mod tests {
             }
         }
 
+        /// Switches from the call to `old` to the host at `new`; `answers` says whether it is this one.
+        async fn switch_host(&mut self, old: &str, new: &str, answers: bool) {
+            match self {
+                Client::Legacy(client) => client.switch_host(old, new, answers).await,
+                Client::Transport(client) => {
+                    let argument = SwitchAddress::try_new(format!("3110{new}")).unwrap();
+                    let expected = match answers {
+                        true => SwitchHostResult::Switched,
+                        false => SwitchHostResult::HostUnreachable,
+                    };
+                    let switched = client.call(Call::SwitchHost(argument)).await;
+                    assert_eq!(switched, Reply::SwitchHost(expected));
+                }
+            }
+        }
+
+        /// After an unreachable host: MODEM.DRV calls its default host, a transport client dials.
+        async fn call_again(&mut self) {
+            match self {
+                Client::Legacy(client) => client.call_host("SIERRA", true).await,
+                Client::Transport(client) => {
+                    let dial = DialString::try_new("ATDT0").unwrap();
+                    let connected = client.call(Call::Connect(dial)).await;
+                    assert_eq!(connected, Reply::Connect(ConnectResult::Connected));
+                }
+            }
+        }
+
         /// Logs on and puts a player object with the given SID low byte into the waiting room.
         async fn enter_waiting_room(&mut self, player: &str) {
             self.send(LOGIN).await;
@@ -462,5 +543,72 @@ pub(crate) mod tests {
     async fn a_legacy_and_a_transport_client_meet_in_one_waiting_room() {
         meet(Kind::Legacy, Kind::Transport).await;
         meet(Kind::Transport, Kind::Legacy).await;
+    }
+
+    /// `kind` switches hosts twice while a client of the `peer` kind watches from the waiting room.
+    async fn switch_hosts(kind: Kind, peer: Kind) {
+        let listeners = Listeners::start().await;
+        let mut client = listeners.client(kind).await;
+        client.enter_waiting_room("00").await;
+        let mut watcher = listeners.client(peer).await;
+        watcher.enter_waiting_room("02").await;
+        client.expect("0a 00 01 01 02 01").await;
+
+        client.switch_host("SIERRA", THIS_HOST, true).await;
+        watcher.expect("0b 00 01 01 00 01").await;
+        watcher.expect("09 00 00 01").await;
+        client.enter_waiting_room("03").await;
+        watcher.expect("0a 00 01 01 03 01").await;
+
+        client.switch_host(THIS_HOST, OTHER_HOST, false).await;
+        watcher.expect("0b 00 01 01 03 01").await;
+        watcher.expect("09 00 03 01").await;
+        client.call_again().await;
+        client.enter_waiting_room("04").await;
+        watcher.expect("0a 00 01 01 04 01").await;
+    }
+
+    #[tokio::test]
+    async fn a_host_switch_releases_the_call_alike_on_both_transports() {
+        switch_hosts(Kind::Legacy, Kind::Transport).await;
+        switch_hosts(Kind::Transport, Kind::Legacy).await;
+    }
+
+    #[tokio::test]
+    async fn notices_wait_while_the_client_chains_programs() {
+        let listeners = Listeners::start().await;
+        let Client::Legacy(mut hub) = listeners.client(Kind::Legacy).await else {
+            panic!("asked for a legacy client");
+        };
+        hub.send(LOGIN).await;
+        hub.expect(LOGIN_ACK).await;
+        hub.send(JOIN_GAME_OBJECT).await;
+        hub.expect("08 00 60 01 00 00 00 01").await;
+        hub.send(JOIN_PLAYER).await;
+        hub.expect("08 00 8c 09 00 00 01 01").await;
+        hub.send(JOIN_WAITING_ROOM).await;
+        hub.expect("08 00 c0 01 00 00 02 01").await;
+        hub.send("0a 00 02 01 01 01 02 03 12").await;
+        hub.expect("0a 00 02 01 01 01").await;
+        // The land frees its game object and exits; the next program has not spoken yet.
+        hub.send("09 00 00 01 00 00").await;
+        hub.expect_silence().await;
+
+        let mut peer = listeners.client(Kind::Transport).await;
+        peer.send(LOGIN).await;
+        peer.expect(LOGIN_ACK).await;
+        peer.send(JOIN_PLAYER).await;
+        peer.expect("08 00 8c 09 00 00 03 01").await;
+        peer.send(JOIN_WAITING_ROOM).await;
+        peer.expect("08 00 c0 01 00 00 02 01").await;
+        peer.send("0a 00 02 01 03 01 02 03 12").await;
+        peer.expect("0a 00 02 01 03 01").await;
+        hub.expect_silence().await;
+
+        hub.send("2f 01 00 00 00 00").await;
+        hub.expect("0a 00 02 01 03 01").await;
+        let occupancy = "2f 01 00 00 00 00 00 00 00 00 03 00 \
+                         07 01 01 40 02 07 02 01 40 00 07 03 01 40 00";
+        hub.expect(occupancy).await;
     }
 }

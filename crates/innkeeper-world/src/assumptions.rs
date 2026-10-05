@@ -64,3 +64,12 @@ pub(crate) const NO_ACCOUNT_MAILBOX_STATUS_ASSUMED: u8 = 2;
 pub(crate) const STORE_FAULT_MAILBOX_STATUS_ASSUMED: u8 = 4;
 /// Mail requests name a box, and only the requester's own box may be checked, listed, read or emptied.
 pub(crate) const OTHER_BOXES_ARE_PRIVATE_ASSUMED: bool = true;
+/// The mnemonic MODEM.DRV calls by default reaches whichever host answers it, this one
+/// (docs/protocol/link-layer.md 3.2).
+pub(crate) const HOME_MNEMONIC_ASSUMED: &str = "SIERRA";
+/// Host N's X.25 number without the DNIC is this prefix and N in two digits: the stock `HOSTADDR`
+/// lists hosts 7 to 14 at `3110834202NN` (section 7.2); other numbers follow the pattern.
+pub(crate) const HOST_NUMBER_PREFIX_ASSUMED: &str = "834202";
+/// A land frees its game object only as it hands the line to the next program (section 5.1, step 2;
+/// entering the Clubhouse re-joins it instead, 5.4), so that leaveNet starts the host's quiet window.
+pub(crate) const PROGRAM_ENDS_WITH_LEAVE_OF_ASSUMED: ObjectKind = ObjectKind::GameObject;
