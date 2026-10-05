@@ -177,11 +177,14 @@ Toolchain gates: `cargo fmt --check` (config `rustfmt.toml`), `cargo clippy --al
 Crates form a downward-only graph. A crate may depend on those below it, never above or sideways.
 
 ```
-innkeeper            bin: argument parsing, runtime, wiring only
-innkeeper-world      games, rooms, chat, accounts (domain behaviour)
+innkeeperd           bin: argument parsing, runtime, sockets, capture files, wiring only
+innkeeper-world      games, rooms, chat, accounts (domain behaviour; not written yet)
 innkeeper-session    connection state machines, no I/O
-innkeeper-wire       frame and message types, parse and encode, no I/O
+pad_thai, tsn-link,  modem and PAD dialogue, link framing, INT 14h API and transport:
+int14h               wire types, parse and encode, no I/O
 ```
+
+The crates as built are described in `docs/server/innkeeperd.md`.
 
 - Only the bin crate and a thin transport module depend on an async runtime. Everything below is
   synchronous and deterministic: input bytes and a clock value in, output bytes and events out.
