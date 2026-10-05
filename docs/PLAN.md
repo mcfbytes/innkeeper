@@ -3,7 +3,15 @@
 End goal: the ImagiNation Network client playable in ScummVM, connected to a new
 server (Rust, cloud-hosted, possibly distributed).
 
-Status (2026-10-04): reconnaissance done. Nothing has been built or changed in ScummVM yet.
+**Status (2026-10-05):**
+- **Original client, live:** the stock Feb-1994 client in headless DOSBox-X dials `innkeeperd`, logs on and
+  reaches the Clubhouse Waiting Room (`docs/protocol/captures.md`). The host does not route between players yet.
+- **ScummVM (`lsci` branch):** detection, DCL, lands, the LSCI kernel table and the script loader are done;
+  1,165 script images match `tools/lsci_image.py` byte for byte. Every land boots to its first `TSN(0)` call.
+- **Census:** every program's use of TSNEXEC's exports and its host messages are in `docs/protocol/int14h-census/`;
+  the server work items derived from it are in `docs/server/fanout-plan.md`.
+- **Next:** `kTSN` behind an offline executive and the boot-path kernels until the Clubhouse renders in
+  ScummVM; the fan-out plan's waves (objects and groups, router, outbox, presence, mail) so two clients meet.
 
 ---
 
@@ -132,36 +140,38 @@ We start with the legacy link, because it needs no installs and gives us ground 
 ### Phase 0: Workspace and tooling
 - [x] Extraction tools (`defuse_list.py`, `unlzexe.py`, `dcl.py`, `sci_res.py`, `unpuff.py`), plus all sets extracted under `work/`.
 - [x] ScummVM shallow clone in `scummvm/`, and `git init` with media and game data ignored.
-- [ ] Packages (needs the user, for sudo): `libsdl2-dev libsdl2-net-dev dosbox-x openjdk-21-jdk`, then Ghidra from its GitHub releases. Rust is already in `~/.cargo/bin`.
-- [ ] Build ScummVM with `--disable-all-engines --enable-engine=sci`.
+- [x] Packages (needs the user, for sudo): `libsdl2-dev libsdl2-net-dev dosbox-x openjdk-21-jdk`, then Ghidra from its GitHub releases. Rust is already in `~/.cargo/bin`.
+- [x] Build ScummVM with `--disable-all-engines --enable-engine=sci`.
 - [x] Install the Feb-94 client into a DOSBox-X directory, and confirm it reaches the dial screen offline (`tools/dosbox/`, `docs/dosbox.md`).
 
 ### Phase 1: Reverse-engineering, in two parallel tracks
 **Track A: the LSCI client**
-1. Find the kernel and opcode dispatch tables in LSCITV. This confirms the kernel numbering and the calling conventions, and shows how far the opcodes diverge from SCI.
-2. Decode the script, module (type 31) and vocab formats, and build `tools/lsci_disasm.py`.
-3. Produce the kernel usage report for every `callk` in every set: argc, argument provenance, how results are used, and sub-op histograms for `TSN`, `Array`, `String`, `List`, `Seq` and `Module`. Diff it across versions.
-4. Work out the semantics of each kernel handler.
+1. [x] Find the kernel and opcode dispatch tables in LSCITV. This confirms the kernel numbering and the calling conventions, and shows how far the opcodes diverge from SCI.
+2. [x] Decode the script, module (type 31) and vocab formats, and build `tools/lsci_disasm.py`.
+3. [x] Produce the kernel usage report for every `callk` in every set: argc, argument provenance, how results are used, and sub-op histograms for `TSN`, `Array`, `String`, `List`, `Seq` and `Module`. Diff it across versions.
+4. [ ] Work out the semantics of each kernel handler. (Deferred; blocked on server phases.)
 
 **Track B: the network seam**
-1. TSNEXEC's INT 14h handler: the list of AH functions, the register and buffer conventions, and how child programs find it.
-2. The com-driver API (MODEM.DRV and NOBRK.DRV), the TSN framing (checksums, acks, NAK and retry), and the login and handshake.
-3. Dynamic capture. `innkeeper` v0 is a TCP listener that logs every byte and scripts just enough PAD responses (`pad_thai`) to coax out the first TSN frames from DOSBox. This is the first Rust code. **Done for the first frame**: the stock client dials, logs on to the PAD and sends its Login (`docs/protocol/captures.md`); the host's replies are the next capture.
-4. Deliverable: `docs/protocol.md`, covering both the INT 14h API and the wire format.
+1. [x] TSNEXEC's INT 14h handler: the list of AH functions, the register and buffer conventions, and how child programs find it.
+2. [x] The com-driver API (MODEM.DRV and NOBRK.DRV), the TSN framing (checksums, acks, NAK and retry), and the login and handshake.
+3. [x] Dynamic capture. `innkeeper` v0 is a TCP listener that logs every byte and scripts just enough PAD responses (`pad_thai`) to coax out the first TSN frames from DOSBox. This is the first Rust code. **Done for the first frame**: the stock client dials, logs on to the PAD and sends its Login (`docs/protocol/captures.md`); the host's replies are the next capture.
+4. [x] Deliverable: `docs/protocol.md`, covering both the INT 14h API and the wire format.
 
 ### Phase 2: ScummVM LSCI bring-up, offline
-Detection; resource fixes (method 8 → DCL, type 31, shared `RESOURCE.002`); the LSCI script loader and kernel table; land switching in place of TSN.PRG chaining; and `kTSN` routed to an offline virtual TSNEXEC.
-**Milestone:** the Clubhouse renders and you can walk around. From there, use the ScummVM debugger for dynamic analysis.
+- [x] **Phase 2.1:** LSCI script loader—parsing (containers, objects, leading slots), image writing (block layout, opcode rewrite, relocation), and script loading (all nine set and land pairs boot identically; byte parity confirmed).
+- [ ] **Phase 2.2:** Detection; resource fixes (method 8 → DCL, type 31, shared `RESOURCE.002`); kernel table and `kTSN` stub routing to offline virtual TSNEXEC; land switching.
+- [ ] **Phase 2.3:** Clubhouse rendering. **Milestone:** you can walk around and use the debugger for dynamic analysis.
 
 ### Phase 3: `innkeeper` and live play
-- Crates: `int14h` (API and transport codecs), `inn-proto` (TSN messages), `pad_thai`, and `innkeeperd`.
-- Server services: accounts and login, presence, lands and rooms, chat and mail, game-session routing, and persistence (SQLite for development, Postgres in the cloud).
+- [x] **Phase 3.1:** Logon protocol (login, joinNet, ack, nak, groupJoin). Messages verified against live capture; Rust crates (innkeeper-session, innkeeper-world, innkeeperd) with typed protocol values, error handling, and test coverage.
+- [ ] **Phase 3.2:** Presence (occupancy, room state, chat, mail) and lands.
+- [ ] **Phase 3.3:** Game-session routing and persistence (SQLite dev, Postgres cloud).
 - **Integration ladder:**
-  1. A DOSBox client logs in.
-  2. Two DOSBox clients chat.
-  3. Two DOSBox clients play a card or board game.
-  4. A ScummVM client does the same over `int14h`.
-  5. ScummVM and DOSBox clients play together.
+  1. [ ] A DOSBox client logs in.
+  2. [ ] Two DOSBox clients chat.
+  3. [ ] Two DOSBox clients play a card or board game.
+  4. [ ] A ScummVM client does the same over `int14h`.
+  5. [ ] ScummVM and DOSBox clients play together.
 - Going distributed later means stateless gateways plus room or game shards over a bus.
 
 ### Phase 4: SCI coverage
@@ -173,6 +183,14 @@ All Clubhouse, SierraLand and CasinoLand games, the Dec-93 and TSN 2.1 variants,
 
 ### Phase 6: The Fates of Twinion
 The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and data formats against Yserbius first, and add the server-side differences.
+
+### Phase 7: Hosting and security (deferred; keep it simple first)
+- Host `innkeeperd` as a container (not a function app: sessions are long-lived TCP), with WebSocket-over-TLS
+  ingress and managed certificates; raw TCP+TLS stays available for self-hosters.
+- DOSBox cannot speak TLS: a small local bridge accepts DOSBox's modem connection on localhost and forwards it
+  over WSS. ScummVM connects over WSS directly.
+- The client sends its password as reversible obfuscation (`docs/protocol/messages.md` 4.1); the server stores
+  only an Argon2id hash of it, and TLS protects the wire.
 
 ### Deferred
 - **Red Baron and 3-D Golf:** DOSBox only, through the same server, whenever we get to them. Their server needs are game-channel relay plus host time.
