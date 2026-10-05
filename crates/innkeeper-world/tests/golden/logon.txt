@@ -1,0 +1,22 @@
+# The stock client's logon and Clubhouse entry as captured live (docs/protocol/captures.md),
+# with the host replies it accepted. Format: "> name | hex" from the client, "< name | hex"
+# a host reply to the latest client message, in order. Every row also round-trips.
+> login | 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00
+< login ack | 00 00 00 00 16 00 00 00 00 00
+> join game object | 07 00 00 00 60 01 81 01 00 00 0c 00
+< object id | 08 00 60 01 00 00 00 01
+> host number | 24 05
+< host number | 24 05 07 00
+> host address file | 24 01 00 00 00 00
+> land directory | 24 06 00 00 00 00
+< land directory | 2f 02 00 00 00 00 01 00 00 00 03 00 07 01 01 00 00 00 00 00 ff ff ff 01 43 6c 75 62 68 6f 75 73 65 00 07 02 01 00 00 00 00 00 ff ff ff 01 53 69 65 72 72 61 4c 61 6e 64 00 07 03 01 00 00 00 00 00 ff ff ff 01 43 61 73 69 6e 6f 4c 61 6e 64 00
+> land occupancy | 2f 01 00 00 00 00
+< land occupancy | 2f 01 00 00 00 00 00 00 00 00 03 00 07 01 01 40 00 07 02 01 40 00 07 03 01 40 00
+> join game object again | 07 00 00 00 60 01 81 01 00 00 0c 00
+< object id | 08 00 60 01 00 00 01 01
+> join player | 07 00 00 00 8c 09 01 01 ff ff 1e 00
+< object id | 08 00 8c 09 00 00 02 01
+> join waiting room | 07 00 00 00 c0 01 05 01 01 00 80 00
+< object id | 08 00 c0 01 00 00 03 01
+> add player to waiting room | 0a 00 03 01 02 01 02 03 12
+< group joined | 0a 00 03 01 02 01

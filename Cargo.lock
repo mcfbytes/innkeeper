@@ -151,6 +151,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "innkeeper-world"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "innkeeperd"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,68 @@
+use crate::MessageError;
+
+/// The command bytes this host reads or writes; the catalog is docs/protocol/messages.md section 3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub(crate) enum Command {
+    Ack = 0,
+    Nak = 1,
+    JoinNet = 7,
+    ObjId = 8,
+    LeaveNet = 9,
+    GroupJoin = 10,
+    HostInfo = 36,
+    WaitGroup = 47,
+    Login = 53,
+    LoginWithProdigyId = 59,
+}
+
+pub(crate) const COMMANDS: [Command; 10] = [
+    Command::Ack,
+    Command::Nak,
+    Command::JoinNet,
+    Command::ObjId,
+    Command::LeaveNet,
+    Command::GroupJoin,
+    Command::HostInfo,
+    Command::WaitGroup,
+    Command::Login,
+    Command::LoginWithProdigyId,
+];
+
+impl Command {
+    pub(crate) const fn byte(self) -> u8 {
+        self as u8
+    }
+}
+
+impl TryFrom<u8> for Command {
+    type Error = MessageError;
+
+    fn try_from(byte: u8) -> Result<Self, Self::Error> {
+        COMMANDS
+            .into_iter()
+            .find(|command| command.byte() == byte)
+            .ok_or(MessageError::UnsupportedCommand(byte))
+    }
+}
+
+/// The `whichCmd` that acknowledges a Login: the number of the login it replaced.
+pub(crate) const LOGIN_REPLY_COMMAND: u8 = 22;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_command_has_one_row_and_round_trips() {
+        for command in COMMANDS {
+            let rows = COMMANDS.iter().filter(|row| **row == command).count();
+            assert_eq!(rows, 1, "{command:?}");
+            assert_eq!(Command::try_from(command.byte()), Ok(command));
+        }
+        assert_eq!(
+            Command::try_from(2),
+            Err(MessageError::UnsupportedCommand(2))
+        );
+    }
+}
