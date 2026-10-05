@@ -10,7 +10,9 @@ INT 14h API locally and `innkeeperd`. It replaces the modem, the X.25 PAD and th
 The export semantics are those of `docs/protocol/int14h-api.md`; this file only defines how they travel.
 The Rust types and codec are in `crates/int14h` (`Call`, `Reply`, `Envelope`, `encode_envelope`,
 `EnvelopeParser`). Status: version 1, specified and implemented as a codec; `innkeeperd` serves it on
-`--int14h-bind` (default `127.0.0.1:2315`), with the choices in section 7.
+`--int14h-bind` (default `127.0.0.1:2315`), with the choices in section 7. The first client is the
+ScummVM fork's `OnlineTsnExecutive` (`docs/lsci/scummvm-integration.md` section 10), with which the
+Feb-1994 client logs on and enters the Clubhouse Waiting Room.
 
 ## 1. Model
 
@@ -151,4 +153,4 @@ Open points:
 - Version 1 polls: the client learns about new messages only through Poll and Receive, one round trip each.
   A later version may let the server push a "messages waiting" notice.
 - There is no authentication; logon happens in the application messages.
-- No client implements the transport yet, and SwitchHost does not move the client to another host.
+- SwitchHost does not move the client to another host.

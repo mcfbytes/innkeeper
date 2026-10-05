@@ -300,9 +300,9 @@ Feb-94 (hub + SL + LL, sites per sub-op):
 - Land switching becomes "remember `TSN(9)`'s name, end the game, restart in the land's directory with
   the shared block preserved". There is no `TSN.PRG` interpreter in the engine.
 
-Status (2026-10-05): the fork implements this with an offline executive; the design and the
-remaining differences (land switching, sub-ops above 16) are in `docs/lsci/scummvm-integration.md`
-sections 10 and 13.
+Status (2026-10-05): the fork implements this with an offline executive and an online one that speaks
+the INT 14h transport to `innkeeperd`; sub-ops above 16 leave the accumulator alone. The design and the
+remaining difference (land switching) are in `docs/lsci/scummvm-integration.md` sections 10 and 13.
 
 ## 11. Open questions
 
