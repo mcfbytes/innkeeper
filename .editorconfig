@@ -1,0 +1,20 @@
+# scummvm/ ships its own tab-based .editorconfig, which takes precedence there.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{rs,py}]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+[*.{toml,yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

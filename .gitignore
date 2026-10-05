@@ -17,3 +17,5 @@ PART.*
 
 __pycache__/
 *.pyc
+.venv/
+/.claude/

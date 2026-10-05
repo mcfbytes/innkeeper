@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""List/extract Sierra Network / ImagiNation 'defuse' PART.n install archives.
-
-Each PART.n starts with a 31-byte directory record naming the current dir.
-Records: name[13], u16 flags (0x4000 = dir), u32 total_size, u32 chunk_len,
-u32 chunk_offset, u32 dos_datetime.  Files split across disks repeat their
-header in the next part with chunk_offset > 0.  Files named _xxx are further
-compressed with Sierra's 'puff' and are left as-is.
-"""
+"""List/extract the install media's PART.n archives; format in docs/formats/install-archives.md."""
 import struct, sys, os
 def records(data):
     off, cur = 0, ''
