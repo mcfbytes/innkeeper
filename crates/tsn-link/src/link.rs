@@ -137,6 +137,16 @@ impl Link {
         self.send_next(now);
     }
 
+    /// Whether everything queued for the client has left and been acknowledged.
+    pub fn is_transmit_idle(&self) -> bool {
+        matches!(self.sender, Sender::Idle) && self.packer.is_empty()
+    }
+
+    /// Holds new DATA frames until the client's next DATA frame, or for `longest` at most.
+    pub fn hold_until_heard(&mut self, now: Instant, longest: Duration) {
+        self.quiet_until = self.quiet_until.max(now + longest);
+    }
+
     pub fn next_deadline(&self) -> Option<Instant> {
         match &self.sender {
             Sender::AwaitingAck { sent_at, .. } => Some(*sent_at + self.config.resend_after),
@@ -409,6 +419,83 @@ mod tests {
         let _ = link.handle_input(&ack(3), after_quiet);
         assert!(sent(&drain(&mut link)).is_empty());
         let _ = link.handle_input(&ack(0), after_quiet);
+        assert_eq!(sent(&drain(&mut link)), vec![data(1, &[1, 0x08])]);
+    }
+
+    fn message(body: &[u8]) -> Message {
+        Message::try_new(body.to_vec()).unwrap()
+    }
+
+    #[test]
+    fn transmit_is_idle_only_once_the_last_frame_is_acknowledged() {
+        let t0 = Instant::now();
+        let mut link = Link::new(LinkConfig::default(), t0);
+        assert!(link.is_transmit_idle());
+        link.send_message(&message(&[0x07]), t0);
+        assert!(
+            !link.is_transmit_idle(),
+            "a message waits in the open frame"
+        );
+        link.flush(t0);
+        assert!(
+            !link.is_transmit_idle(),
+            "a closed frame waits for the quiet period"
+        );
+
+        let t1 = t0 + LinkConfig::default().quiet_after_connect;
+        link.handle_timeout(t1);
+        assert_eq!(sent(&drain(&mut link)), vec![data(0, &[1, 0x07])]);
+        assert!(!link.is_transmit_idle(), "the frame awaits its ACK");
+        let _ = link.handle_input(&ack(0), t1);
+        assert!(link.is_transmit_idle());
+    }
+
+    #[test]
+    fn a_hold_keeps_new_frames_until_the_client_sends_data() {
+        let t0 = Instant::now();
+        let mut link = Link::new(LinkConfig::default(), t0);
+        let t1 = t0 + LinkConfig::default().quiet_after_connect;
+        let longest = Duration::from_secs(10);
+        link.hold_until_heard(t1, longest);
+        for body in [0x07, 0x08] {
+            link.send_message(&message(&[body]), t1);
+            link.flush(t1);
+        }
+        assert_eq!(link.next_deadline(), Some(t1 + longest));
+        link.handle_timeout(t1 + longest / 2);
+        assert!(sent(&drain(&mut link)).is_empty());
+
+        let t2 = t1 + longest / 2;
+        let _ = link.handle_input(&ack(0), t2);
+        assert!(
+            sent(&drain(&mut link)).is_empty(),
+            "only a DATA frame ends the hold"
+        );
+        let _ = link.handle_input(&data(0, &[1, 0x22]), t2);
+        assert_eq!(sent(&drain(&mut link)), vec![ack(0), data(0, &[1, 0x07])]);
+        let _ = link.handle_input(&ack(0), t2);
+        assert_eq!(sent(&drain(&mut link)), vec![data(1, &[1, 0x08])]);
+    }
+
+    #[test]
+    fn a_hold_ends_at_its_deadline_and_never_shortens_one() {
+        let t0 = Instant::now();
+        let config = LinkConfig::default();
+        let mut link = Link::new(config, t0);
+        link.hold_until_heard(t0, Duration::ZERO);
+        link.send_message(&message(&[0x07]), t0);
+        link.flush(t0);
+        assert_eq!(link.next_deadline(), Some(t0 + config.quiet_after_connect));
+
+        let t1 = t0 + config.quiet_after_connect;
+        link.handle_timeout(t1);
+        let _ = link.handle_input(&ack(0), t1);
+        let longest = Duration::from_secs(10);
+        link.hold_until_heard(t1, longest);
+        link.send_message(&message(&[0x08]), t1);
+        link.flush(t1);
+        drain(&mut link);
+        link.handle_timeout(t1 + longest);
         assert_eq!(sent(&drain(&mut link)), vec![data(1, &[1, 0x08])]);
     }
 

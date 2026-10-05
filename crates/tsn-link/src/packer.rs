@@ -38,6 +38,10 @@ impl FramePacker {
         !self.closed.is_empty()
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.open.is_empty() && self.closed.is_empty()
+    }
+
     pub(crate) fn pop_closed(&mut self) -> Option<Vec<u8>> {
         self.closed.pop_front()
     }
