@@ -1,0 +1,19 @@
+# Original game media and anything extracted/derived from it -- never commit.
+/media/
+/work/
+*.7z
+*.zip
+*.iso
+*.ISO
+*.img
+*.ima
+*.raw
+RESOURCE.*
+resource.*
+PART.*
+
+# Upstream ScummVM checkout (work happens in its own fork/branch)
+/scummvm/
+
+__pycache__/
+*.pyc
