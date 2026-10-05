@@ -1,0 +1,34 @@
+# DOSBox-X settings for the INN capture harness; tools/dosbox/run_client.py fills in the placeholders.
+[sdl]
+output = surface
+
+[dosbox]
+machine = vgaonly
+memsize = 16
+captures = $capture_dir
+capture format = mpegts-h264
+capture chroma format = 4:2:0
+skip encoding unchanged frames = true
+
+[cpu]
+cycles = 30000
+
+[mixer]
+nosound = true
+
+[midi]
+mpu401 = none
+mididevice = none
+
+[serial]
+serial1 = $serial1
+phonebookfile = $phonebook_file
+
+[autoexec]
+@echo off
+mount c "$drive_c_dir"
+c:
+cd \INN
+$autotype
+dx-capture /v /-a command /c inn.bat
+exit
