@@ -106,6 +106,10 @@ wait is limited to 30 s, so `run_client.py` turns a script into a single command
 | `create-persona` | welcome `OK`, "INN Guide" `No`, Create, name `guybrush`, age 30, `maine`, `Go On` through appearance, skills and hobbies, then `Save` | 260 s |
 | `play` | `Play` on the "Select Player" screen; the client then dials | 120 s |
 | `clubhouse` | `Play`, then on the town map 13 tabs round to the Clubhouse, `enter`, `enter` on the place list, `enter` on "Want To Play" | 520 s |
+| `mailbox` | `Play`, then three tabs to the Post Office and `enter`; needs `innkeeperd --data-dir` and an account with user flag `0x200` ([mail.md](server/mail.md)). A run installs `MAIL.CFG` into the client tree, after which the client sends 37/18 instead of 45/1 at logon | 160 s |
+
+Pauses depend on how fast the host emulates: on a loaded host the `clubhouse` tabs can still be running when
+the time limit ends (observed once, with 43 screenshots instead of about 100); run it again.
 
 What the menus need (all observed on the Feb-94 client, no mouse):
 
