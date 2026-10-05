@@ -1,0 +1,6 @@
+# Object lookup (command 41), built from yserbius.md sections 4.1 and 4.2, redbaron.md sections 5.1
+# and 5.2 (41/2 land type, reply SID at w@6) and messages.md section 3.3 (name check). Rows as in send.txt.
+> service lookup, land type 0x8B | 29 02 00 00 02 01 8b 00 00
+> service lookup, land type 101 | 29 02 00 00 02 01 65 00 00
+> conference name check | 29 00 02 01 02 01 74 65 73 74 00
+< service located | 29 00 02 01 00 00 04 03

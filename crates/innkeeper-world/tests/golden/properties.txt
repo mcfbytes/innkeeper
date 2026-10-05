@@ -1,0 +1,9 @@
+# Property replication (setInt 13, setStr 14), built from redbaron.md section 5.1 (linked builders),
+# yserbius.md section 4.2 (pairs at byte 6) and messages.md section 3.2. Rows as in send.txt.
+> set two integers | 0d 00 02 01 02 01 05 00 07 00 0a 00 0b 00
+> set one integer | 0d 00 02 01 02 01 09 00 01 02
+> set no integers | 0d 00 02 01 02 01
+> set persona name | 0e 00 02 01 02 01 05 00 67 75 79 62 72 75 73 68 00
+> set array bytes, not text | 0e 00 02 01 02 01 20 00 ff 00 01
+< integers delivered | 0d 00 02 01 03 01 09 00 01 02
+< string delivered | 0e 00 02 01 03 01 05 00 67 75 79 62 72 75 73 68 00

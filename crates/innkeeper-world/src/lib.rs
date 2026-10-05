@@ -18,9 +18,10 @@ pub use ids::{
 };
 pub use land::LandCatalog;
 pub use message::{
-    ClientMessage, EncodedPassword, GroupJoin, HostInfoRequest, HostMessage, JoinNet,
-    LandDirectory, LandEntry, Login, LoginAck, LoginNakReason, LoginStatus, Nak, ObjectKind,
-    Occupancy, PasswordSource,
+    Ack, ClientMessage, EncodedPassword, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest,
+    HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory, LandEntry, Login, LoginAck,
+    LoginNakReason, LoginStatus, Multicast, Nak, Notice, ObjExists, ObjectKind, ObjectLocated,
+    Occupancy, PasswordSource, SendMessage, SetInt, SetStr,
 };
 pub use player::PlayerSession;
 pub use world::World;

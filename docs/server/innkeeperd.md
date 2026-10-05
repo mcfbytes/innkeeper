@@ -93,7 +93,7 @@ DATA frame per client message.
 
 | Module | Holds |
 |---|---|
-| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes |
+| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `object_kind`); the type names are in `messages.md` section 3.2.1 |
 | `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the stand-in while nothing persists; `listed(...)` checks number and encoded password |
 | `land` | `LandCatalog`: the land directory and occupancy |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; owns the client's SIDs and group memberships |
@@ -113,8 +113,10 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 47/1 | occupancy for the same lands: maximum 64, current 0 |
 | 36/1, 36/2 | nothing; the client keeps its files |
 
-Every other command is logged as "not decoded" and gets no reply. At logon that is 34/4, 45/1, 37/32 and
-40/4, and in the Clubhouse 13, 14 and 26; the client carries on without answers (`captures.md` section 9).
+Commands 2, 11, 12, 13, 14, 28 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply
+until the object store routes them. Every other command is logged as "not decoded" and gets no reply. At
+logon that is 34/4, 45/1, 37/32 and 40/4, and in the Clubhouse 26; the client carries on without answers
+(`captures.md` section 9).
 
 ## 6. Capture files
 

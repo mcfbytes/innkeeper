@@ -1,0 +1,5 @@
+# Notice (command 48) and the generic Ack (command 0), built from golf.md section 6.2 (48: text @2),
+# redbaron.md section 5.2 and messages.md section 3.1 (Ack: whichCmd @4, whichSub @5). Rows as in send.txt.
+< operator notice | 30 00 53 79 73 74 65 6d 20 64 6f 77 6e 00
+< ack of a password change | 00 00 00 00 2c 01
+< ack with a reply tail | 00 00 02 01 28 04 01 00 aa

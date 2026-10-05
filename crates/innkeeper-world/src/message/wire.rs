@@ -44,6 +44,11 @@ impl<'a> WireReader<'a> {
         ascii(text, field)
     }
 
+    /// Everything not read yet, for a body the host relays without interpreting it.
+    pub(crate) fn rest(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.rest).to_vec()
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.rest.is_empty()
     }
@@ -62,6 +67,15 @@ fn ascii(bytes: &[u8], field: &'static str) -> Result<String, MessageError> {
     } else {
         Err(MessageError::NotAscii { field })
     }
+}
+
+/// Row counts are words on the wire, so a longer list is cut to the rows the count can name.
+pub(crate) fn fitting_count<T>(rows: &[T]) -> &[T] {
+    rows.get(..usize::from(u16::MAX)).unwrap_or(rows)
+}
+
+pub(crate) fn row_count<T>(rows: &[T]) -> u16 {
+    u16::try_from(rows.len()).unwrap_or(u16::MAX)
 }
 
 /// Writes the same field codes; the inverse of [`WireReader`].
@@ -118,6 +132,21 @@ mod tests {
         assert_eq!(reader.word("word"), Ok(0x86A1));
         assert_eq!(reader.array("array"), Ok([1, 2, 3]));
         assert_eq!(reader.text("name").as_deref(), Ok("guybrush"));
+        assert_eq!(reader.finish(), Ok(()));
+    }
+
+    #[test]
+    fn a_list_longer_than_its_count_word_is_cut() {
+        let rows = vec![0u8; usize::from(u16::MAX) + 1];
+        assert_eq!(fitting_count(&rows).len(), usize::from(u16::MAX));
+        assert_eq!(row_count(fitting_count(&rows)), u16::MAX);
+    }
+
+    #[test]
+    fn rest_takes_the_unread_tail_once() {
+        let mut reader = WireReader::new(&[1, 2, 3]);
+        assert_eq!(reader.byte("head"), Ok(1));
+        assert_eq!(reader.rest(), [2, 3]);
         assert_eq!(reader.finish(), Ok(()));
     }
 

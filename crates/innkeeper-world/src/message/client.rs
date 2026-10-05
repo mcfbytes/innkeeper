@@ -1,17 +1,27 @@
 use std::fmt;
 
 use crate::message::wire::{WireReader, WireWriter};
-use crate::message::Command;
+use crate::message::{
+    Command, GroupLeave, GroupMembersRequest, Multicast, ObjExists, ObjectKind, SendMessage,
+    SetInt, SetStr,
+};
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
 /// A message the client transmits, decoded; layouts are in docs/protocol/messages.md.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ClientMessage {
     Login(Login),
+    Send(SendMessage),
     JoinNet(JoinNet),
     LeaveNet(Sid),
     GroupJoin(GroupJoin),
+    GroupLeave(GroupLeave),
+    GroupMembers(GroupMembersRequest),
+    SetInt(SetInt),
+    SetStr(SetStr),
+    Multicast(Multicast),
     HostInfo(HostInfoRequest),
+    ObjExists(ObjExists),
     LandOccupancyRequest,
 }
 
@@ -71,51 +81,6 @@ pub struct JoinNet {
     pub size: u16,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum ObjectKind {
-    Object = 1,
-    GameGroup = 2,
-    RedBaron = 4,
-    WaitingRoom = 5,
-    GameObject = 129,
-}
-
-const OBJECT_KINDS: [ObjectKind; 5] = [
-    ObjectKind::Object,
-    ObjectKind::GameGroup,
-    ObjectKind::RedBaron,
-    ObjectKind::WaitingRoom,
-    ObjectKind::GameObject,
-];
-
-impl ObjectKind {
-    pub fn is_group(self) -> bool {
-        match self {
-            ObjectKind::GameGroup | ObjectKind::WaitingRoom => true,
-            ObjectKind::Object | ObjectKind::RedBaron | ObjectKind::GameObject => false,
-        }
-    }
-
-    const fn byte(self) -> u8 {
-        self as u8
-    }
-}
-
-impl TryFrom<u8> for ObjectKind {
-    type Error = MessageError;
-
-    fn try_from(byte: u8) -> Result<Self, Self::Error> {
-        OBJECT_KINDS
-            .into_iter()
-            .find(|kind| kind.byte() == byte)
-            .ok_or(MessageError::UnknownValue {
-                field: "kind",
-                value: u16::from(byte),
-            })
-    }
-}
-
 /// Command 10: the client adds one of its objects to a group; waiting rooms add the version.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroupJoin {
@@ -147,6 +112,7 @@ impl ClientMessage {
             Command::Login | Command::LoginWithProdigyId => {
                 ClientMessage::Login(Login::parse(&mut reader, command)?)
             }
+            Command::Send => ClientMessage::Send(SendMessage::parse(&mut reader)?),
             Command::JoinNet => ClientMessage::JoinNet(JoinNet::parse(&mut reader)?),
             Command::LeaveNet => {
                 reader.byte("flags")?;
@@ -155,14 +121,22 @@ impl ClientMessage {
                 ClientMessage::LeaveNet(sid)
             }
             Command::GroupJoin => ClientMessage::GroupJoin(GroupJoin::parse(&mut reader)?),
+            Command::GroupLeave => ClientMessage::GroupLeave(GroupLeave::parse(&mut reader)?),
+            Command::GroupMembers => {
+                ClientMessage::GroupMembers(GroupMembersRequest::parse(&mut reader)?)
+            }
+            Command::SetInt => ClientMessage::SetInt(SetInt::parse(&mut reader)?),
+            Command::SetStr => ClientMessage::SetStr(SetStr::parse(&mut reader)?),
+            Command::Multicast => ClientMessage::Multicast(Multicast::parse(&mut reader)?),
             Command::HostInfo => ClientMessage::HostInfo(HostInfoRequest::parse(&mut reader)?),
+            Command::ObjExists => ClientMessage::ObjExists(ObjExists::parse(&mut reader)?),
             Command::WaitGroup => {
                 expect_sub(&mut reader, command, LAND_OCCUPANCY)?;
                 reader.word("toSID")?;
                 reader.word("fromSID")?;
                 ClientMessage::LandOccupancyRequest
             }
-            Command::Ack | Command::Nak | Command::ObjId => {
+            Command::Ack | Command::Nak | Command::ObjId | Command::Notice => {
                 return Err(MessageError::UnsupportedCommand(command.byte()))
             }
         };
@@ -174,6 +148,7 @@ impl ClientMessage {
         let mut writer = WireWriter::default();
         match self {
             ClientMessage::Login(login) => login.write(&mut writer),
+            ClientMessage::Send(send) => send.write(&mut writer),
             ClientMessage::JoinNet(join) => join.write(&mut writer),
             ClientMessage::LeaveNet(sid) => {
                 writer
@@ -183,7 +158,13 @@ impl ClientMessage {
                     .word(0);
             }
             ClientMessage::GroupJoin(join) => join.write(&mut writer),
+            ClientMessage::GroupLeave(leave) => leave.write(&mut writer),
+            ClientMessage::GroupMembers(request) => request.write(&mut writer),
+            ClientMessage::SetInt(set) => set.write(&mut writer),
+            ClientMessage::SetStr(set) => set.write(&mut writer),
+            ClientMessage::Multicast(multicast) => multicast.write(&mut writer),
             ClientMessage::HostInfo(request) => request.write(&mut writer),
+            ClientMessage::ObjExists(lookup) => lookup.write(&mut writer),
             ClientMessage::LandOccupancyRequest => {
                 writer.byte(Command::WaitGroup.byte()).byte(LAND_OCCUPANCY);
                 writer.word(0).word(0);
@@ -358,12 +339,12 @@ mod tests {
 
     #[test]
     fn unknown_object_kind_and_trailing_bytes_are_rejected() {
-        let mut join = vec![7, 0, 0, 0, 0x34, 0x12, 3, 1, 0, 0, 0, 0];
+        let mut join = vec![7, 0, 0, 0, 0x34, 0x12, 6, 1, 0, 0, 0, 0];
         assert_eq!(
             ClientMessage::parse(&join),
             Err(MessageError::UnknownValue {
                 field: "kind",
-                value: 3
+                value: 6
             })
         );
         join[6] = 129;

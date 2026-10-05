@@ -148,7 +148,7 @@ puts the holder's SID at w@5 (`hub/script.121 inviteScript::handleMsg +0x00AD`).
 | 4 | lock | C→H | `w 4, w fromSID, w lockId, w…` or `…, a[n]` | `class_61::lock`, invite scripts | take a named host lock; Ack on success, Nak with holder SID at w@5 | CONFIRMED |
 | 5 | lockQueue | C→H | `w 5, w toSID, w fromSID` | `class_61::lockQueue` (never called) | unknown | CONFIRMED layout, unused |
 | 6 | unlock | C→H | as lock | `class_61::unlock`, `LL/script.905 inviteRoom::init` | release a lock | CONFIRMED |
-| 7 | joinNet | C→H | `w 7, w 0, w cookie, b kind, b landType, w param, w size` (12 bytes) | `Obj::joinNet`, `GameGroup::joinNet`, `WaitingRoomGroup::joinNet` | create a networked object; `cookie` is the client's object handle, `kind` 1 = object, 2 = game group, 5 = waiting-room group (param = land number, size = maximum), 129 = the game object at logon, 4 = Red Baron (`SL/script.120 runRedBaronScript`) | CONFIRMED layout; kinds from callers; 129, 1 (param `0xFFFF`, size 30) and 5 seen live |
+| 7 | joinNet | C→H | `w 7, w 0, w cookie, b kind, b landType, w param, w size` (12 bytes) | `Obj::joinNet`, `GameGroup::joinNet`, `WaitingRoomGroup::joinNet` | create a networked object; `cookie` is the client's object handle, `kind` is one of 1 to 5 or 129 (the role names and per-land meaning are in section 3.2.1) | CONFIRMED layout; kinds from callers; 129, 1 (param `0xFFFF`, size 30) and 5 seen live |
 | 8 | `ObjID` | H→C | `b 8, b ?, w cookie @2, w ? @4, w sid @6` | `class_66::init`; `Obj::handleMsg +0x003F` | reply to joinNet: the object whose handle is `cookie` gets SID `sid` and registers it with `SID(1, …)` | CONFIRMED, live with bytes 1 and 4..5 zero |
 | 9 | leaveNet / `ObjFree` | both | C→H `w 9, w sid, w 0`; H→C header only | `Obj::leaveNet`; `Obj::handleMsg +0x0068` | free an object; on receive the target object disposes itself | CONFIRMED |
 | 10 | add / `GrpJoin` | both | C→H `w 10, w groupSID, w memberSID` (+ `b major, b minor, b revision` from waiting rooms); H→C `b 10, b 0, w groupSID @2, w who @4` | `class_83::add`, `WaitingRoomGroup::add`; `class_83::handleMsg` | add a member to a group / a member joined; the H→C form is delivered to the group, which calls `addMember: who` | CONFIRMED, both directions live (`captures.md` section 11) |
@@ -167,6 +167,41 @@ puts the holder's SID at w@5 (`hub/script.121 inviteScript::handleMsg +0x00AD`).
 | 33 | `SetMsg` | H→C | body rebased at 6; records of `b type, …` | `SetMsg::doit`, `getProp` | property values (reply to 32) applied to the object | CONFIRMED in part |
 | 51 | `ObjNewList` | both | C→H `b 51, b 0, w 0, w cookie, b 1, b landType, w -2, w size, w count`; H→C `w to @4, w ? @6, body @8` | `SL/script.780 placeMen`; PaintBall | create a list of objects | CONFIRMED layout |
 | 52 | `ObjFreeList` | both | C→H `b 52, b 0, w 0, w n, a[n]`; H→C `w to @2, body @6` | `SL/script.780 PaintBall::dispose` | free a list of objects | CONFIRMED layout |
+
+#### 3.2.1 Codec names and joinNet kinds
+
+`innkeeper-world::message` types the shared-object commands as follows. Both header shapes are the same
+bytes: LSCI writes `w cmd`, the DOS libraries `b cmd, b 0`, and the codec ignores byte 1 on receive and
+writes 0.
+
+| Cmd | Client to host | Host to client | Notes |
+|---|---|---|---|
+| 2 | `ClientMessage::Send(SendMessage)` | `HostMessage::Send` | `to`, `from`, then the payload from byte 6 kept raw. LSCI's `msgType` is a word, the DOS libraries' a byte, so only `msg_type_word()` interprets it, and only for LSCI traffic |
+| 9 | `LeaveNet(Sid)` | `ObjectFreed(Sid)` | the host form is the header only |
+| 10 | `GroupJoin` | `GroupJoined` | unchanged |
+| 11 | `GroupLeave` | `GroupLeft` | `group`, `member` |
+| 12 | `GroupMembers(GroupMembersRequest)` | `GroupMembers` | the list is every word from byte 6; the word at byte 4 is unread (INFERRED 0) |
+| 13 | `SetInt` | `SetInt` | `target`, `from`, then `(propOffset, value)` pairs to the end |
+| 14 | `SetStr` | `SetStr` | `target`, `from`, `propOffset`, then the value verbatim: arrays are not text |
+| 28 | `Multicast` | none | `from`, `n` word SIDs, the body raw (`5 + 2n + body`); the body's first word is LSCI's `msgType` |
+| 41 | `ObjExists::Name` (sub 0, raw name tail), `ObjExists::Service` (sub 2: `w 0, w userSID, b landType, w 0`) | `ObjectLocated` | the located SID is at w@6; the word at byte 4 is unread (INFERRED 0) |
+| 48 | none | `Notice` | text from byte 2, byte 1 unread; the NUL that ends the text is INFERRED |
+| 0 | none | `Ack` (`to`, `whichCmd`, `whichSub`, tail) | `whichCmd` 22 stays `LoginAccepted` |
+
+The joinNet `kind` byte says how the host scopes the object; the codec names it by that role and the land
+decides what it stands for (`ObjectKind`). Whether a kind is a group is a host decision per land, not a
+property of the codec. CONFIRMED layouts, per-land meaning from the census documents:
+
+| Kind | Role name | LSCI | Yserbius and Twinion | Red Baron | GOLF |
+|---|---|---|---|---|---|
+| 1 | `Object` | player object (param `0xFFFF`, size 30) | player object (type `0x8B`, size 1) | none | player object (type `0x66`, size 1) |
+| 2 | `Group` | game group (`GameGroup::joinNet`) | map group (type `0x8B`, param map number, size 104, Twinion 80) | linked, never called | none |
+| 3 | `SoloObject` | none seen | none (the client's own enum calls its party slot 3, never sent) | the player's in-game object (type 101, size 1) | none |
+| 4 | `PrivateGroup` | `SL/script.120 runRedBaronScript` | personal party (type `0x8B`, param `0xFFFD`, size 4) | none | none |
+| 5 | `LandGroup` | waiting-room group (param land number, size = maximum) | land group (param land number, size 100) | none | none |
+| 129 | `GameObject` | the game object at logon | none | none | none |
+
+Kind 6 and every other value are errors.
 
 ### 3.3 Host services (byte formats)
 

@@ -6,25 +6,41 @@ use crate::MessageError;
 pub(crate) enum Command {
     Ack = 0,
     Nak = 1,
+    Send = 2,
     JoinNet = 7,
     ObjId = 8,
     LeaveNet = 9,
     GroupJoin = 10,
+    GroupLeave = 11,
+    GroupMembers = 12,
+    SetInt = 13,
+    SetStr = 14,
+    Multicast = 28,
     HostInfo = 36,
+    ObjExists = 41,
     WaitGroup = 47,
+    Notice = 48,
     Login = 53,
     LoginWithProdigyId = 59,
 }
 
-pub(crate) const COMMANDS: [Command; 10] = [
+pub(crate) const COMMANDS: [Command; 18] = [
     Command::Ack,
     Command::Nak,
+    Command::Send,
     Command::JoinNet,
     Command::ObjId,
     Command::LeaveNet,
     Command::GroupJoin,
+    Command::GroupLeave,
+    Command::GroupMembers,
+    Command::SetInt,
+    Command::SetStr,
+    Command::Multicast,
     Command::HostInfo,
+    Command::ObjExists,
     Command::WaitGroup,
+    Command::Notice,
     Command::Login,
     Command::LoginWithProdigyId,
 ];
@@ -61,8 +77,8 @@ mod tests {
             assert_eq!(Command::try_from(command.byte()), Ok(command));
         }
         assert_eq!(
-            Command::try_from(2),
-            Err(MessageError::UnsupportedCommand(2))
+            Command::try_from(3),
+            Err(MessageError::UnsupportedCommand(3))
         );
     }
 }

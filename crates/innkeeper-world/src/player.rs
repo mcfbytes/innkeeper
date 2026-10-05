@@ -4,7 +4,7 @@ use tracing::{info, warn};
 
 use crate::{
     Account, ClientMessage, GroupJoin, HostInfoRequest, HostMessage, JoinNet, Login, LoginAck,
-    LoginNakReason, Nak, Refusal, Sid, World,
+    LoginNakReason, Nak, ObjectKind, Refusal, Sid, World,
 };
 
 const PASSWORD_TRIES: u8 = 3;
@@ -64,6 +64,16 @@ impl PlayerSession {
                     world.lands.occupancy(world.host),
                 )]
             }),
+            ClientMessage::Send(_)
+            | ClientMessage::GroupLeave(_)
+            | ClientMessage::GroupMembers(_)
+            | ClientMessage::SetInt(_)
+            | ClientMessage::SetStr(_)
+            | ClientMessage::Multicast(_)
+            | ClientMessage::ObjExists(_) => {
+                info!(?message, "decoded, no handler yet: ignored");
+                Vec::new()
+            }
         }
     }
 
@@ -139,7 +149,7 @@ impl Player {
         let is_group = self
             .objects
             .get(&join.group)
-            .is_some_and(|group| group.kind.is_group());
+            .is_some_and(|group| holds_members(group.kind));
         if !is_group {
             warn!(?join, "add to an object that is not a group");
             return Vec::new();
@@ -167,6 +177,11 @@ impl Player {
     }
 }
 
+/// Which kinds take members until the shared object store decides it per land.
+fn holds_members(kind: ObjectKind) -> bool {
+    matches!(kind, ObjectKind::Group | ObjectKind::LandGroup)
+}
+
 fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage> {
     match request {
         HostInfoRequest::HostNumber => vec![HostMessage::HostNumber(world.host)],
@@ -187,7 +202,7 @@ mod tests {
     use super::*;
     use crate::{
         AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, LandCatalog, LandType,
-        ObjectKind, PasswordSource,
+        ObjectKind, PasswordSource, SendMessage,
     };
 
     fn login(password: u8) -> ClientMessage {
@@ -252,7 +267,7 @@ mod tests {
         let mut player = PlayerSession::new();
         let _ = player.handle(&world, &login(7));
         let _ = player.handle(&world, &join(1, ObjectKind::Object));
-        let _ = player.handle(&world, &join(2, ObjectKind::WaitingRoom));
+        let _ = player.handle(&world, &join(2, ObjectKind::LandGroup));
         let add = |group| {
             ClientMessage::GroupJoin(GroupJoin {
                 group: Sid(group),
@@ -264,6 +279,19 @@ mod tests {
         assert_eq!(player.handle(&world, &add(FIRST_SID + 1)).len(), 1);
         let _ = player.handle(&world, &ClientMessage::LeaveNet(Sid(FIRST_SID + 1)));
         assert!(player.handle(&world, &add(FIRST_SID + 1)).is_empty());
+    }
+
+    #[test]
+    fn decoded_shared_object_commands_are_ignored_until_a_handler_exists() {
+        let world = World::stock();
+        let mut player = PlayerSession::new();
+        let _ = player.handle(&world, &login(7));
+        let relay = ClientMessage::Send(SendMessage {
+            to: Sid(FIRST_SID),
+            from: Sid(0),
+            payload: vec![1, 0],
+        });
+        assert!(player.handle(&world, &relay).is_empty());
     }
 
     #[test]

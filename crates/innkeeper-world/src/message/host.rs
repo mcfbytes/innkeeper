@@ -1,8 +1,10 @@
 use crate::assumptions::DIRECTORY_UNREAD_BYTES_ASSUMED;
 use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
-use crate::message::wire::{WireReader, WireWriter};
-use crate::message::Command;
+use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
+use crate::message::{
+    Ack, Command, GroupLeave, GroupMembers, Notice, ObjectLocated, SendMessage, SetInt, SetStr,
+};
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
 };
@@ -11,7 +13,10 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostMessage {
     LoginAccepted(LoginAck),
+    /// An `AckMsg` for any request but a Login.
+    Ack(Ack),
     Nak(Nak),
+    Send(SendMessage),
     ObjId {
         cookie: Cookie,
         sid: Sid,
@@ -21,6 +26,16 @@ pub enum HostMessage {
         group: Sid,
         member: Sid,
     },
+    /// `GrpDel`, delivered to the group object: `member` left it.
+    GroupLeft(GroupLeave),
+    GroupMembers(GroupMembers),
+    /// `ObjFree`: the object `sid` is gone and disposes itself.
+    ObjectFreed(Sid),
+    SetInt(SetInt),
+    SetStr(SetStr),
+    /// The answer to an `ObjExists` lookup.
+    ObjectLocated(ObjectLocated),
+    Notice(Notice),
     HostNumber(HostNumber),
     LandDirectory(LandDirectory),
     LandOccupancy(Vec<Occupancy>),
@@ -119,6 +134,8 @@ impl HostMessage {
                 writer.byte(LOGIN_REPLY_COMMAND).word(ack.user_flags);
                 writer.byte(ack.status.0).word(ack.rating);
             }
+            HostMessage::Ack(ack) => ack.write(&mut writer),
+            HostMessage::Send(send) => send.write(&mut writer),
             HostMessage::Nak(nak) => {
                 writer.byte(Command::Nak.byte()).byte(0).word(nak.to.0);
                 writer.byte(nak.which_cmd).byte(nak.which_sub).byte(0);
@@ -132,6 +149,15 @@ impl HostMessage {
                 writer.byte(Command::GroupJoin.byte()).byte(0);
                 writer.word(group.0).word(member.0);
             }
+            HostMessage::GroupLeft(leave) => leave.write(&mut writer),
+            HostMessage::GroupMembers(members) => members.write(&mut writer),
+            HostMessage::ObjectFreed(sid) => {
+                writer.byte(Command::LeaveNet.byte()).byte(0).word(sid.0);
+            }
+            HostMessage::SetInt(set) => set.write(&mut writer),
+            HostMessage::SetStr(set) => set.write(&mut writer),
+            HostMessage::ObjectLocated(located) => located.write(&mut writer),
+            HostMessage::Notice(notice) => notice.write(&mut writer),
             HostMessage::HostNumber(host) => {
                 writer.byte(Command::HostInfo.byte()).byte(HOST_NUMBER_TYPE);
                 writer.word(u16::from(host.0));
@@ -159,15 +185,18 @@ impl HostMessage {
         let message = match command {
             Command::Ack => {
                 reader.byte("flags")?;
-                reader.word("toSID")?;
-                expect_byte(&mut reader, "whichCmd", LOGIN_REPLY_COMMAND)?;
-                HostMessage::LoginAccepted(LoginAck {
-                    user_flags: reader.word("userFlags")?,
-                    status: LoginStatus(reader.byte("status")?),
-                    rating: reader.word("rating")?,
-                })
+                let to = Sid(reader.word("toSID")?);
+                match reader.byte("whichCmd")? {
+                    LOGIN_REPLY_COMMAND => HostMessage::LoginAccepted(LoginAck {
+                        user_flags: reader.word("userFlags")?,
+                        status: LoginStatus(reader.byte("status")?),
+                        rating: reader.word("rating")?,
+                    }),
+                    which_cmd => HostMessage::Ack(Ack::parse_after(&mut reader, to, which_cmd)?),
+                }
             }
             Command::Nak => HostMessage::Nak(Nak::parse(&mut reader)?),
+            Command::Send => HostMessage::Send(SendMessage::parse(&mut reader)?),
             Command::ObjId => {
                 reader.byte("flags")?;
                 let cookie = Cookie(reader.word("cookie")?);
@@ -181,6 +210,16 @@ impl HostMessage {
                 let member = Sid(reader.word("who")?);
                 HostMessage::GroupJoined { group, member }
             }
+            Command::GroupLeave => HostMessage::GroupLeft(GroupLeave::parse(&mut reader)?),
+            Command::GroupMembers => HostMessage::GroupMembers(GroupMembers::parse(&mut reader)?),
+            Command::LeaveNet => {
+                reader.byte("flags")?;
+                HostMessage::ObjectFreed(Sid(reader.word("toSID")?))
+            }
+            Command::SetInt => HostMessage::SetInt(SetInt::parse(&mut reader)?),
+            Command::SetStr => HostMessage::SetStr(SetStr::parse(&mut reader)?),
+            Command::ObjExists => HostMessage::ObjectLocated(ObjectLocated::parse(&mut reader)?),
+            Command::Notice => HostMessage::Notice(Notice::parse(&mut reader)?),
             Command::HostInfo => {
                 expect_byte(&mut reader, "type", HOST_NUMBER_TYPE)?;
                 let host = reader.word("host")?;
@@ -191,7 +230,10 @@ impl HostMessage {
                 HostMessage::HostNumber(HostNumber(host))
             }
             Command::WaitGroup => parse_wait_group(&mut reader)?,
-            Command::JoinNet | Command::LeaveNet | Command::Login | Command::LoginWithProdigyId => {
+            Command::JoinNet
+            | Command::Multicast
+            | Command::Login
+            | Command::LoginWithProdigyId => {
                 return Err(MessageError::UnsupportedCommand(command.byte()))
             }
         };
@@ -212,15 +254,6 @@ fn expect_byte(
             value: u16::from(found),
         }),
     }
-}
-
-/// Row counts are words on the wire, so a longer list is cut to the rows the count can name.
-fn fitting_count<T>(rows: &[T]) -> &[T] {
-    rows.get(..usize::from(u16::MAX)).unwrap_or(rows)
-}
-
-fn row_count<T>(rows: &[T]) -> u16 {
-    u16::try_from(rows.len()).unwrap_or(u16::MAX)
 }
 
 fn write_wait_group_header(writer: &mut WireWriter, msg_type: u8) {
@@ -350,12 +383,5 @@ mod tests {
         for message in messages {
             assert_eq!(HostMessage::parse(&message.encode()), Ok(message));
         }
-    }
-
-    #[test]
-    fn a_list_longer_than_its_count_word_is_cut() {
-        let rows = vec![0u8; usize::from(u16::MAX) + 1];
-        assert_eq!(fitting_count(&rows).len(), usize::from(u16::MAX));
-        assert_eq!(row_count(fitting_count(&rows)), u16::MAX);
     }
 }

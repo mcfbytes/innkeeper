@@ -1,0 +1,8 @@
+# Send (command 2), built from docs/protocol/int14h-census/redbaron.md section 7 (byte msgType),
+# yserbius.md section 4.1 and messages.md section 3.2 (word msgType). Rows: "> name | hex" from the
+# client, "< name | hex" from the host; every row round-trips byte for byte.
+> LSCI room chat, word msgType 1 | 02 00 03 01 02 01 01 00 68 69
+> DOS player info to a group, byte msgType 0xC8 | 02 00 03 01 02 01 c8 01 47 55 59 00
+> send from SID 0 with no body | 02 00 03 01 00 00
+< relayed chat with the real fromSID | 02 00 03 01 02 01 01 00 68 69
+< relayed player info | 02 00 03 01 02 01 c8 01 47 55 59 00

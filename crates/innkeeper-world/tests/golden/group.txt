@@ -1,0 +1,12 @@
+# Group and object lifetime (commands 7, 9, 11, 12), built from golf.md sections 6.1 and 6.2,
+# redbaron.md sections 5.1 and 5.2 and yserbius.md section 4.1. Rows as in send.txt.
+> joinNet kind 2 (map group, 104 members) | 07 00 00 00 02 01 02 8b 05 00 68 00
+> joinNet kind 3 (Red Baron, capacity 1) | 07 00 00 00 02 01 03 65 ff ff 01 00
+> joinNet kind 4 (personal party, 4 members) | 07 00 00 00 02 01 04 8b fd ff 04 00
+> leaveNet, LSCI form | 09 00 02 01 00 00
+> group leave | 0b 00 03 01 02 01
+> group members request | 0c 00 03 01 02 01
+< group left | 0b 00 03 01 02 01
+< group members, two | 0c 00 03 01 00 00 02 01 05 01
+< group members, none | 0c 00 03 01 00 00
+< object freed | 09 00 02 01

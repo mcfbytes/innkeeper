@@ -1,0 +1,5 @@
+# Multicast (command 28), built from redbaron.md sections 5.1 and 7.2 (b 28, w from @1, w n @3,
+# w recip[n] @5, body) and golf.md section 6.1; n counts word SIDs. Rows as in send.txt.
+> state update to the group and the sender | 1c 02 01 02 00 03 01 02 01 c9 01 00 02 00
+> conference text, word msgType 50 | 1c 02 01 01 00 03 01 32 00 0f 00 00 68 69 00
+> multicast to nobody | 1c 02 01 00 00
