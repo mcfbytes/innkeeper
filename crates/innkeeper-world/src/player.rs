@@ -1,14 +1,9 @@
-use std::collections::{BTreeSet, HashMap};
-
-use tracing::{info, warn};
+use tracing::{info, info_span, warn};
 
 use crate::{
-    logon, Account, ClientMessage, GroupJoin, HostInfoRequest, HostMessage, JoinNet, Login,
-    ObjectKind, Sid, World,
+    logon, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, Login,
+    ObjectStore, World,
 };
-
-/// Server choice: SIDs below this stay free for well-known objects.
-const FIRST_SID: u16 = 0x0100;
 
 /// The host side of one logged-in client, from Login to hang-up.
 #[derive(Debug)]
@@ -25,10 +20,6 @@ enum PlayerState {
 #[derive(Debug)]
 struct Player {
     account: Account,
-    /// Every object that holds a SID, as the client described it when it joined.
-    objects: HashMap<Sid, JoinNet>,
-    groups: HashMap<Sid, BTreeSet<Sid>>,
-    next_sid: u16,
 }
 
 impl Default for PlayerSession {
@@ -44,30 +35,46 @@ impl PlayerSession {
         }
     }
 
-    /// The replies to one client message, in the order they go out.
+    /// Everything one client message causes: the sender's replies in request order, and the
+    /// notices for other connections where they happened.
     #[must_use]
-    pub fn handle(&mut self, world: &World, message: &ClientMessage) -> Vec<HostMessage> {
+    pub fn handle(
+        &mut self,
+        world: &World,
+        objects: &mut ObjectStore,
+        connection: ConnectionId,
+        message: &ClientMessage,
+    ) -> Vec<Delivery> {
+        let reply = |messages: Vec<HostMessage>| replies_to(connection, messages);
         match *message {
-            ClientMessage::Login(ref login) => vec![self.log_in(world, login)],
-            ClientMessage::JoinNet(join) => self.with_player(|player| player.join(join)),
-            ClientMessage::LeaveNet(sid) => self.with_player(|player| {
-                player.leave(sid);
-                Vec::new()
-            }),
-            ClientMessage::GroupJoin(join) => self.with_player(|player| player.join_group(join)),
-            ClientMessage::ChangePassword(change) => self
-                .with_player(|player| vec![logon::change_password(world, &player.account, change)]),
-            ClientMessage::HostInfo(request) => {
-                self.with_player(|_| answer_host_info(world, request))
+            ClientMessage::Login(ref login) => {
+                let mut deliveries = objects.disconnect(connection);
+                deliveries.extend(reply(vec![self.log_in(world, login)]));
+                deliveries
             }
-            ClientMessage::LandOccupancyRequest => self.with_player(|_| {
-                vec![HostMessage::LandOccupancy(
+            ClientMessage::JoinNet(join) => self.when_logged_in(|_| objects.join(connection, join)),
+            ClientMessage::LeaveNet(sid) => self.when_logged_in(|_| objects.leave(connection, sid)),
+            ClientMessage::GroupJoin(join) => {
+                self.when_logged_in(|_| objects.join_group(connection, join))
+            }
+            ClientMessage::GroupLeave(leave) => {
+                self.when_logged_in(|_| objects.leave_group(connection, leave))
+            }
+            ClientMessage::GroupMembers(request) => {
+                self.when_logged_in(|_| objects.list_members(connection, request))
+            }
+            ClientMessage::ChangePassword(change) => self.when_logged_in(|account| {
+                reply(vec![logon::change_password(world, account, change)])
+            }),
+            ClientMessage::HostInfo(request) => {
+                self.when_logged_in(|_| reply(answer_host_info(world, request)))
+            }
+            ClientMessage::LandOccupancyRequest => self.when_logged_in(|_| {
+                reply(vec![HostMessage::LandOccupancy(
                     world.lands.occupancy(world.host),
-                )]
+                )])
             }),
             ClientMessage::Send(_)
-            | ClientMessage::GroupLeave(_)
-            | ClientMessage::GroupMembers(_)
             | ClientMessage::SetInt(_)
             | ClientMessage::SetStr(_)
             | ClientMessage::Multicast(_)
@@ -78,12 +85,12 @@ impl PlayerSession {
         }
     }
 
-    fn with_player(
-        &mut self,
-        answer: impl FnOnce(&mut Player) -> Vec<HostMessage>,
-    ) -> Vec<HostMessage> {
-        match &mut self.state {
-            PlayerState::LoggedIn(player) => answer(player),
+    fn when_logged_in(&self, answer: impl FnOnce(&Account) -> Vec<Delivery>) -> Vec<Delivery> {
+        match &self.state {
+            PlayerState::LoggedIn(player) => {
+                let _player = info_span!("player", persona = %player.account.persona).entered();
+                answer(&player.account)
+            }
             PlayerState::AwaitingLogin => {
                 warn!("message before Login ignored");
                 Vec::new()
@@ -96,7 +103,7 @@ impl PlayerSession {
             Ok(account) => {
                 info!(account = account.id.0, persona = %account.persona, "logged in");
                 let ack = account.login_ack();
-                self.state = PlayerState::LoggedIn(Player::new(account));
+                self.state = PlayerState::LoggedIn(Player { account });
                 HostMessage::LoginAccepted(ack)
             }
             Err(nak) => HostMessage::Nak(nak),
@@ -104,74 +111,14 @@ impl PlayerSession {
     }
 }
 
-impl Player {
-    fn new(account: Account) -> Self {
-        Player {
-            account,
-            objects: HashMap::new(),
-            groups: HashMap::new(),
-            next_sid: FIRST_SID,
-        }
-    }
-
-    fn join(&mut self, join: JoinNet) -> Vec<HostMessage> {
-        let Some(sid) = self.allocate_sid() else {
-            warn!(?join, "every SID is taken");
-            return Vec::new();
-        };
-        info!(sid = sid.0, ?join, persona = %self.account.persona, "object joined");
-        self.objects.insert(sid, join);
-        vec![HostMessage::ObjId {
-            cookie: join.cookie,
-            sid,
-        }]
-    }
-
-    /// The next SID in order that no live object holds, wrapping past the top.
-    fn allocate_sid(&mut self) -> Option<Sid> {
-        let candidates = (self.next_sid..=u16::MAX).chain(FIRST_SID..self.next_sid);
-        let sid = candidates
-            .map(Sid)
-            .find(|sid| !self.objects.contains_key(sid))?;
-        self.next_sid = sid.0.checked_add(1).unwrap_or(FIRST_SID);
-        Some(sid)
-    }
-
-    fn join_group(&mut self, join: GroupJoin) -> Vec<HostMessage> {
-        let is_group = self
-            .objects
-            .get(&join.group)
-            .is_some_and(|group| holds_members(group.kind));
-        if !is_group {
-            warn!(?join, "add to an object that is not a group");
-            return Vec::new();
-        }
-        info!(?join, "group member added");
-        self.groups
-            .entry(join.group)
-            .or_default()
-            .insert(join.member);
-        vec![HostMessage::GroupJoined {
-            group: join.group,
-            member: join.member,
-        }]
-    }
-
-    fn leave(&mut self, sid: Sid) {
-        self.groups.remove(&sid);
-        self.groups.values_mut().for_each(|members| {
-            members.remove(&sid);
-        });
-        match self.objects.remove(&sid) {
-            Some(object) => info!(sid = sid.0, ?object, "object left"),
-            None => warn!(sid = sid.0, "leaveNet for an unknown SID"),
-        }
-    }
-}
-
-/// Which kinds take members until the shared object store decides it per land.
-fn holds_members(kind: ObjectKind) -> bool {
-    matches!(kind, ObjectKind::Group | ObjectKind::LandGroup)
+fn replies_to(connection: ConnectionId, messages: Vec<HostMessage>) -> Vec<Delivery> {
+    let replies = messages.into_iter();
+    replies
+        .map(|message| Delivery {
+            to: connection,
+            message,
+        })
+        .collect()
 }
 
 fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage> {
@@ -194,9 +141,11 @@ fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage>
 mod tests {
     use super::*;
     use crate::{
-        AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, LandCatalog, LandType,
-        LoginNakReason, ObjectKind, PasswordSource, SendMessage,
+        AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, JoinNet, LandCatalog,
+        LandType, LoginNakReason, ObjectKind, PasswordSource, SendMessage, Sid,
     };
+
+    const ME: ConnectionId = ConnectionId(1);
 
     fn login(password: u8) -> ClientMessage {
         ClientMessage::Login(Login {
@@ -210,10 +159,10 @@ mod tests {
         })
     }
 
-    fn join(cookie: u16, kind: ObjectKind) -> ClientMessage {
+    fn join_game_object() -> ClientMessage {
         ClientMessage::JoinNet(JoinNet {
-            cookie: Cookie(cookie),
-            kind,
+            cookie: Cookie(1),
+            kind: ObjectKind::GameObject,
             land_type: LandType(1),
             parameter: 0,
             size: 12,
@@ -229,20 +178,29 @@ mod tests {
         }
     }
 
+    fn messages(deliveries: Vec<Delivery>) -> Vec<HostMessage> {
+        assert!(deliveries.iter().all(|delivery| delivery.to == ME));
+        deliveries
+            .into_iter()
+            .map(|delivery| delivery.message)
+            .collect()
+    }
+
     #[test]
     fn a_wrong_password_asks_the_client_to_try_again() {
         let world = world_with_one_account();
+        let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();
-        let replies = player.handle(&world, &login(8));
+        let replies = messages(player.handle(&world, &mut objects, ME, &login(8)));
         let [HostMessage::Nak(nak)] = replies.as_slice() else {
             panic!("expected one Nak, got {replies:?}");
         };
         assert_eq!(nak.which_sub, LoginNakReason::RetryPassword as u8);
         assert!(player
-            .handle(&world, &join(1, ObjectKind::GameObject))
+            .handle(&world, &mut objects, ME, &join_game_object())
             .is_empty());
         assert!(matches!(
-            player.handle(&world, &login(7)).as_slice(),
+            messages(player.handle(&world, &mut objects, ME, &login(7))).as_slice(),
             [HostMessage::LoginAccepted(_)]
         ));
     }
@@ -250,86 +208,50 @@ mod tests {
     #[test]
     fn a_repeat_login_on_a_logged_in_session_admits_again() {
         let world = World::stock();
+        let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();
-        let _ = player.handle(&world, &login(7));
-        let _ = player.handle(&world, &join(1, ObjectKind::Object));
-        let replies = player.handle(&world, &login(7));
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
+        let _ = player.handle(&world, &mut objects, ME, &join_game_object());
+        let replies = messages(player.handle(&world, &mut objects, ME, &login(7)));
         assert!(matches!(
             replies.as_slice(),
             [HostMessage::LoginAccepted(_)]
         ));
-        // The object table starts over; releasing what the first login held is the object store's.
-        let again = player.handle(&world, &join(2, ObjectKind::Object));
-        assert_eq!(again, [obj_id(2, FIRST_SID)]);
     }
 
     #[test]
     fn requests_before_login_get_no_reply() {
         let world = World::stock();
+        let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();
         let request = ClientMessage::HostInfo(HostInfoRequest::HostNumber);
-        assert!(player.handle(&world, &request).is_empty());
+        assert!(player.handle(&world, &mut objects, ME, &request).is_empty());
     }
 
     #[test]
-    fn only_groups_take_members_and_leaving_ends_membership() {
+    fn a_second_login_releases_what_the_first_one_held() {
         let world = World::stock();
+        let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();
-        let _ = player.handle(&world, &login(7));
-        let _ = player.handle(&world, &join(1, ObjectKind::Object));
-        let _ = player.handle(&world, &join(2, ObjectKind::LandGroup));
-        let add = |group| {
-            ClientMessage::GroupJoin(GroupJoin {
-                group: Sid(group),
-                member: Sid(FIRST_SID),
-                version: None,
-            })
-        };
-        assert!(player.handle(&world, &add(FIRST_SID)).is_empty());
-        assert_eq!(player.handle(&world, &add(FIRST_SID + 1)).len(), 1);
-        let _ = player.handle(&world, &ClientMessage::LeaveNet(Sid(FIRST_SID + 1)));
-        assert!(player.handle(&world, &add(FIRST_SID + 1)).is_empty());
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
+        let _ = player.handle(&world, &mut objects, ME, &join_game_object());
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
+        let leave = ClientMessage::LeaveNet(Sid(0x0100));
+        assert!(player.handle(&world, &mut objects, ME, &leave).is_empty());
+        assert!(objects.is_empty());
     }
 
     #[test]
     fn decoded_shared_object_commands_are_ignored_until_a_handler_exists() {
         let world = World::stock();
+        let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();
-        let _ = player.handle(&world, &login(7));
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
         let relay = ClientMessage::Send(SendMessage {
-            to: Sid(FIRST_SID),
+            to: Sid(0x0100),
             from: Sid(0),
             payload: vec![1, 0],
         });
-        assert!(player.handle(&world, &relay).is_empty());
-    }
-
-    #[test]
-    fn sids_wrap_past_the_top_and_skip_live_objects() {
-        let world = World::stock();
-        let mut player = PlayerSession::new();
-        let _ = player.handle(&world, &login(7));
-        let first = player.handle(&world, &join(1, ObjectKind::Object));
-        assert_eq!(first, [obj_id(1, FIRST_SID)]);
-        let PlayerState::LoggedIn(logged_in) = &mut player.state else {
-            panic!("logged in above");
-        };
-        logged_in.next_sid = u16::MAX;
-        assert_eq!(logged_in.join(join_net(2)), [obj_id(2, u16::MAX)]);
-        assert_eq!(logged_in.join(join_net(3)), [obj_id(3, FIRST_SID + 1)]);
-    }
-
-    fn join_net(cookie: u16) -> JoinNet {
-        let ClientMessage::JoinNet(join) = join(cookie, ObjectKind::Object) else {
-            panic!("join builds a JoinNet");
-        };
-        join
-    }
-
-    fn obj_id(cookie: u16, sid: u16) -> HostMessage {
-        HostMessage::ObjId {
-            cookie: Cookie(cookie),
-            sid: Sid(sid),
-        }
+        assert!(player.handle(&world, &mut objects, ME, &relay).is_empty());
     }
 }

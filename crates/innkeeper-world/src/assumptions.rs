@@ -1,7 +1,7 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags, LoginNakReason};
+use crate::{ClientVersion, LandFlags, LoginNakReason, ObjectKind};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -28,3 +28,18 @@ pub(crate) const UNLISTED_LAND_NAK_ASSUMED: LoginNakReason = LoginNakReason::Unl
 /// A host with a data directory creates an unknown account from the password the Login presents, so
 /// a dev machine needs no sign-up (command 55 is not answered). The original host's policy is unknown.
 pub(crate) const STORED_BOOK_ENROLS_ASSUMED: bool = true;
+/// joinNet kinds that take members on every land; the codec leaves this to the host (section 3.2.1).
+pub(crate) const GROUP_KINDS_ASSUMED: [ObjectKind; 3] = [
+    ObjectKind::Group,
+    ObjectKind::PrivateGroup,
+    ObjectKind::LandGroup,
+];
+/// A group parameter that is negative as a word (-3 for a personal party) asks for a group of the
+/// requester's own; other groups are shared by kind, land type and parameter (section 11).
+pub(crate) const PRIVATE_PARAMETER_MIN_ASSUMED: u16 = 0x8000;
+/// A GrpJoin reaches the other members as well as the joiner: the waiting room's members fetch the
+/// newcomer's name when it arrives (section 11).
+pub(crate) const GROUP_JOIN_TELLS_MEMBERS_ASSUMED: bool = true;
+/// A joinNet of this kind with a cookie the connection already holds replaces that object: the
+/// Clubhouse entry re-joins the game object with no leaveNet (section 5.4, section 11).
+pub(crate) const REJOIN_REPLACES_KIND_ASSUMED: ObjectKind = ObjectKind::GameObject;

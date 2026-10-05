@@ -473,6 +473,17 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
 - `notify`: a `class_61` flag ORed into byte 1 of object commands; never set by any script.
 - Whether the host fans a `Send` to a group SID out to every member, and whether it echoes it to the
   sender. Game handlers suggest every member including the sender gets it; a capture would settle it.
+- Whether a `GrpJoin` reaches the other members of the group as well as the joiner, and a `GrpDel` the
+  remaining members. The waiting room fetches a newcomer's name in `addMember`
+  (`hub/script.003 WaitingRoomGroup::addMember`) and the DOS games drop a remote player on `GrpDel`
+  (`int14h-census/yserbius.md` section 4.2), so `innkeeperd` tells every member (INFERRED,
+  `docs/server/objects.md` section 6).
+- How the host scopes groups. `innkeeperd` shares kinds 2, 4 and 5 by kind, land type and parameter, and
+  gives a negative parameter (the personal party's -3) a group of the requester's own (INFERRED,
+  `docs/server/objects.md` section 3).
+- Whether a second joinNet with the same cookie replaces the first object. The Clubhouse entry re-joins the
+  game object with no leaveNet (section 5.4); `innkeeperd` frees the old one and its group memberships
+  (INFERRED).
 - The meaning of `userFlags`, `status` and `rating` in the login Ack beyond the bits the client tests;
   all zero works.
 - The two unread bytes of a land directory row, and the land flags beyond bits `0x0C`.

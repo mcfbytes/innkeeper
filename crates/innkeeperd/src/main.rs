@@ -11,6 +11,7 @@ mod server;
     expect(dead_code, reason = "nothing opens the database until accounts use it")
 )]
 mod sqlite_store;
+mod switchboard;
 
 use std::process::ExitCode;
 

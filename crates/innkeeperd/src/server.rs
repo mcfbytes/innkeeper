@@ -47,11 +47,7 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
     let listener = TcpListener::bind(bind)
         .await
         .map_err(|source| ServerError::Bind { bind, source })?;
-    let settings = ConnectionSettings {
-        session: config.session_config(),
-        world,
-        capture_dir: config.capture_dir(),
-    };
+    let settings = ConnectionSettings::new(config.session_config(), world, config.capture_dir());
     info!(%bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
     tokio::select! {
         () = accept_forever(listener, Arc::new(settings)) => {}
@@ -84,11 +80,15 @@ async fn accept_forever(listener: TcpListener, settings: Arc<ConnectionSettings>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
+    use std::time::Instant;
+
     use innkeeper_session::SessionConfig;
     use innkeeper_world::{AccountId, AccountRecord, EncodedPassword};
     use pad_thai::LineKind;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
+    use tsn_link::{Link, LinkConfig, LinkOutput, Message};
 
     /// The stock client's first frame and the host's reply, from docs/protocol/captures.md.
     const CAPTURED_LOGIN_FRAME: [u8; 39] = [
@@ -141,11 +141,7 @@ mod tests {
             line: LineKind::Pad,
             ..SessionConfig::default()
         };
-        let settings = ConnectionSettings {
-            session,
-            world: World::stock(),
-            capture_dir: Some(capture_dir.clone()),
-        };
+        let settings = ConnectionSettings::new(session, World::stock(), Some(capture_dir.clone()));
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         tokio::spawn(accept_forever(listener, Arc::new(settings)));
@@ -177,5 +173,116 @@ mod tests {
         assert!(captured.contains("ev client Login("), "{captured}");
         assert!(captured.contains("ev host LoginAccepted"), "{captured}");
         assert!(captured.contains(" rx 81 a1 11 00 0a 00 "), "{captured}");
+    }
+
+    /// A client past the PAD call that speaks the link layer through a `Link` of its own.
+    struct LinkedClient {
+        stream: TcpStream,
+        link: Link,
+        received: VecDeque<Vec<u8>>,
+    }
+
+    impl LinkedClient {
+        async fn call(address: SocketAddr) -> Self {
+            let mut stream = TcpStream::connect(address).await.unwrap();
+            stream.write_all(b"@D\r\r").await.unwrap();
+            expect_reply(&mut stream, b"\r\nTERMINAL=\r\n@").await;
+            stream.write_all(b"c SIERRA\r").await.unwrap();
+            expect_reply(&mut stream, b"\r\nSIERRA CONNECTED\r\n").await;
+            let config = LinkConfig {
+                quiet_after_connect: Duration::ZERO,
+                ..LinkConfig::default()
+            };
+            let link = Link::new(config, Instant::now());
+            let received = VecDeque::new();
+            LinkedClient {
+                stream,
+                link,
+                received,
+            }
+        }
+
+        async fn send(&mut self, body: &str) {
+            let message = Message::try_new(hex(body)).unwrap();
+            self.link.send_message(&message, Instant::now());
+            self.link.flush(Instant::now());
+            self.write_outputs().await;
+        }
+
+        async fn expect(&mut self, body: &str) {
+            while self.received.is_empty() {
+                let mut chunk = [0; 256];
+                let read =
+                    tokio::time::timeout(Duration::from_secs(5), self.stream.read(&mut chunk));
+                let read = read.await.expect("server answered in time").unwrap();
+                assert!(read > 0, "server hung up");
+                let escaped = self.link.handle_input(&chunk[..read], Instant::now());
+                assert_eq!(escaped, None);
+                self.write_outputs().await;
+            }
+            assert_eq!(self.received.pop_front(), Some(hex(body)));
+        }
+
+        async fn write_outputs(&mut self) {
+            while let Some(output) = self.link.poll_output() {
+                match output {
+                    LinkOutput::ToClient(bytes) => self.stream.write_all(&bytes).await.unwrap(),
+                    LinkOutput::Delivered(message) => {
+                        self.received.push_back(message.body().to_vec())
+                    }
+                    LinkOutput::Event(_) => {}
+                }
+            }
+        }
+    }
+
+    fn hex(text: &str) -> Vec<u8> {
+        let pairs = text.split_whitespace();
+        pairs
+            .map(|pair| u8::from_str_radix(pair, 16).unwrap())
+            .collect()
+    }
+
+    const LOGIN: &str = "35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 \
+                         67 75 79 62 72 75 73 68 00";
+    const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 00 00";
+    const JOIN_PLAYER: &str = "07 00 00 00 8c 09 01 01 ff ff 1e 00";
+    const JOIN_WAITING_ROOM: &str = "07 00 00 00 c0 01 05 01 01 00 80 00";
+
+    #[tokio::test]
+    async fn two_clients_meet_in_one_waiting_room_group() {
+        let session = SessionConfig {
+            line: LineKind::Pad,
+            ..SessionConfig::default()
+        };
+        let settings = ConnectionSettings::new(session, World::stock(), None);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(accept_forever(listener, Arc::new(settings)));
+
+        let mut first = LinkedClient::call(address).await;
+        first.send(LOGIN).await;
+        first.expect(LOGIN_ACK).await;
+        first.send(JOIN_PLAYER).await;
+        first.expect("08 00 8c 09 00 00 00 01").await;
+        first.send(JOIN_WAITING_ROOM).await;
+        first.expect("08 00 c0 01 00 00 01 01").await;
+        first.send("0a 00 01 01 00 01 02 03 12").await;
+        first.expect("0a 00 01 01 00 01").await;
+
+        let mut second = LinkedClient::call(address).await;
+        second.send(LOGIN).await;
+        second.expect(LOGIN_ACK).await;
+        second.send(JOIN_PLAYER).await;
+        second.expect("08 00 8c 09 00 00 02 01").await;
+        second.send(JOIN_WAITING_ROOM).await;
+        second.expect("08 00 c0 01 00 00 01 01").await;
+        second.send("0a 00 01 01 02 01 02 03 12").await;
+        second.expect("0a 00 01 01 02 01").await;
+        first.expect("0a 00 01 01 02 01").await;
+
+        drop(second);
+        first.expect("0b 00 01 01 02 01").await;
+        first.expect("09 00 02 01").await;
     }
 }

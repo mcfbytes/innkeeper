@@ -2,11 +2,11 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
-use innkeeper_world::World;
+use innkeeper_world::{ConnectionId, ObjectStore, World};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
@@ -14,17 +14,33 @@ use tsn_link::LinkEvent;
 
 use crate::capture::{Capture, Direction};
 use crate::host::{Exchange, Host};
+use crate::switchboard::Switchboard;
 
 const READ_CHUNK: usize = 4096;
 
 type FileCapture = Capture<BufWriter<File>>;
 
-/// What every connection shares: the session settings, the world and where captures go.
+/// What every connection shares: the session settings, the world, the host's objects, the way to
+/// reach other connections and where captures go.
 #[derive(Debug)]
 pub(crate) struct ConnectionSettings {
     pub(crate) session: SessionConfig,
     pub(crate) world: World,
+    pub(crate) objects: Mutex<ObjectStore>,
+    pub(crate) switchboard: Switchboard,
     pub(crate) capture_dir: Option<PathBuf>,
+}
+
+impl ConnectionSettings {
+    pub(crate) fn new(session: SessionConfig, world: World, capture_dir: Option<PathBuf>) -> Self {
+        ConnectionSettings {
+            session,
+            world,
+            objects: Mutex::new(ObjectStore::new()),
+            switchboard: Switchboard::default(),
+            capture_dir,
+        }
+    }
 }
 
 /// Runs one client connection to its end, logging instead of failing.
@@ -55,9 +71,10 @@ async fn drive(
     stream.set_nodelay(true)?;
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
-    let mut host = Host::new(&settings.world);
+    let mut host = Host::new(settings, ConnectionId(id));
     let session = Session::new(settings.session);
     let result = pump(&mut stream, session, &mut host, &mut capture).await;
+    host.hang_up();
     record(&mut capture, Capture::finish_run);
     result
 }
@@ -83,6 +100,10 @@ async fn pump(
             }
             () = sleep_until(session.next_deadline()) => session.handle_timeout(Instant::now()),
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
+            Some(notice) = host.next_notice() => {
+                let now = Instant::now();
+                report(capture, now, host.pass_on(&mut session, notice, now));
+            }
         }
         deliver_outputs(&mut session, host, stream, capture).await?;
     }
@@ -107,15 +128,19 @@ async fn deliver_outputs(
                 log_event(&event);
                 record(capture, |c| c.record_event(now, &event));
                 if let SessionEvent::Message(message) = &event {
-                    for step in host.answer(session, message, now) {
-                        log_exchange(&step);
-                        record(capture, |c| c.record_event(now, &step));
-                    }
+                    report(capture, now, host.answer(session, message, now));
                 }
             }
         }
     }
     Ok(())
+}
+
+fn report(capture: &mut Option<FileCapture>, now: Instant, steps: Vec<Exchange>) {
+    for step in steps {
+        log_exchange(&step);
+        record(capture, |c| c.record_event(now, &step));
+    }
 }
 
 fn log_exchange(step: &Exchange) {

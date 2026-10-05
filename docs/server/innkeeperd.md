@@ -16,11 +16,15 @@ innkeeperd           bin: command line, tokio runtime, TCP, capture files, wirin
 int14h               the 17 INT 14h exports and the transport codec (int14h-transport.md), no I/O
 ```
 
-`innkeeper-world` does not depend on the session crates: it turns message bodies into replies, and
+`innkeeper-world` does not depend on the session crates: it turns message bodies into deliveries, and
 `innkeeperd` (`src/host.rs`, `Host`) carries them between the two. A delivered client message is parsed
-into a `ClientMessage`, handed to the connection's `PlayerSession` with the shared `World`, and every
-`HostMessage` that comes back is encoded, queued with `Session::send_message` and sent with
-`Session::flush`, which closes the frame.
+into a `ClientMessage` and handed to the connection's `PlayerSession` with the shared `World` and the
+host's `ObjectStore`, which every connection shares behind one `Mutex`. What comes back is a list of
+`Delivery { to, message }`: the connection's own replies are encoded, queued with `Session::send_message`
+and sent with `Session::flush`, which closes the frame; deliveries for other connections go through
+`src/switchboard.rs` to their inboxes, and each connection's pump loop sends what arrives in its inbox the
+same way. When the TCP connection closes, the store releases what it held and tells the others
+([objects.md](objects.md) section 5).
 
 Every crate below `innkeeperd` is synchronous and deterministic: bytes and an `Instant` go in, bytes and
 events come out, and timers are a `next_deadline()` that the caller sleeps on. `innkeeperd` depends on
@@ -102,7 +106,8 @@ DATA frame per client message.
 | `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the dev default; `listed(...)` checks number and encoded password; `stored(store, Enrolment)` reads the `AccountRecord` and gives the `Account` its `user_flags`, `rating` and `LoginStatus` (11 while the record's password is expired), and `change_password` updates the record |
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory and occupancy |
-| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; owns the client's SIDs and group memberships |
+| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store |
+| `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
 | `store` | `Store`: accounts, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
 | `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
@@ -111,19 +116,21 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 
 | Client sends | Host replies |
 |---|---|
-| Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A repeat Login on a logged-in session admits again and starts a fresh player |
+| Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A Login on a connection that holds objects first releases them, as a hang-up does |
 | 44 | Ack 44/1 to the request's SID after the password is stored and the expired flag cleared; Nak 44 when the store refuses. The open book stores nothing and still acks |
-| joinNet (7) | `ObjID` with the next free SID, counting up from `0x0100` per connection and skipping SIDs still in use after the wrap |
-| leaveNet (9) | nothing; the SID and its group memberships are forgotten |
-| add (10) to a group | `GrpJoin` for the member, delivered to the group |
+| joinNet (7) | `ObjID` with the cookie echoed and a host-wide SID counting up from `0x0100`; a group of kind 2, 4 or 5 is shared by `(kind, landType, parameter)`, so every joiner of the same waiting room gets the same SID; a game object joined again with the same cookie replaces the old one ([objects.md](objects.md) section 3) |
+| leaveNet (9) | nothing to the sender; releases one reference, and the last one frees the object: `GrpDel` and `ObjFree` to the other connections that see it |
+| add (10) to a group | `GrpJoin` for the member to the joiner and to every other connection with a member in the group; Nak 10 with code 1 (no such group), 2 (full) or 3 (not the sender's object) |
+| delete (11) | `GrpDel` to the connections of the remaining members |
+| `GrpMem` (12) | the member list, from byte 6 in joining order |
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
 | 47/1 | occupancy for the same lands: maximum 64, current 0 |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |
 
-Commands 2, 11, 12, 13, 14, 28 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply
-until the object store routes them. Every other command is logged as "not decoded" and gets no reply. At
+Commands 2, 13, 14, 28 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply until
+the router and the property replication handle them. Every other command is logged as "not decoded" and gets no reply. At
 logon that is 34/4, 45/1, 37/32 and 40/4, and in the Clubhouse 26; the client carries on without answers
 (`captures.md` section 9).
 

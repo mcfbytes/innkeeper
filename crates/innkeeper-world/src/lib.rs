@@ -10,6 +10,7 @@ mod ids;
 mod land;
 mod logon;
 mod message;
+mod objects;
 mod player;
 mod store;
 mod world;
@@ -27,6 +28,7 @@ pub use message::{
     LandEntry, Login, LoginAck, LoginNakReason, LoginStatus, Multicast, Nak, Notice, ObjExists,
     ObjectKind, ObjectLocated, Occupancy, PasswordSource, SendMessage, SetInt, SetStr,
 };
+pub use objects::{ConnectionId, Delivery, GroupKey, ObjectStore};
 pub use player::PlayerSession;
 #[cfg(feature = "test-support")]
 pub use store::conformance;

@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use innkeeper_world::{
-    AccountBook, AccountId, AccountRecord, ClientMessage, EncodedPassword, Enrolment, LoginStatus,
-    MemoryStore, PlayerSession, Store, World,
+    AccountBook, AccountId, AccountRecord, ClientMessage, ConnectionId, EncodedPassword, Enrolment,
+    LoginStatus, MemoryStore, ObjectStore, PlayerSession, Store, World,
 };
 
 fn hex(text: &str) -> Vec<u8> {
@@ -43,10 +43,12 @@ fn member() -> AccountRecord {
 
 /// Sends each client message in turn and returns the encoded replies, in order.
 fn transcript(world: &World, session: &mut PlayerSession, sends: &[&str]) -> Vec<Vec<u8>> {
+    let mut objects = ObjectStore::new();
     let mut replies = Vec::new();
     for send in sends {
         let message = ClientMessage::parse(&hex(send)).unwrap();
-        replies.extend(session.handle(world, &message).iter().map(|r| r.encode()));
+        let deliveries = session.handle(world, &mut objects, ConnectionId(1), &message);
+        replies.extend(deliveries.iter().map(|delivery| delivery.message.encode()));
     }
     replies
 }

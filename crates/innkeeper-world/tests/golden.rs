@@ -5,8 +5,8 @@ use std::fs;
 use std::path::Path;
 
 use innkeeper_world::{
-    AccountId, ClientMessage, ClientVersion, HostMessage, LandType, MessageError, ObjExists,
-    ObjectKind, PasswordSource, PlayerSession, SendMessage, Sid, World,
+    AccountId, ClientMessage, ClientVersion, ConnectionId, HostMessage, LandType, MessageError,
+    ObjExists, ObjectKind, ObjectStore, PasswordSource, PlayerSession, SendMessage, Sid, World,
 };
 
 struct Row {
@@ -209,14 +209,15 @@ fn the_captured_login_decodes_to_the_persona() {
 #[test]
 fn the_player_session_answers_like_the_capture() {
     let world = World::stock();
+    let mut objects = ObjectStore::new();
     let mut player = PlayerSession::new();
     let mut expected: Vec<Vec<u8>> = Vec::new();
     let mut answered: Vec<Vec<u8>> = Vec::new();
     for row in logon_rows() {
         if row.from_client {
             let message = ClientMessage::parse(&row.bytes).unwrap();
-            let replies = player.handle(&world, &message);
-            answered.extend(replies.iter().map(HostMessage::encode));
+            let replies = player.handle(&world, &mut objects, ConnectionId(1), &message);
+            answered.extend(replies.iter().map(|reply| reply.message.encode()));
         } else {
             expected.push(row.bytes);
         }
