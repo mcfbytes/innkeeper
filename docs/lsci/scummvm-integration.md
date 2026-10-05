@@ -294,7 +294,10 @@ Design, following ktsn.md section 10:
   the next Poll or Service then reports 1 (carrier lost) once, as a modem hang-up would, and the scripts
   show their carrier-lost error. A host that does not answer or does not welcome version 1 makes Connect
   return 10, the offline result. A field the transport cannot carry (a dial string over 127 bytes or with
-  a control character) is not sent and also closes the link.
+  a control character, a message over 65535 bytes) is not sent; the export fails and the link stays open.
+- `TsnSocketTransport` reads only what `Networking::Socket::ready` reports. While a reply is due it
+  waits in `SciEngine::sleep` slices of 1 ms, as `kWait` does, so events and the screen stay live and
+  quitting ends the wait.
 - `TsnEnvelopeWriter` and `TsnEnvelopeParser` (`tsn_envelope_*`) encode and parse the envelopes, length
   prefix included on write; the executive splits the stream by the prefix and refuses envelopes over
   `0x10100` bytes. `TsnTransport` (`tsn_transport.h`) is the byte stream underneath, with two
@@ -311,7 +314,8 @@ Design, following ktsn.md section 10:
   string; the `a` code sends its full count even when the array is shorter, padding with zeros, because
   LSCITV copies `count` elements from element 0 without comparing with the array's size (CONFIRMED
   `16B1:0694`..`06C4`). The stock Login has 0 in its eleventh password byte, read past the ten-byte
-  array of `PASS_SET.DTA` (captures.md section 4); that LSCITV's heap holds 0 there is INFERRED. A failed Connect posts its result as a network error.
+  array of `PASS_SET.DTA` (captures.md section 4); that LSCITV's heap holds 0 there is INFERRED. A
+  failed Connect posts its result as a network error.
 - Received bodies become byte arrays when they are received, as LSCITV's Receive allocates them through
   the `alloc` callback, and wait in `EngineState::_lsciNetworkMessages`, which the GC treats as roots.
   `kLsciGetEvent` runs the poll hooks, then returns the oldest message (type `0x400`, the array in
@@ -319,9 +323,10 @@ Design, following ktsn.md section 10:
   `kGetEvent`. A peek returns the same array as the read that follows it. A mask of only `0x400` never
   reads input events.
 - `SciEngine` owns the session; it exists only for LSCI games. `makeTsnExecutive` chooses the executive:
-  online when the game option `lsci_host` is set, with `lsci_port` (default 2315, `innkeeperd`'s
-  `--int14h-bind`), offline otherwise. The executives log dials, the host's name and `TSN(9)` program
-  names on the `Network` debug channel (`--debugflags=network`).
+  online when the game option `lsci_host` is set (an IPv6 address may be bare), with `lsci_port` (default
+  2315, `innkeeperd`'s `--int14h-bind`; outside 1..65535 it warns and stays offline), offline otherwise.
+  The executives log dials, the host's name and `TSN(9)` program names on the `Network` debug channel
+  (`--debugflags=network`).
 
 ### 10.1 Which networking facility
 
@@ -397,8 +402,9 @@ Kernel notes (signatures from kernel-usage.md, Feb-94):
 - `ObjPropOffset(object, selector)` returns the slot of that property, counting from `-env-` as slot 0,
   and `ObjOffsetProp(object, slot)` the selector of a slot (CONFIRMED `1773:0002` searches the property
   dictionary, `1773:00CE` indexes it; both call LSCITV's error routine for a missing one, where
-  ScummVM warns and returns -1 or 0). LSCI's slots are ScummVM's variable indices (`docs/lsci/script-loader.md`), so the kernels use
-  `Object::locateVarSelector` and the class's selector list. setStr and setInt use them to name the
+  ScummVM warns and returns -1 or 0). LSCI's slots are ScummVM's variable indices
+  (`docs/lsci/script-loader.md`), so the kernels use `Object::locateVarSelector` and the class's
+  selector list. setStr and setInt use them to name the
   properties they replicate, so they reach the host: name 5, looks 17, home 23, game 9, room 24.
 
 Object handles. LSCITV names every object by a 16-bit handle, and the scripts send their own objects as
@@ -456,8 +462,10 @@ of section 7.1 were found.
 - When to restart for a land switch without losing the virtual TSNEXEC state (connection, hand-off block).
   `TSN(9)` only logs the program name so far.
 - The online executive calls the host once per Poll, Receive and Flush, about 200 calls a second on the
-  waiting-room screen, and blocks the game until each reply (at most 10 s). Transport version 1 has no
-  "messages waiting" notice (int14h-transport.md section 7).
+  waiting-room screen, and the script waits for each reply (at most 10 s, with events pumped). Transport
+  version 1 has no "messages waiting" notice (int14h-transport.md section 7).
+- `Networking::Socket::connect` blocks inside libcurl until the TCP connect ends; a host that drops SYNs
+  holds Connect for libcurl's connect timeout. The interface has no timeout to set; that is common code.
 - A build without basic networking (no libcurl) stays offline. A `Networking::Socket` on SDL_net in the
   backend would bring the online executive to those builds; that is common code, outside this fork's scope.
 - LSCI object handles are never released, and a handle of an object that was freed resolves to a stale
