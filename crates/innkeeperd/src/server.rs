@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use innkeeper_world::World;
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
@@ -27,6 +28,7 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
         .map_err(|source| ServerError::Bind { bind, source })?;
     let settings = ConnectionSettings {
         session: config.session_config(),
+        world: World::stock(),
         capture_dir: config.capture_dir(),
     };
     info!(%bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
@@ -66,6 +68,17 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
 
+    /// The stock client's first frame and the host's reply, from docs/protocol/captures.md.
+    const CAPTURED_LOGIN_FRAME: [u8; 39] = [
+        0x81, 0x58, 0xd8, 0x00, 0x21, 0x35, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x12, 0xa1, 0x86,
+        0x01, 0x00, 0x01, 0x1d, 0x7a, 0x01, 0x66, 0x16, 0x66, 0x18, 0x73, 0x03, 0x00, 0x00, 0x67,
+        0x75, 0x79, 0x62, 0x72, 0x75, 0x73, 0x68, 0x00, 0x82,
+    ];
+    const LOGIN_ACK_FRAME: [u8; 16] = [
+        0x81, 0xa1, 0x11, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x82,
+    ];
+
     async fn expect_reply(client: &mut TcpStream, expected: &[u8]) {
         let mut received = vec![0; expected.len()];
         let read = tokio::time::timeout(Duration::from_secs(5), client.read_exact(&mut received));
@@ -86,6 +99,7 @@ mod tests {
         };
         let settings = ConnectionSettings {
             session,
+            world: World::stock(),
             capture_dir: Some(capture_dir.clone()),
         };
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -97,11 +111,9 @@ mod tests {
         expect_reply(&mut client, b"\r\nTERMINAL=\r\n@").await;
         client.write_all(b"c SIERRA\r").await.unwrap();
         expect_reply(&mut client, b"\r\nSIERRA CONNECTED\r\n").await;
-        client
-            .write_all(&[0x81, 0x83, 0xBC, 0x00, 0x03, 0x22, 0x04, 0x10, 0x82])
-            .await
-            .unwrap();
+        client.write_all(&CAPTURED_LOGIN_FRAME).await.unwrap();
         expect_reply(&mut client, &[0x81, 0x49, 0x62, 0x90, 0x82]).await;
+        expect_reply(&mut client, &LOGIN_ACK_FRAME).await;
         drop(client);
 
         let mut captured = String::new();
@@ -111,13 +123,15 @@ mod tests {
                 .iter()
                 .map(|f| std::fs::read_to_string(f.path()).unwrap())
                 .collect();
-            if captured.contains("ev message len=3 22 04 10") {
+            if captured.contains(" rx 81 a1 11 00 0a 00 ") {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
         std::fs::remove_dir_all(&capture_dir).unwrap();
-        assert!(captured.contains("ev message len=3 22 04 10"), "{captured}");
-        assert!(captured.contains(" rx 81 49 62 90 82 "), "{captured}");
+        assert!(captured.contains("ev message len=33 35 00"), "{captured}");
+        assert!(captured.contains("ev client Login("), "{captured}");
+        assert!(captured.contains("ev host LoginAccepted"), "{captured}");
+        assert!(captured.contains(" rx 81 a1 11 00 0a 00 "), "{captured}");
     }
 }

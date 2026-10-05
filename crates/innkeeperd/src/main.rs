@@ -4,6 +4,7 @@
 mod capture;
 mod config;
 mod connection;
+mod host;
 mod server;
 
 use std::process::ExitCode;

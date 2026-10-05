@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 innkeeper-session.workspace = true
+innkeeper-world.workspace = true
 pad_thai.workspace = true
 tsn-link.workspace = true
 clap.workspace = true

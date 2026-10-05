@@ -165,6 +165,7 @@ dependencies = [
  "clap",
  "humantime",
  "innkeeper-session",
+ "innkeeper-world",
  "pad_thai",
  "thiserror",
  "tokio",

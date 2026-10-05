@@ -6,21 +6,24 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
+use innkeeper_world::World;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
 use tsn_link::LinkEvent;
 
 use crate::capture::{Capture, Direction};
+use crate::host::{Exchange, Host};
 
 const READ_CHUNK: usize = 4096;
 
 type FileCapture = Capture<BufWriter<File>>;
 
-/// What every connection shares: the session settings and where captures go.
+/// What every connection shares: the session settings, the world and where captures go.
 #[derive(Debug)]
 pub(crate) struct ConnectionSettings {
     pub(crate) session: SessionConfig,
+    pub(crate) world: World,
     pub(crate) capture_dir: Option<PathBuf>,
 }
 
@@ -52,7 +55,9 @@ async fn drive(
     stream.set_nodelay(true)?;
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
-    let result = pump(&mut stream, Session::new(settings.session), &mut capture).await;
+    let mut host = Host::new(&settings.world);
+    let session = Session::new(settings.session);
+    let result = pump(&mut stream, session, &mut host, &mut capture).await;
     record(&mut capture, Capture::finish_run);
     result
 }
@@ -60,6 +65,7 @@ async fn drive(
 async fn pump(
     stream: &mut TcpStream,
     mut session: Session,
+    host: &mut Host<'_>,
     capture: &mut Option<FileCapture>,
 ) -> std::io::Result<()> {
     let mut chunk = Vec::with_capacity(READ_CHUNK);
@@ -78,12 +84,13 @@ async fn pump(
             () = sleep_until(session.next_deadline()) => session.handle_timeout(Instant::now()),
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
         }
-        deliver_outputs(&mut session, stream, capture).await?;
+        deliver_outputs(&mut session, host, stream, capture).await?;
     }
 }
 
 async fn deliver_outputs(
     session: &mut Session,
+    host: &mut Host<'_>,
     stream: &mut TcpStream,
     capture: &mut Option<FileCapture>,
 ) -> std::io::Result<()> {
@@ -99,10 +106,23 @@ async fn deliver_outputs(
             SessionOutput::Event(event) => {
                 log_event(&event);
                 record(capture, |c| c.record_event(now, &event));
+                if let SessionEvent::Message(message) = &event {
+                    for step in host.answer(session, message, now) {
+                        log_exchange(&step);
+                        record(capture, |c| c.record_event(now, &step));
+                    }
+                }
             }
         }
     }
     Ok(())
+}
+
+fn log_exchange(step: &Exchange) {
+    match step {
+        Exchange::Received(_) | Exchange::Replied(_) => info!(%step),
+        Exchange::Undecodable(_) | Exchange::NotSent(_) => warn!(%step),
+    }
 }
 
 fn log_event(event: &SessionEvent) {
