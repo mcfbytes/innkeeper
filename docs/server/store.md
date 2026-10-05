@@ -72,9 +72,19 @@ tests) holds the cases every `Store` must pass:
 a fresh file database, and `run_persistence` on a file, in `crates/innkeeperd/src/sqlite_store.rs`.
 A new implementation adds the same calls to its tests and needs nothing else.
 
-## 5. Not wired yet
+## 5. Who uses it
 
-Nothing in the host opens a store today. The account book and `World` take one when logon policy
-lands, and mail and boards parse their own bodies on top of `append_letter` and `post`. Until then
-`sqlite_store` is compiled but unused, which `main.rs` records with an expected `dead_code` lint that
-the first user must remove.
+The account book and `World` take a store (`World::stored`), and `innkeeperd --data-dir` opens a
+`SqliteStore`. Mail is the first user of the mailbox family ([mail.md](mail.md)):
+
+- `assign_mailbox` answers command 45 and finds the requester's own box for every command 37 request; the
+  open book's store has no accounts, so it fails with `UnknownAccount`, which the mail module reports as a
+  status 2 to the client.
+- `append_letter` stores a body of six bytes of delivery time followed by the client's envelope; the store still
+  never looks inside. A delivery to a number nobody was assigned is `UnknownMailbox`.
+- `letters` serves the new-mail check, the listing and the read; `delete_letter` returns false for a letter
+  that is not in that mailbox, which the client sees as "that letter does not exist".
+
+Boards (`post`, `posts`) have no user yet; the RPG bulletin board will parse its own bodies on top of them.
+A first-class delivery time on `Letter` would let the stored body be the envelope alone; that is a trait
+change for the owner of `store.rs`.

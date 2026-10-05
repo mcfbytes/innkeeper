@@ -113,10 +113,11 @@ DATA frame per client message.
 
 | Module | Holds |
 |---|---|
-| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `object_kind`); the type names are in `messages.md` section 3.2.1 |
+| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `object_kind`, `mail`); the type names are in `messages.md` section 3.2.1 |
 | `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the dev default; `listed(...)` checks number and encoded password; `stored(store, Enrolment)` reads the `AccountRecord` and gives the `Account` its `user_flags`, `rating` and `LoginStatus` (11 while the record's password is expired), and `change_password` updates the record |
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory with each row's version range, `admits(land_type, version)` against that range, and occupancy counted from the object store (`current` is the member count of the land's waiting room, `maximum` the catalog's 64) |
+| `mail` | the mailbox assignment (45/1) and the `EMMsg` requests (37) over the store: new-mail check, listing, send, read, delete, forward. See [mail.md](mail.md) |
 | `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4) |
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
@@ -144,11 +145,17 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`); the name replaces the account's persona for the session and is not written to the store |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |
+| 45/1 | the account's mailbox number (status 1), assigned once and then stable; status 2 on the open book and 4 when the store fails |
+| 37/17, 18, 19, 25 | the account's box, the new-mail status, the listing and the letter's text; Nak 37 with a fault number for another account's box, a missing letter or box |
+| 37/20, 21, 24, 27 | Ack 37 naming the box that received the letter; the letter is stored for the addressee's box |
+| 37/26, 30 | nothing: the letter is deleted, the service form is dropped |
+| 37/31, 32 | an empty services listing and an empty system list |
 
 Commands 13, 14 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply until
 the property replication and the service lookup handle them. Every other command is logged as "not decoded" and gets no reply. At
-logon that is 34/4, 45/1 and 37/32, and in the Clubhouse 26; the client carries on without answers
-(`captures.md` section 9).
+logon that is 34/4, and in the Clubhouse 26; the client carries on without answers
+(`captures.md` section 9). Mail (37, 45) is answered on a host with `--data-dir`; without one every 37 request is refused
+and 45/1 answers status 2 ([mail.md](mail.md) section 6).
 
 ## 6. Capture files
 
@@ -187,6 +194,7 @@ Example, the end of a real session (`docs/protocol/captures.md`):
   ([router.md](router.md)).
 - Password hashing (Phase 7): the encoded password is stored as the client sends it. A second Login for an
   account that is already online is not refused.
-- Replies to 34/4 (rates), 45/1 (mailbox), 37 (mail), 40/4 (name), `getProp` (32) and the other services of
-  `messages.md` section 3.3.
+- Replies to 34/4 (rates), `getProp` (32) and the other services of `messages.md` section 3.3.
+- Mail beyond [mail.md](mail.md): letters arriving while the recipient is online are not pushed, and a
+  new account has no stamps flag, so it cannot send until its record has `0x200`.
 - Serving the INT 14h transport.

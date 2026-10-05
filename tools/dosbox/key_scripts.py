@@ -39,4 +39,6 @@ KEY_SCRIPTS = {
         pace=0.5,
         seconds=520,
     ),
+    # Needs an account with user flag 0x200 (INN Stamps); opens "Mailbox 1" from the Post Office.
+    "mailbox": KeyScript(keys="enter 40s " + "tab 4s " * 3 + "enter 40s", wait=30, pace=0.5, seconds=160),
 }
