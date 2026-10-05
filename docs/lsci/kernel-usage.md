@@ -193,7 +193,9 @@ Notes on kernels outside the sub-op family:
   a temp 85% of the time. `ObjectFree` and `ObjectRespondsTo` are called from `Obj` (`type31.608`),
   `InvokeMethod` from `class_70` (`type31.559`). `ObjPropOffset(object, selector)` and
   `ObjOffsetProp(object, offset)` map between selectors and property slots; callers are `Obj`, the
-  network classes and `WaitingRoomGroup`.
+  network classes and `WaitingRoomGroup`. The slot counts from `-env-` as 0: `1773:0002` searches the
+  property dictionary for the selector, `1773:00CE` reads the selector of a slot, and both call the
+  error routine `17B2:02CF` with code 5 when the property or slot does not exist.
 - INFERRED: `Wait(ticks)` returns the elapsed ticks; 61% of the sites discard it.
 - CONFIRMED (counts): `NumLoops` callers are the face-builder classes in `script.105` (`bEyes`,
   `bMouth`...); 90 of the 172 `NumCels` calls are in `class_8d` (`script.191`) and 153 of them in SL.
@@ -297,7 +299,9 @@ Sub-op semantics worth stating in prose:
 - CONFIRMED `FileSystem` backs the `File` class (`class_2`, `type31.639`): open 0, close 1, writeString 2,
   readString 3, putByte 5, getByte 6, seek 9, unlink 10, readToArray 11, writeFromArray 12, size 13. Sub-ops
   14 and 15 are `FindFirst` and `FindNext`, used by `class_60::readFrom` (`type31.689`). Sub-ops 16 and 17
-  (file size low and high word) are INN-only. INFERRED: 4 `GetCurrentDir` and 8 `IsDirectory`.
+  (file size low and high word) are INN-only. INFERRED: 4 `GetCurrentDir`. CONFIRMED: 8 `IsDirectory`
+  (`0FAC:0231`) runs a DOS find-first for the path with attributes `0x12` into the DTA at `DS:3524` and
+  returns 1 when an entry is found whose attribute byte (`DS:3539`) has the directory bit `0x10`.
 - CONFIRMED `SID` is an id to object table: `Init(slots)`, `Bind(id, obj)`, `Unbind(id)`, `Lookup(id)` (id 0
   is the local object). 4 and 5 are two list operations, INFERRED, never called. Used by the network
   message class (`class_61`), `Obj` and the invite rooms.
@@ -451,7 +455,7 @@ Sub-op semantics worth stating in prose:
 | 5 PutByte | `(handle, byte)` | CONFIRMED | 3 | 3x3 | class_2 (type31.639) 3 | stored in property 100% |
 | 6 GetByte | `(handle) -> byte or -1` | CONFIRMED | 13 | 2x13 | TileMap (script.496) 10; class_2 (type31.639) 3 | computed 76%, returned 23%, stored in property 23% |
 | 7 (reserved) | `no-op` | CONFIRMED | 0 | - | - |  |
-| 8 IsDirectory | `(path) -> 1 when the path names a directory` | INFERRED | 12 | 2x12 | proc_313 (script.050) 3; gotoCUCmall (script.050) 3 | stored in temp 50%, tested 25%, returned 25% |
+| 8 IsDirectory | `(path) -> 1 when the path names a directory` | CONFIRMED | 12 | 2x12 | proc_313 (script.050) 3; gotoCUCmall (script.050) 3 | stored in temp 50%, tested 25%, returned 25% |
 | 9 Seek | `(file object, low, high * 10000, whence)` | CONFIRMED | 6 | 5x6 | class_2 (type31.639) 6 | returned 100% |
 | 10 Unlink | `(name)` | CONFIRMED | 3 | 1+x3 | class_2 (type31.639) 3 | returned 100% |
 | 11 ReadToArray | `(file object, array, count) -> status` | CONFIRMED | 3 | 4x3 | class_2 (type31.639) 3 | returned 100% |

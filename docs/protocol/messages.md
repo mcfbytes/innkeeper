@@ -97,7 +97,10 @@ Replies addressed to SID 0 reach the game object, so `CC` and through it the cur
 `RoomZeroHandler` (`hub/script.011`), whose name fits. This matters before the game object has a SID:
 the login Ack (section 4.2) can only be delivered with `toSID` 0. CONFIRMED live: an Ack, a `HostInfo`
 and two `WaitGrpRequest` replies with `toSID` 0 all reached `Dialing` (`docs/protocol/captures.md`
-section 9). That the variable behind `SID(3, 0)` is the game object itself remains INFERRED.
+section 9). That the variable behind `SID(3, 0)` is the game object itself remains INFERRED: its only
+writer, `0BAE:000D`, stores the value that `0BAE:000A` stores as the current object (`DGROUP:0A52`) at
+start-up, and the ScummVM fork, which returns the game object, logs on with it
+(`docs/lsci/scummvm-integration.md` section 7.1).
 
 Several classes call `move` in `init` to drop their header, so offsets used later by handlers are
 relative to the new start ("body rebased" in the tool output). For example `Send` rebases at 8, so a
