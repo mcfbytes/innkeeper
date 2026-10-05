@@ -20,6 +20,17 @@ pub enum SessionEvent {
     Link(LinkEvent),
     /// A complete application message from the client.
     Message(Message),
+    /// The host call ended while the TCP connection stays open; reported once per call.
+    LinkLost(LinkLoss),
+}
+
+/// What ended a host call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LinkLoss {
+    /// The client cleared the call at the PAD prompt with `D`.
+    PadDisconnected,
+    /// The emulated modem hung up (`ATH` or `ATZ`) with the call still up.
+    ModemHungUp,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,11 +104,19 @@ impl Session {
         Ok(())
     }
 
+    /// Whether every message for the client has been acknowledged; true while no call is up.
+    pub fn is_transmit_idle(&self) -> bool {
+        match &self.host {
+            HostLink::Online(link) => link.is_transmit_idle(),
+            HostLink::Offline => true,
+        }
+    }
+
     pub fn poll_output(&mut self) -> Option<SessionOutput> {
         self.outputs.pop_front()
     }
 
-    fn online_link(&mut self) -> Result<&mut Link, SessionError> {
+    pub(crate) fn online_link(&mut self) -> Result<&mut Link, SessionError> {
         match &mut self.host {
             HostLink::Online(link) => Ok(link),
             HostLink::Offline => Err(SessionError::NoHostCall),
@@ -110,8 +129,8 @@ impl Session {
                 LineOutput::Reply(bytes) => self.outputs.push_back(SessionOutput::ToClient(bytes)),
                 LineOutput::Data(bytes) => self.feed_link(&bytes, now),
                 LineOutput::Event(event) => {
+                    self.emit(SessionEvent::Line(event.clone()));
                     self.follow_call_state(&event, now);
-                    self.emit(SessionEvent::Line(event));
                 }
             }
         }
@@ -122,11 +141,18 @@ impl Session {
             LineEvent::Pad(PadEvent::HostConnected(_)) => {
                 self.host = HostLink::Online(Box::new(Link::new(self.config.link, now)));
             }
-            LineEvent::Pad(PadEvent::HostDisconnected(_))
-            | LineEvent::Modem(ModemEvent::HungUp) => {
-                self.host = HostLink::Offline;
+            LineEvent::Pad(PadEvent::HostDisconnected(_)) => {
+                self.lose_link(LinkLoss::PadDisconnected);
             }
+            LineEvent::Modem(ModemEvent::HungUp) => self.lose_link(LinkLoss::ModemHungUp),
             LineEvent::Detected(_) | LineEvent::Modem(_) | LineEvent::Pad(_) => {}
+        }
+    }
+
+    /// Only a call that was up can be lost, so a second hang-up reports nothing.
+    fn lose_link(&mut self, loss: LinkLoss) {
+        if let HostLink::Online(_) = std::mem::replace(&mut self.host, HostLink::Offline) {
+            self.emit(SessionEvent::LinkLost(loss));
         }
     }
 
@@ -168,6 +194,16 @@ impl fmt::Display for SessionEvent {
             SessionEvent::Line(event) => event.fmt(f),
             SessionEvent::Link(event) => write!(f, "link: {event}"),
             SessionEvent::Message(message) => write!(f, "message {message}"),
+            SessionEvent::LinkLost(loss) => write!(f, "link lost: {loss}"),
         }
+    }
+}
+
+impl fmt::Display for LinkLoss {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            LinkLoss::PadDisconnected => "the PAD cleared the call",
+            LinkLoss::ModemHungUp => "the modem hung up",
+        })
     }
 }

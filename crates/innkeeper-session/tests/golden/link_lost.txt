@@ -1,0 +1,54 @@
+# A call ends by the PAD's D or by a modem hang-up (docs/protocol/link-layer.md 5.2, checklist 12),
+# and each ended call is reported once. Syntax as in raw_serial.txt, plus "e text": the session
+# reported that link loss; a transcript that uses "e" names every one.
+# A hang-up before any PAD call loses no link.
+> \rAT\r
+< \rAT\r
+< \r\nOK\r\n
+> ATDT5551234\r
+< ATDT5551234\r
+< \r\nCONNECT 2400\r\n
++1500
+> +++
++1500
+< \r\nOK\r\n
+> AT H0\r
+< AT H0\r
+< \r\nOK\r\n
+# Dial again, call SIERRA, then clear the call at the PAD; a second D finds no call.
+> ATDT5551234\r
+< ATDT5551234\r
+< \r\nCONNECT 2400\r\n
+> @
+> D
+> \r
+< \r\nTERMINAL=
+> \r
+< \r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
++1500
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
+> \r
+< \r\n@
+> D\r
+< \r\nSIERRA DISCONNECTED\r\n@
+e link lost: the PAD cleared the call
+> D\r
+< \r\n@
+# A new call, then MODEM.DRV's hang-up; a second hang-up finds no call.
+> c 83420207\r
+< \r\n83420207 CONNECTED\r\n
++1500
+> +++
++1500
+< \r\nOK\r\n
+> AT H0\r
+< AT H0\r
+< \r\nOK\r\n
+e link lost: the modem hung up
+> ATH\r
+< ATH\r
+< \r\nOK\r\n

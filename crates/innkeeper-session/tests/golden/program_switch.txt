@@ -1,0 +1,44 @@
+# The host holds its frames while the client chains programs (docs/protocol/int14h-api.md 9.3).
+# Syntax as in host_replies.txt, plus "idle" and "busy": whether a host frame is still queued or
+# unacknowledged, and "switch": the host begins a program switch.
+> @
+> D
+> \r
+< \r\nTERMINAL=
+> \r
+< \r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
+idle
++1650
+>x 81 83 bc 00 03 22 04 10 82
+<x 81 49 62 90 82
+m 22 04 10
+s 08 00 60 01 00 00 00 01
+<x 81 74 33 00 08 08 00 60 01 00 00 00 01 82
+busy
+>x 81 49 62 90 82
+idle
+# Two notices wait out the switch; the child's first DATA frame lets them go in order, one per ACK.
+switch
+s 0a 00 01 01 02 01
+s 0b 00 01 01 02 01
+busy
++5000
+>x 81 00 58 01 0c 07 00 00 00 8c 09 01 01 ff ff 1e 00 82
+<x 81 68 72 91 82
+m 07 00 00 00 8c 09 01 01 ff ff 1e 00
+<x 81 0d 66 01 06 0a 00 01 01 02 01 82
+>x 81 68 72 91 82
+<x 81 d8 eb 02 06 0b 00 01 01 02 01 82
+busy
+>x 81 0b 42 92 82
+idle
+# A child that stays silent: the held frame leaves at the 10 s deadline.
+switch
+s 09 00 02 01
++9999
++1
+<x 81 c2 cc 03 04 09 00 02 01 82
+>x 81 2a 52 93 82
+idle

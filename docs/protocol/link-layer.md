@@ -462,6 +462,9 @@ Assumes DOSBox modem emulation, or any byte pipe that looks like a Hayes modem t
     - Expect `D\r` and reply `\r\n<old host> DISCONNECTED\r\n@`.
     - Expect `c <new>\r` and reply `\r\n<new> CONNECTED\r\n`. Reset sequence numbers to 0 and stay silent for at least 1.5 s
       (the client clears its buffer right after ` CONNECTED` and also drops its own queues).
+    - A program switch without a new call also drops the client's queues (`int14h-api.md` 9.3), so the host may hold its
+      new DATA frames until the next program's first DATA frame or a deadline (`Session::begin_program_switch`). INFERRED remedy;
+      what should arm it is open.
 13. **Hangup.** DTR drop, `+++` and `AT H0` close the call, and the client reports nothing further. Discard any
     in-band `+++` / `AT H0` bytes that reach the server.
 14. **Optional `DIRECT` host.** With `hostID = DIRECT` in `LSCI.CFG`, steps 2–5 do not happen: framing starts right

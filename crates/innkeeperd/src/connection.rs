@@ -127,8 +127,12 @@ async fn deliver_outputs(
             SessionOutput::Event(event) => {
                 log_event(&event);
                 record(capture, |c| c.record_event(now, &event));
-                if let SessionEvent::Message(message) = &event {
-                    report(capture, now, host.answer(session, message, now));
+                match &event {
+                    SessionEvent::Message(message) => {
+                        report(capture, now, host.answer(session, message, now));
+                    }
+                    SessionEvent::LinkLost(_) => host.hang_up(),
+                    SessionEvent::Line(_) | SessionEvent::Link(_) => {}
                 }
             }
         }
@@ -161,7 +165,7 @@ fn log_event(event: &SessionEvent) {
             | LinkEvent::UnknownControl { .. }
             | LinkEvent::GaveUp { .. },
         ) => warn!(%event),
-        SessionEvent::Link(_) | SessionEvent::Line(_) => info!(%event),
+        SessionEvent::Link(_) | SessionEvent::Line(_) | SessionEvent::LinkLost(_) => info!(%event),
     }
 }
 

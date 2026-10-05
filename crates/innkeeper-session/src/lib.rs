@@ -2,8 +2,10 @@
 //! The stages follow the server checklist in docs/protocol/link-layer.md.
 #![forbid(unsafe_code)]
 
+mod assumptions;
 mod error;
+mod program_switch;
 mod session;
 
 pub use error::SessionError;
-pub use session::{Session, SessionConfig, SessionEvent, SessionOutput};
+pub use session::{LinkLoss, Session, SessionConfig, SessionEvent, SessionOutput};

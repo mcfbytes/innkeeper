@@ -23,8 +23,17 @@ host's `ObjectStore`, which every connection shares behind one `Mutex`. What com
 `Delivery { to, message }`: the connection's own replies are encoded, queued with `Session::send_message`
 and sent with `Session::flush`, which closes the frame; deliveries for other connections go through
 `src/switchboard.rs` to their inboxes, and each connection's pump loop sends what arrives in its inbox the
-same way. When the TCP connection closes, the store releases what it held and tells the others
-([objects.md](objects.md) section 5).
+same way.
+
+A connection's lifecycle follows its call. A call ends when the client clears it at the PAD (`D`) or the
+emulated modem hangs up (`ATH`, `ATZ`); the session then reports `SessionEvent::LinkLost` with a `LinkLoss`,
+once per call and never for a connection that had no call. `innkeeperd` answers with `Host::hang_up`: the
+store releases what the connection held and tells the others ([objects.md](objects.md) section 5), while
+the socket stays open for a new call. When the TCP connection closes, the driver does the same.
+`Session::is_transmit_idle` says whether everything sent to the client has been acknowledged.
+`Session::begin_program_switch` holds the host's new DATA frames while the client chains programs
+(`int14h-api.md` 9.3), until the client's next DATA frame or `PROGRAM_SWITCH_QUIET_MAX_ASSUMED` (10 s),
+after which they leave in order; a frame already awaiting its ACK is still resent. Nothing arms it yet.
 
 Every crate below `innkeeperd` is synchronous and deterministic: bytes and an `Instant` go in, bytes and
 events come out, and timers are a `next_deadline()` that the caller sleeps on. `innkeeperd` depends on
@@ -86,12 +95,14 @@ serial1 = nullmodem server:127.0.0.1 port:2314 transparent:1
 | Hayes modem (raw lines) | echoes commands, answers `OK`, answers `ATD…` with `CONNECT <rate>`, `+++` with a 1 s guard time returns to command mode, `ATO` goes back online, `ATH`/`ATZ` hang up, `AT\B` sends a BREAK to the PAD | link-layer sections 4, 2.5, 5.2 |
 | PAD wake-up | `TERMINAL=` after the CR that follows `D`, then the `@` prompt; prompts anyway after two bare CRs | link-layer checklist 3 |
 | call | `c <host>` gets `<host> CONNECTED`; a new link starts with both sequences at 0 | checklist 4, 6 |
-| link | hunts for `81`, verifies the CRC, ACKs every good DATA frame (duplicates too), NAKs bad ones, delivers in-order payloads as messages | checklist 7, 8, 10 |
+| link | hunts for `81`, verifies the CRC, ACKs every good DATA frame (duplicates too), NAKs bad ones, delivers in-order payloads as messages; during a program switch new DATA frames wait for the client's next DATA frame or 10 s | checklist 7, 8, 10, 12 |
+| hang-up | `D` at the PAD prompt, or `ATH`/`ATZ` while a call is up, ends the link once (`SessionEvent::LinkLost`); the connection's objects are released and its peers told, and the socket stays open | link-layer 5.2, checklist 12, 13 |
 | escape to the PAD | a CR while no frame is open, or a modem BREAK, returns to the `@` prompt with the call still up; `SET?` gets a prompt, `D` gets `<host> DISCONNECTED` | checklist 12 |
 | `DIRECT` | a byte with bit 7 set during wake-up starts the link at once | checklist 14 |
 
-The INFERRED parts (prompt texts, the CR escape heuristic, the `DIRECT` detection) are named constants in
-`crates/pad_thai/src/assumptions.rs` and `crates/tsn-link/src/assumptions.rs`.
+The INFERRED parts (prompt texts, the CR escape heuristic, the `DIRECT` detection, the program-switch
+deadline) are named constants in `crates/pad_thai/src/assumptions.rs`, `crates/tsn-link/src/assumptions.rs`
+and `crates/innkeeper-session/src/assumptions.rs`.
 
 Host-side link timing (`tsn_link::LinkConfig`): no DATA frame for 1.5 s after a call connects unless the
 client sends first, a resend after 3 s without an ACK, and at most 10 resends. These are server choices,

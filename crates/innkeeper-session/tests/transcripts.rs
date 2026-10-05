@@ -38,6 +38,8 @@ fn hex(text: &str) -> Vec<u8> {
 struct Pending {
     to_client: Vec<u8>,
     messages: Vec<Vec<u8>>,
+    link_losses: Vec<String>,
+    names_every_link_loss: bool,
 }
 
 impl Pending {
@@ -47,6 +49,9 @@ impl Pending {
                 SessionOutput::ToClient(bytes) => self.to_client.extend(bytes),
                 SessionOutput::Event(SessionEvent::Message(message)) => {
                     self.messages.push(message.body().to_vec());
+                }
+                SessionOutput::Event(event @ SessionEvent::LinkLost(_)) => {
+                    self.link_losses.push(event.to_string());
                 }
                 SessionOutput::Event(_) => {}
             }
@@ -75,13 +80,26 @@ impl Pending {
             "line {line}: unexpected messages {:?}",
             self.messages
         );
+        assert!(
+            !self.names_every_link_loss || self.link_losses.is_empty(),
+            "line {line}: unexpected {:?}",
+            self.link_losses
+        );
+    }
+
+    fn expect_link_loss(&mut self, expected: &str, line: usize) {
+        let reported = (!self.link_losses.is_empty()).then(|| self.link_losses.remove(0));
+        assert_eq!(reported.as_deref(), Some(expected), "line {line}");
     }
 }
 
 fn run_transcript(transcript: &str) {
     let mut now = Instant::now();
     let mut session = Session::new(SessionConfig::default());
-    let mut pending = Pending::default();
+    let mut pending = Pending {
+        names_every_link_loss: transcript.lines().any(|text| text.starts_with("e ")),
+        ..Pending::default()
+    };
     for (index, text) in transcript.lines().enumerate() {
         let line = index + 1;
         let (directive, argument) = text.split_once(' ').unwrap_or((text, ""));
@@ -99,6 +117,10 @@ fn run_transcript(transcript: &str) {
             "<" => pending.expect_to_client(&unescape(argument), line),
             "<x" => pending.expect_to_client(&hex(argument), line),
             "m" => assert_eq!(pending.messages.remove(0), hex(argument), "line {line}"),
+            "e" => pending.expect_link_loss(argument, line),
+            "idle" => assert!(session.is_transmit_idle(), "line {line}: still sending"),
+            "busy" => assert!(!session.is_transmit_idle(), "line {line}: nothing to send"),
+            "switch" => session.begin_program_switch(now).unwrap(),
             "s" => {
                 let message = Message::try_new(hex(argument)).unwrap();
                 session.send_message(&message, now).unwrap();
@@ -132,6 +154,16 @@ fn host_replies_reach_the_client_in_data_frames() {
 }
 
 #[test]
+fn a_lost_call_is_reported_once() {
+    run_transcript(include_str!("golden/link_lost.txt"));
+}
+
+#[test]
+fn host_frames_wait_out_a_program_switch_in_order() {
+    run_transcript(include_str!("golden/program_switch.txt"));
+}
+
+#[test]
 fn sending_without_a_call_is_refused() {
     let now = Instant::now();
     let mut session = Session::new(SessionConfig::default());
@@ -141,4 +173,9 @@ fn sending_without_a_call_is_refused() {
         Err(SessionError::NoHostCall)
     );
     assert_eq!(session.flush(now), Err(SessionError::NoHostCall));
+    assert_eq!(
+        session.begin_program_switch(now),
+        Err(SessionError::NoHostCall)
+    );
+    assert!(session.is_transmit_idle());
 }

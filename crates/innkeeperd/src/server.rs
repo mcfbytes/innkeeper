@@ -85,7 +85,7 @@ mod tests {
 
     use innkeeper_session::SessionConfig;
     use innkeeper_world::{AccountId, AccountRecord, EncodedPassword};
-    use pad_thai::LineKind;
+    use pad_thai::{HayesConfig, LineKind};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
     use tsn_link::{Link, LinkConfig, LinkOutput, Message};
@@ -184,7 +184,18 @@ mod tests {
 
     impl LinkedClient {
         async fn call(address: SocketAddr) -> Self {
+            Self::call_over(TcpStream::connect(address).await.unwrap()).await
+        }
+
+        /// Dials the emulated modem first, as MODEM.DRV does on a raw serial line.
+        async fn dial(address: SocketAddr) -> Self {
             let mut stream = TcpStream::connect(address).await.unwrap();
+            stream.write_all(b"ATDT5551234\r").await.unwrap();
+            expect_reply(&mut stream, b"ATDT5551234\r\r\nCONNECT 2400\r\n").await;
+            Self::call_over(stream).await
+        }
+
+        async fn call_over(mut stream: TcpStream) -> Self {
             stream.write_all(b"@D\r\r").await.unwrap();
             expect_reply(&mut stream, b"\r\nTERMINAL=\r\n@").await;
             stream.write_all(b"c SIERRA\r").await.unwrap();
@@ -200,6 +211,15 @@ mod tests {
                 link,
                 received,
             }
+        }
+
+        /// MODEM.DRV's hang-up: `+++` after a guard time, then `AT H0`; the socket stays open.
+        async fn hang_up_modem(&mut self) {
+            tokio::time::sleep(2 * GUARD_TIME).await;
+            self.stream.write_all(b"+++").await.unwrap();
+            expect_reply(&mut self.stream, b"\r\nOK\r\n").await;
+            self.stream.write_all(b"AT H0\r").await.unwrap();
+            expect_reply(&mut self.stream, b"AT H0\r\r\nOK\r\n").await;
         }
 
         async fn send(&mut self, body: &str) {
@@ -248,41 +268,66 @@ mod tests {
     const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 00 00";
     const JOIN_PLAYER: &str = "07 00 00 00 8c 09 01 01 ff ff 1e 00";
     const JOIN_WAITING_ROOM: &str = "07 00 00 00 c0 01 05 01 01 00 80 00";
+    const GUARD_TIME: Duration = Duration::from_millis(50);
 
-    #[tokio::test]
-    async fn two_clients_meet_in_one_waiting_room_group() {
-        let session = SessionConfig {
-            line: LineKind::Pad,
-            ..SessionConfig::default()
-        };
+    async fn serve_on_loopback(session: SessionConfig) -> SocketAddr {
         let settings = ConnectionSettings::new(session, World::stock(), None);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         tokio::spawn(accept_forever(listener, Arc::new(settings)));
+        address
+    }
 
+    /// Logs on and adds the player object the host hands out to the Clubhouse waiting room.
+    async fn enter_waiting_room(client: &mut LinkedClient, player: &str) {
+        client.send(LOGIN).await;
+        client.expect(LOGIN_ACK).await;
+        client.send(JOIN_PLAYER).await;
+        client.expect(&format!("08 00 8c 09 00 00 {player}")).await;
+        client.send(JOIN_WAITING_ROOM).await;
+        client.expect("08 00 c0 01 00 00 01 01").await;
+        client.send(&format!("0a 00 01 01 {player} 02 03 12")).await;
+        client.expect(&format!("0a 00 01 01 {player}")).await;
+    }
+
+    #[tokio::test]
+    async fn two_clients_meet_in_one_waiting_room_group() {
+        let address = serve_on_loopback(SessionConfig {
+            line: LineKind::Pad,
+            ..SessionConfig::default()
+        })
+        .await;
         let mut first = LinkedClient::call(address).await;
-        first.send(LOGIN).await;
-        first.expect(LOGIN_ACK).await;
-        first.send(JOIN_PLAYER).await;
-        first.expect("08 00 8c 09 00 00 00 01").await;
-        first.send(JOIN_WAITING_ROOM).await;
-        first.expect("08 00 c0 01 00 00 01 01").await;
-        first.send("0a 00 01 01 00 01 02 03 12").await;
-        first.expect("0a 00 01 01 00 01").await;
-
+        enter_waiting_room(&mut first, "00 01").await;
         let mut second = LinkedClient::call(address).await;
-        second.send(LOGIN).await;
-        second.expect(LOGIN_ACK).await;
-        second.send(JOIN_PLAYER).await;
-        second.expect("08 00 8c 09 00 00 02 01").await;
-        second.send(JOIN_WAITING_ROOM).await;
-        second.expect("08 00 c0 01 00 00 01 01").await;
-        second.send("0a 00 01 01 02 01 02 03 12").await;
-        second.expect("0a 00 01 01 02 01").await;
+        enter_waiting_room(&mut second, "02 01").await;
         first.expect("0a 00 01 01 02 01").await;
 
         drop(second);
         first.expect("0b 00 01 01 02 01").await;
         first.expect("09 00 02 01").await;
+    }
+
+    #[tokio::test]
+    async fn a_modem_hang_up_releases_the_player_while_the_socket_stays_open() {
+        let address = serve_on_loopback(SessionConfig {
+            hayes: HayesConfig {
+                guard_time: GUARD_TIME,
+                ..HayesConfig::default()
+            },
+            ..SessionConfig::default()
+        })
+        .await;
+        let mut first = LinkedClient::call(address).await;
+        enter_waiting_room(&mut first, "00 01").await;
+        let mut second = LinkedClient::dial(address).await;
+        enter_waiting_room(&mut second, "02 01").await;
+        first.expect("0a 00 01 01 02 01").await;
+
+        second.hang_up_modem().await;
+        first.expect("0b 00 01 01 02 01").await;
+        first.expect("09 00 02 01").await;
+        second.stream.write_all(b"AT\r").await.unwrap();
+        expect_reply(&mut second.stream, b"AT\r\r\nOK\r\n").await;
     }
 }
