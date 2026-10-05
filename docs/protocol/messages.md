@@ -210,7 +210,9 @@ All CONFIRMED in `hub/script.101` unless noted.
    XORs byte i with `"M34546788S"[i]`, zero-pads to 10 bytes, then for i = 0..n-1 XORs byte
    `(i+1) mod n` with byte i. CONFIRMED (code); that the host stores the same encoding is INFERRED.
 3. The account number comes from the `LSCI.CFG` key `id` (decimal, split into words held in globals 262
-   and 261) and the name from key `name` (`hub/script.004` export 0 `+0x003A`, `+0x0063`).
+   and 261) and a name from key `name` (`hub/script.004` export 0 `+0x003A`, `+0x0063`). The live client sent the
+   **persona** name in the Login, with or without a `name` key (`docs/protocol/captures.md` section 4), so that key
+   is not where the Login's name comes from. INFERRED: it is an operator or debug setting.
 4. `proc_80` composes the dial string and calls Connect (section 7).
 
 ### 4.2 The exchange
@@ -218,7 +220,7 @@ All CONFIRMED in `hub/script.101` unless noted.
 | # | Dir | Message | Evidence | Status |
 |---|---|---|---|---|
 | 1 | C→H | **Login** `b 53, b 0, w 0, b landType, b major, b minor, b revision, w idLow, w idHigh, b fromFile, a[11] password, s name` (59 adds `s prodigyId` from `C:\prodtsn.pid` when `LSCI.CFG` has `pFlag`) | `script.196` export 2 `+0x00DA`/`+0x0092`, called by `proc_7 +0x001B` right after Connect | CONFIRMED |
-| 2 | — | client starts `LoginTimeout` (70 s); on expiry it hangs up with "We are not receiving any messages from the network." | `LoginTimeout::changeState +0x000C`; `dialScript::changeState +0x008E` | CONFIRMED |
+| 2 | — | client starts `LoginTimeout` (70 s); on expiry it shows error 999 "There seems to be a problem logging in. If you still have a problem, call 1-800-IMAGIN-1." (`proc_116`). "We are not receiving any messages from the network." belongs to a different path, `dialScript::changeState +0x008E`. | `LoginTimeout::changeState +0x000C`..`+0x001E`; live run: `docs/protocol/captures.md` section 5 | CONFIRMED |
 | 3 | H→C | **AckMsg** `b 0, b ?, w 0, b 22, w userFlags @5, b status @7, w rating @8` (target SID 0, section 2.1) | `Dialing::handleMsg +0x02F3`..`+0x039A` | CONFIRMED layout; field names INFERRED |
 | 3' | H→C | or **NakMsg** `b 1, b ?, w 0, b 22, b reason @5, b ?, b numTries @7, text @8` | `+0x03A2`..`+0x0427`: the text is shown; reason 9 counts a retry and the client hangs up after `numTries` | CONFIRMED |
 | 4 | C→H | joinNet for the game object: `w 7, w 0, w cookie, b 129, b landType, w 0, w propertyCount` | `dialScript::changeState +0x00BE` → `Obj::joinNet +0x0027` | CONFIRMED |

@@ -159,7 +159,9 @@ The dial string is therefore built as:
 <prefix> 't' <hostID> <modem>      e.g.  +++~~~AT&F!~~~~AT&D2!~AT&C1!~t SIERRA ATDT5551234!~   (spaces added for reading only)
 ```
 
-The composition is INFERRED from the strings. The driver's parsing of the result is CONFIRMED (`0A6B`..`0BEF`):
+The composition is INFERRED from the strings; a live run confirmed its effect (the `prefix` commands, then
+`ATDT<number>`, then `c <hostID>` after the connect; `docs/protocol/captures.md` section 6). The driver's
+parsing of the result is CONFIRMED (`0A6B`..`0BEF`):
 
 1. Copy up to 127 bytes to `DS:0576`. If `ATD` is not found, return `AH=40h`.
 2. Find the first lowercase `t` before `ATD`.
@@ -408,8 +410,11 @@ There is **no link-level handshake**. After Connect returns 0, the next frame on
 - a DATA frame from the host with `ctrl` = `00`, which the client ACKs with `81 49 62 90 82`.
 
 Which side speaks first, and what the first message bodies contain, is decided by `kTSN` and the scripts
-(`script.012` "MakeConnection", `script.101` "LoginTimeout", "We are not receiving any messages from the
-network"). That is outside this document and still open (section 8).
+(`script.012` "MakeConnection", `script.101` "LoginTimeout"). A live run settled the first question: the
+**client speaks first**. 1.65 s after ` CONNECTED` it sent DATA 0 with a 33-byte Login message (`35 00 00 00 01
+02 03 12 ...`) and waited for the host; the ACK made it neither resend nor send more, and after 70 s without a
+reply it showed error 999. The frame and the message are decoded in `docs/protocol/captures.md` sections 3 and 4.
+Whether the host may also speak first is not known.
 
 ## 7. Checklist: a server that emulates the PAD and host for the stock client
 
@@ -463,13 +468,15 @@ Assumes DOSBox modem emulation, or any byte pipe that looks like a Hayes modem t
 
 ## 8. Open questions
 
-- What the application payloads are: the first logon messages, which side sends first, and the opcode
-  set. This belongs to the `kTSN`/script analysis.
+- What the application payloads are beyond the first one. The client's Login is captured; the host's replies
+  and the messages the client sends after them are not. This belongs to the `kTSN`/script analysis and the
+  next capture (`captures.md` section 8).
 - Exact meaning of the `HOSTADDR` columns `CC n`, and of `hostaddr.tim` / `landaddr.tim`. Which script passes which
   address to SwitchHost.
 - What X.3 parameters `SET? 0:0,32:0` sets, and the real SprintNet response text. The client needs only an `@`.
 - How DOSBox / DOSBox-X modem emulation handles UART BREAK, `+++`, `AT\B` and `ATO`. This decides whether
-  the CR-in-hunt-state heuristic (checklist 12) is sufficient. Needs a capture.
+  the CR-in-hunt-state heuristic (checklist 12) is sufficient. The dial through DOSBox-X's modem emulation and
+  through a null modem works (`captures.md`); the escape needs a land switch, so it still needs a capture.
 - `novell` in `script.012` (`0x324`) and the Novell error texts point to a LAN driver that is not in these sets.
 
 ## 9. Verification

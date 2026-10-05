@@ -134,7 +134,7 @@ We start with the legacy link, because it needs no installs and gives us ground 
 - [x] ScummVM shallow clone in `scummvm/`, and `git init` with media and game data ignored.
 - [ ] Packages (needs the user, for sudo): `libsdl2-dev libsdl2-net-dev dosbox-x openjdk-21-jdk`, then Ghidra from its GitHub releases. Rust is already in `~/.cargo/bin`.
 - [ ] Build ScummVM with `--disable-all-engines --enable-engine=sci`.
-- [ ] Install the Feb-94 client into a DOSBox-X directory, and confirm it reaches the dial screen offline.
+- [x] Install the Feb-94 client into a DOSBox-X directory, and confirm it reaches the dial screen offline (`tools/dosbox/`, `docs/dosbox.md`).
 
 ### Phase 1: Reverse-engineering, in two parallel tracks
 **Track A: the LSCI client**
@@ -146,7 +146,7 @@ We start with the legacy link, because it needs no installs and gives us ground 
 **Track B: the network seam**
 1. TSNEXEC's INT 14h handler: the list of AH functions, the register and buffer conventions, and how child programs find it.
 2. The com-driver API (MODEM.DRV and NOBRK.DRV), the TSN framing (checksums, acks, NAK and retry), and the login and handshake.
-3. Dynamic capture. `innkeeper` v0 is a TCP listener that logs every byte and scripts just enough PAD responses (`pad_thai`) to coax out the first TSN frames from DOSBox. This is the first Rust code.
+3. Dynamic capture. `innkeeper` v0 is a TCP listener that logs every byte and scripts just enough PAD responses (`pad_thai`) to coax out the first TSN frames from DOSBox. This is the first Rust code. **Done for the first frame**: the stock client dials, logs on to the PAD and sends its Login (`docs/protocol/captures.md`); the host's replies are the next capture.
 4. Deliverable: `docs/protocol.md`, covering both the INT 14h API and the wire format.
 
 ### Phase 2: ScummVM LSCI bring-up, offline
