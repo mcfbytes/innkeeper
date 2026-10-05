@@ -9,6 +9,7 @@ mod ids;
 mod land;
 mod message;
 mod player;
+mod store;
 mod world;
 
 pub use account::{Account, AccountBook, Refusal};
@@ -24,4 +25,10 @@ pub use message::{
     Occupancy, PasswordSource, SendMessage, SetInt, SetStr,
 };
 pub use player::PlayerSession;
+#[cfg(feature = "test-support")]
+pub use store::conformance;
+pub use store::{
+    AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post, PostId, Store,
+    StoreError,
+};
 pub use world::World;

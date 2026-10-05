@@ -6,6 +6,9 @@ edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[features]
+test-support = []
+
 [dependencies]
 thiserror.workspace = true
 tracing.workspace = true

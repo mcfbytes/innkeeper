@@ -98,6 +98,7 @@ DATA frame per client message.
 | `land` | `LandCatalog`: the land directory and occupancy |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; owns the client's SIDs and group memberships |
 | `world` | `World`: host number, accounts and lands, shared read-only by every connection |
+| `store` | `Store`: accounts, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
 | `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
 
 What the host answers (`docs/protocol/messages.md` for the layouts):

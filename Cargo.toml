@@ -21,6 +21,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "signal", "sync"] }
 clap = { version = "4", features = ["derive"] }
 humantime = "2"
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
