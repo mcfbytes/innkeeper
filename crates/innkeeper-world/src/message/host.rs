@@ -75,6 +75,8 @@ pub struct Nak {
 pub enum LoginNakReason {
     /// Any reason but a retry shows the text as error 100 + reason and hangs up.
     UnknownAccount = 1,
+    /// The Login names a land type this host does not run; the number is the host's choice.
+    UnlistedLand = 2,
     /// The client counts a retry and asks for the password again, up to `numTries` times.
     RetryPassword = 9,
 }
@@ -267,6 +269,7 @@ impl HostMessage {
             Command::WaitGroup => parse_wait_group(&mut reader)?,
             Command::JoinNet
             | Command::Multicast
+            | Command::ChangePassword
             | Command::Login
             | Command::LoginWithProdigyId => {
                 return Err(MessageError::UnsupportedCommand(command.byte()))

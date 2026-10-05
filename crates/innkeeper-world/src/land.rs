@@ -50,6 +50,11 @@ impl LandCatalog {
         }
     }
 
+    /// Whether some land of this type runs here.
+    pub fn runs(&self, land_type: LandType) -> bool {
+        self.lands.iter().any(|land| land.land_type == land_type)
+    }
+
     pub fn directory(&self, host: HostNumber) -> LandDirectory {
         let entry = |land: &Land| LandEntry {
             host,
@@ -104,5 +109,6 @@ mod tests {
         let occupancy = table.occupancy(HostNumber(7));
         assert_eq!(occupancy[0].land_type, LandType(1));
         assert_eq!(occupancy[0].maximum, 64);
+        assert!(table.runs(LandType(3)) && !table.runs(LandType(0x8B)));
     }
 }

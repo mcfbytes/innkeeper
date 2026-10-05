@@ -22,6 +22,9 @@ pub(crate) struct Config {
     /// Write no capture files.
     #[arg(long)]
     pub(crate) no_capture: bool,
+    /// Directory holding the account database; without it every account number is admitted.
+    #[arg(long)]
+    pub(crate) data_dir: Option<PathBuf>,
     /// What the client's serial port reaches: a modem emulator, a raw line, or auto-detect.
     #[arg(long, value_enum, default_value_t = LineArg::Auto)]
     pub(crate) line: LineArg,
@@ -70,6 +73,13 @@ mod tests {
         assert_eq!(config.bind, "127.0.0.1:2314".parse().unwrap());
         assert_eq!(config.capture_dir(), Some(PathBuf::from("work/captures")));
         assert_eq!(config.session_config().line, LineKind::Auto);
+        assert_eq!(config.data_dir, None);
+    }
+
+    #[test]
+    fn a_data_dir_names_where_accounts_are_kept() {
+        let config = Config::parse_from(["innkeeperd", "--data-dir", "work/data"]);
+        assert_eq!(config.data_dir, Some(PathBuf::from("work/data")));
     }
 
     #[test]

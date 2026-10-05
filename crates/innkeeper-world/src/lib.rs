@@ -8,12 +8,13 @@ mod error;
 mod host_time;
 mod ids;
 mod land;
+mod logon;
 mod message;
 mod player;
 mod store;
 mod world;
 
-pub use account::{Account, AccountBook, Refusal};
+pub use account::{Account, AccountBook, Enrolment, Refusal};
 pub use error::MessageError;
 pub use host_time::{Clock, FixedClock, HostTime, SystemClock};
 pub use ids::{
@@ -21,10 +22,10 @@ pub use ids::{
 };
 pub use land::LandCatalog;
 pub use message::{
-    Ack, ClientMessage, EncodedPassword, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest,
-    HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory, LandEntry, Login, LoginAck,
-    LoginNakReason, LoginStatus, Multicast, Nak, Notice, ObjExists, ObjectKind, ObjectLocated,
-    Occupancy, PasswordSource, SendMessage, SetInt, SetStr,
+    Ack, ChangePassword, ClientMessage, EncodedPassword, GroupJoin, GroupLeave, GroupMembers,
+    GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory,
+    LandEntry, Login, LoginAck, LoginNakReason, LoginStatus, Multicast, Nak, Notice, ObjExists,
+    ObjectKind, ObjectLocated, Occupancy, PasswordSource, SendMessage, SetInt, SetStr,
 };
 pub use player::PlayerSession;
 #[cfg(feature = "test-support")]

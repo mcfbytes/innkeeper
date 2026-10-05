@@ -30,12 +30,17 @@ events come out, and timers are a `next_deadline()` that the caller sleeps on. `
 
 ```
 cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures] [--no-capture]
+                           [--data-dir DIR]
                            [--line auto|hayes|pad] [--connect-rate 2400]
 ```
 
 - On a successful bind it logs `INT 14h hooked. Please wait while ImagiNation loads...`.
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
+- `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an
+  unknown account from the password its first Login presents (INFERRED, `STORED_BOOK_ENROLS_ASSUMED`).
+  Without it every account number and password is admitted and nothing is kept, which is what the DOSBox
+  scripts use.
 - `--line` says what the client's serial port reaches (section 4). `--connect-rate` is the rate in the
   emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes).
 
@@ -94,10 +99,11 @@ DATA frame per client message.
 | Module | Holds |
 |---|---|
 | `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `object_kind`); the type names are in `messages.md` section 3.2.1 |
-| `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the stand-in while nothing persists; `listed(...)` checks number and encoded password |
+| `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the dev default; `listed(...)` checks number and encoded password; `stored(store, Enrolment)` reads the `AccountRecord` and gives the `Account` its `user_flags`, `rating` and `LoginStatus` (11 while the record's password is expired), and `change_password` updates the record |
+| `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory and occupancy |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; owns the client's SIDs and group memberships |
-| `world` | `World`: host number, accounts and lands, shared read-only by every connection |
+| `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
 | `store` | `Store`: accounts, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
 | `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
 
@@ -105,7 +111,8 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 
 | Client sends | Host replies |
 |---|---|
-| Login (53, 59) | Ack `whichCmd` 22 with all fields 0; a refused account gets Nak 22: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account |
+| Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A repeat Login on a logged-in session admits again and starts a fresh player |
+| 44 | Ack 44/1 to the request's SID after the password is stored and the expired flag cleared; Nak 44 when the store refuses. The open book stores nothing and still acks |
 | joinNet (7) | `ObjID` with the next free SID, counting up from `0x0100` per connection and skipping SIDs still in use after the wrap |
 | leaveNet (9) | nothing; the SID and its group memberships are forgotten |
 | add (10) to a group | `GrpJoin` for the member, delivered to the group |
@@ -155,8 +162,8 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 - Anything shared between players: each connection has its own `PlayerSession`, SIDs are only unique per
   connection, and a `Send` (2) or a group change is not routed to anyone. The next step is a world task that
   owns SIDs and groups, fed by the connections through a channel.
-- Persistent accounts: `AccountBook::anyone()` admits everybody; a store on disk comes with a second
-  `AccountBook` source.
+- Password hashing (Phase 7): the encoded password is stored as the client sends it. A second Login for an
+  account that is already online is not refused.
 - Replies to 34/4 (rates), 45/1 (mailbox), 37 (mail), 40/4 (name), `getProp` (32) and the other services of
   `messages.md` section 3.3.
 - Serving the INT 14h transport.

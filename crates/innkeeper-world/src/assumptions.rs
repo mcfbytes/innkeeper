@@ -1,7 +1,7 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags};
+use crate::{ClientVersion, LandFlags, LoginNakReason};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -22,3 +22,9 @@ pub(crate) const NOTICE_UNREAD_BYTE_ASSUMED: u8 = 0;
 /// This constant exists to document the assumption; its value is true and not used in code.
 #[allow(dead_code)]
 pub(crate) const HOST_TIME_ZONE_UTC_ASSUMED: bool = true;
+/// A Login for a land type the catalog lacks gets this Nak reason: only 9 is special to the client,
+/// every other value shows error 100 + reason (section 4.2).
+pub(crate) const UNLISTED_LAND_NAK_ASSUMED: LoginNakReason = LoginNakReason::UnlistedLand;
+/// A host with a data directory creates an unknown account from the password the Login presents, so
+/// a dev machine needs no sign-up (command 55 is not answered). The original host's policy is unknown.
+pub(crate) const STORED_BOOK_ENROLS_ASSUMED: bool = true;

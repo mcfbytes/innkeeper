@@ -22,6 +22,7 @@ pub enum ClientMessage {
     Multicast(Multicast),
     HostInfo(HostInfoRequest),
     ObjExists(ObjExists),
+    ChangePassword(ChangePassword),
     LandOccupancyRequest,
 }
 
@@ -67,6 +68,14 @@ impl fmt::Debug for EncodedPassword {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("EncodedPassword(..)")
     }
+}
+
+/// Command 44: the client sets a new password, after a Login status of 11 or by choice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChangePassword {
+    /// The object the Ack is addressed to.
+    pub sid: Sid,
+    pub password: EncodedPassword,
 }
 
 /// Command 7: the client asks for a SID for one of its objects.
@@ -130,6 +139,9 @@ impl ClientMessage {
             Command::Multicast => ClientMessage::Multicast(Multicast::parse(&mut reader)?),
             Command::HostInfo => ClientMessage::HostInfo(HostInfoRequest::parse(&mut reader)?),
             Command::ObjExists => ClientMessage::ObjExists(ObjExists::parse(&mut reader)?),
+            Command::ChangePassword => {
+                ClientMessage::ChangePassword(ChangePassword::parse(&mut reader)?)
+            }
             Command::WaitGroup => {
                 expect_sub(&mut reader, command, LAND_OCCUPANCY)?;
                 reader.word("toSID")?;
@@ -165,6 +177,7 @@ impl ClientMessage {
             ClientMessage::Multicast(multicast) => multicast.write(&mut writer),
             ClientMessage::HostInfo(request) => request.write(&mut writer),
             ClientMessage::ObjExists(lookup) => lookup.write(&mut writer),
+            ClientMessage::ChangePassword(change) => change.write(&mut writer),
             ClientMessage::LandOccupancyRequest => {
                 writer.byte(Command::WaitGroup.byte()).byte(LAND_OCCUPANCY);
                 writer.word(0).word(0);
@@ -230,6 +243,20 @@ impl Login {
         if let Some(prodigy_id) = &self.prodigy_id {
             writer.text(prodigy_id);
         }
+    }
+}
+
+impl ChangePassword {
+    fn parse(reader: &mut WireReader) -> Result<Self, MessageError> {
+        reader.byte("flags")?;
+        let sid = Sid(reader.word("sid")?);
+        let password = EncodedPassword(reader.array("password")?);
+        Ok(ChangePassword { sid, password })
+    }
+
+    fn write(&self, writer: &mut WireWriter) {
+        writer.byte(Command::ChangePassword.byte()).byte(2);
+        writer.word(self.sid.0).array(&self.password.0);
     }
 }
 

@@ -15,7 +15,8 @@ mod wire;
 
 pub use ack::Ack;
 pub use client::{
-    ClientMessage, EncodedPassword, GroupJoin, HostInfoRequest, JoinNet, Login, PasswordSource,
+    ChangePassword, ClientMessage, EncodedPassword, GroupJoin, HostInfoRequest, JoinNet, Login,
+    PasswordSource,
 };
 pub(crate) use command::Command;
 pub use group::{GroupLeave, GroupMembers, GroupMembersRequest};

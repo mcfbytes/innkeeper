@@ -3,11 +3,10 @@ use std::collections::{BTreeSet, HashMap};
 use tracing::{info, warn};
 
 use crate::{
-    Account, ClientMessage, GroupJoin, HostInfoRequest, HostMessage, JoinNet, Login, LoginAck,
-    LoginNakReason, Nak, ObjectKind, Refusal, Sid, World,
+    logon, Account, ClientMessage, GroupJoin, HostInfoRequest, HostMessage, JoinNet, Login,
+    ObjectKind, Sid, World,
 };
 
-const PASSWORD_TRIES: u8 = 3;
 /// Server choice: SIDs below this stay free for well-known objects.
 const FIRST_SID: u16 = 0x0100;
 
@@ -56,6 +55,8 @@ impl PlayerSession {
                 Vec::new()
             }),
             ClientMessage::GroupJoin(join) => self.with_player(|player| player.join_group(join)),
+            ClientMessage::ChangePassword(change) => self
+                .with_player(|player| vec![logon::change_password(world, &player.account, change)]),
             ClientMessage::HostInfo(request) => {
                 self.with_player(|_| answer_host_info(world, request))
             }
@@ -91,37 +92,28 @@ impl PlayerSession {
     }
 
     fn log_in(&mut self, world: &World, login: &Login) -> HostMessage {
-        match world.accounts.admit(login) {
+        match logon::admit(world, login) {
             Ok(account) => {
                 info!(account = account.id.0, persona = %account.persona, "logged in");
-                self.state = PlayerState::LoggedIn(Player {
-                    account,
-                    objects: HashMap::new(),
-                    groups: HashMap::new(),
-                    next_sid: FIRST_SID,
-                });
-                HostMessage::LoginAccepted(LoginAck::default())
+                let ack = account.login_ack();
+                self.state = PlayerState::LoggedIn(Player::new(account));
+                HostMessage::LoginAccepted(ack)
             }
-            Err(refusal) => {
-                warn!(account = login.account.0, ?refusal, "login refused");
-                HostMessage::Nak(match refusal {
-                    Refusal::WrongPassword => Nak::login(
-                        LoginNakReason::RetryPassword,
-                        PASSWORD_TRIES,
-                        "That password is not right.",
-                    ),
-                    Refusal::UnknownAccount => Nak::login(
-                        LoginNakReason::UnknownAccount,
-                        0,
-                        "This account is not known here.",
-                    ),
-                })
-            }
+            Err(nak) => HostMessage::Nak(nak),
         }
     }
 }
 
 impl Player {
+    fn new(account: Account) -> Self {
+        Player {
+            account,
+            objects: HashMap::new(),
+            groups: HashMap::new(),
+            next_sid: FIRST_SID,
+        }
+    }
+
     fn join(&mut self, join: JoinNet) -> Vec<HostMessage> {
         let Some(sid) = self.allocate_sid() else {
             warn!(?join, "every SID is taken");
@@ -203,7 +195,7 @@ mod tests {
     use super::*;
     use crate::{
         AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, LandCatalog, LandType,
-        ObjectKind, PasswordSource, SendMessage,
+        LoginNakReason, ObjectKind, PasswordSource, SendMessage,
     };
 
     fn login(password: u8) -> ClientMessage {
@@ -233,7 +225,7 @@ mod tests {
             host: World::stock().host,
             accounts: AccountBook::listed([(AccountId(100_001), EncodedPassword([7; 10]))]),
             lands: LandCatalog::stock(),
-            clock: Box::new(crate::host_time::SystemClock),
+            ..World::stock()
         }
     }
 
@@ -253,6 +245,22 @@ mod tests {
             player.handle(&world, &login(7)).as_slice(),
             [HostMessage::LoginAccepted(_)]
         ));
+    }
+
+    #[test]
+    fn a_repeat_login_on_a_logged_in_session_admits_again() {
+        let world = World::stock();
+        let mut player = PlayerSession::new();
+        let _ = player.handle(&world, &login(7));
+        let _ = player.handle(&world, &join(1, ObjectKind::Object));
+        let replies = player.handle(&world, &login(7));
+        assert!(matches!(
+            replies.as_slice(),
+            [HostMessage::LoginAccepted(_)]
+        ));
+        // The object table starts over; releasing what the first login held is the object store's.
+        let again = player.handle(&world, &join(2, ObjectKind::Object));
+        assert_eq!(again, [obj_id(2, FIRST_SID)]);
     }
 
     #[test]

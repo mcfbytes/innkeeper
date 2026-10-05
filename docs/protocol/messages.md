@@ -217,7 +217,7 @@ Kind 6 and every other value are errors.
 | 39 | `HostFile` | H→C | `b 39, b whichCmd, body @2` | — (no handler found) | CONFIRMED layout |
 | 40 | `UserInfoMsg` | both | C→H `b 40, b sub, …`; H→C `b 40, b whichCmd, w msgType @4, w whichSub @6` | 4 set name (`s` at 2), 3 read money, 2 save money (`w sid, w 1, w 1, w low, w high`, CasinoLand `script.000`) | CONFIRMED |
 | 41 | `ObjExists` | both | C→H `b 41, b 0, w sid, w sid, a name`; H→C body @6 | conference name check (`GotoConference::init`) | CONFIRMED |
-| 44 | password | C→H | `b 44, b 2, w sid, a[10] encoded password` | change password (`script.095` export 5); Ack 44/1 or 44/2 makes `RoomZeroHandler` store it in `PASS_SET.DTA` | CONFIRMED |
+| 44 | password | C→H | `b 44, b 2, w sid, a[10] encoded password` | change password (`script.095` export 5); Ack 44/1 or 44/2 makes `RoomZeroHandler` store it in `PASS_SET.DTA`. Host: `ClientMessage::ChangePassword`; `innkeeperd` stores it, clears the expired flag and answers Ack 44/1 to the SID (`golden/logon_policy.txt`) | CONFIRMED layout; host reply INFERRED |
 | 45 | `NewBoxHandler` | both | C→H `b 45, b 1, w sid`; H→C `b 45, b whichCmd, w toSID, b status @4, w low @5, w high @7` | 1 assign mailbox: status 1 = mailbox number low/high (written to `mail.cfg`), 2–6 errors | CONFIRMED |
 | 47 | `WaitGrpRequest` | both | C→H `b 47, b 1, w 0, w 0`; H→C `b 47, b msgType, w toSID, w ? @4`, body rebased at 6 | msgType 1 land occupancy, msgType 2 land directory (section 6) | CONFIRMED |
 | 48 | `Unsolicited` | H→C | `b 48, b ?, text @2` | operator notice (`script.011 RoomZeroHandler`) | CONFIRMED layout |
@@ -273,6 +273,12 @@ All CONFIRMED in `hub/script.101` unless noted.
 Fields in step 3: bit `0x04` of `userFlags` gives level 3, `0x80` level 2, `0x02` level 1 (global 82);
 `status` 11 means "Your password is out of date", which prompts for a new one and sends command 44
 (`+0x0320`..`+0x0374`); `rating` 0 is stored as 1 (global 253). CONFIRMED (code); meanings INFERRED.
+
+Host notes (`innkeeper-world::logon`, INFERRED): the Ack's three fields come from the stored account, and
+a record whose password is expired logs in with `status` 11, so the client sends command 44 and the host
+clears the flag. A Login whose land type the host does not run is refused with Nak 22 reason 2 (any reason
+but 9 shows error 100 + reason). A host with a data directory creates an unknown account from the encoded
+password the first Login presents.
 
 The Login's 11-byte password field is copied from a 10-byte array (`a` with count 11), so its last byte
 is whatever follows the array in the interpreter's heap. CONFIRMED (`script.196` export 2,

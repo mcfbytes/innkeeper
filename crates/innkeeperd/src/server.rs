@@ -1,16 +1,19 @@
 use std::io;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use innkeeper_world::World;
+use innkeeper_world::{StoreError, World};
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
 use crate::config::Config;
 use crate::connection::{serve_connection, ConnectionSettings};
+use crate::sqlite_store::SqliteStore;
 
+const DATABASE_FILE: &str = "innkeeper.db";
 const STARTUP_LINE: &str = "INT 14h hooked. Please wait while ImagiNation loads...";
 /// Pause after a failed accept, so a full descriptor table does not spin the loop.
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(100);
@@ -19,16 +22,34 @@ const ACCEPT_BACKOFF: Duration = Duration::from_millis(100);
 pub(crate) enum ServerError {
     #[error("cannot listen on {bind}: {source}")]
     Bind { bind: SocketAddr, source: io::Error },
+    #[error("cannot create the data directory {dir}: {source}")]
+    DataDir { dir: String, source: io::Error },
+    #[error("cannot open the account database: {0}")]
+    Database(#[from] StoreError),
+}
+
+/// The stock world, with its accounts kept under `data_dir` when one is given.
+fn open_world(data_dir: Option<&Path>) -> Result<World, ServerError> {
+    let Some(dir) = data_dir else {
+        return Ok(World::stock());
+    };
+    std::fs::create_dir_all(dir).map_err(|source| ServerError::DataDir {
+        dir: dir.display().to_string(),
+        source,
+    })?;
+    let store = SqliteStore::open(&dir.join(DATABASE_FILE))?;
+    Ok(World::stored(Arc::new(store)))
 }
 
 pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
     let bind = config.bind;
+    let world = open_world(config.data_dir.as_deref())?;
     let listener = TcpListener::bind(bind)
         .await
         .map_err(|source| ServerError::Bind { bind, source })?;
     let settings = ConnectionSettings {
         session: config.session_config(),
-        world: World::stock(),
+        world,
         capture_dir: config.capture_dir(),
     };
     info!(%bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
@@ -64,6 +85,7 @@ async fn accept_forever(listener: TcpListener, settings: Arc<ConnectionSettings>
 mod tests {
     use super::*;
     use innkeeper_session::SessionConfig;
+    use innkeeper_world::{AccountId, AccountRecord, EncodedPassword};
     use pad_thai::LineKind;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
@@ -87,6 +109,28 @@ mod tests {
             String::from_utf8_lossy(&received),
             String::from_utf8_lossy(expected)
         );
+    }
+
+    #[test]
+    fn a_data_dir_opens_a_database_that_enrols_and_remembers_accounts() {
+        let dir = std::env::temp_dir().join(format!("innkeeperd-data-{}", std::process::id()));
+        let id = AccountId(100_001);
+        let world = open_world(Some(&dir)).unwrap();
+        assert!(world.store.account(id).unwrap().is_none());
+        world
+            .store
+            .create_account(id, AccountRecord::new(EncodedPassword([7; 10]), "kept"))
+            .unwrap();
+        drop(world);
+        let reopened = open_world(Some(&dir)).unwrap();
+        let kept = reopened.store.account(id).unwrap().unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(kept.persona, "kept");
+    }
+
+    #[test]
+    fn without_a_data_dir_the_book_stays_open() {
+        assert!(open_world(None).is_ok());
     }
 
     #[tokio::test]
