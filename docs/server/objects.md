@@ -43,7 +43,9 @@ one `ObjID`, in request order, with the request's cookie echoed: the DOS games m
 
 A shared group's capacity is the `size` of the joinNet that created it (128 for the stock Clubhouse waiting
 room, `captures.md` section 11); later joiners add a reference and do not change it. `member_count(key)`
-reports how many members the shared group of a key has, for land occupancy.
+reports how many members the shared group of a key has, for land occupancy, and `group_key(sid)` gives
+the key of a shared group back from its SID. `recipients(sid)` names the connections a `Send` reaches
+([router.md](router.md)).
 
 **Re-join.** A joinNet of kind 129 with a cookie the same connection already holds replaces that object: the
 old one is freed (section 4) and the new one gets the next SID. The stock client does this when it enters the
@@ -72,8 +74,8 @@ Nobody is told about their own action except the joiner, whose client waits for 
 | 2 | "Group Full" | the group has `capacity` members and the member is not one of them |
 | 3 | "Invalid Object" | the member is not a live object of the requesting connection, or is the group itself |
 
-Codes 4 to 6 (locked, no rights, version) are not sent here; the version gate (code 6) belongs to the land's
-waiting-room and RPG rules, not to the store.
+Codes 4 and 5 (locked, no rights) are not sent here. Code 6 (version) is decided outside the store:
+`presence::join_group` checks a waiting-room join against the land's range and calls `refuse_wrong_version`.
 
 ### 4.2 Release and destruction
 
@@ -93,11 +95,12 @@ player and then `ObjFree`.
 
 `innkeeperd::switchboard::Switchboard` maps each `ConnectionId` to an unbounded tokio channel, the
 connection's `Inbox`. `Host::answer` takes the store lock, hands deliveries for other connections to the
-switchboard while it still holds the lock, and sends its own with `Session::send_message` and
-`Session::flush`. A connection's pump loop waits on its inbox beside the socket and the timers, and sends
-what arrives the same way. Because every inbox is filled under the store lock, and `Host::answer` first
+switchboard while it still holds the lock, and returns its own; the transport's driver sends them (the
+legacy link with `Session::send_message` and `Session::flush`) or queues them for Receive (the INT 14h
+transport). A connection's pump loop waits on its inbox beside the socket and the timers, and treats what
+arrives the same way. Because every inbox is filled under the store lock, and `Host::answer` first
 takes what is already in its own inbox, each client receives deliveries in the order the store made them.
-On TCP close `Host::hang_up` calls `ObjectStore::disconnect`; dropping the inbox takes the connection off the
+On TCP close, a lost call (`SessionEvent::LinkLost`) or a transport Disconnect, `Host::hang_up` calls `ObjectStore::disconnect`; dropping the inbox takes the connection off the
 switchboard, and a delivery for a connection that is gone is dropped.
 
 ## 6. Assumptions

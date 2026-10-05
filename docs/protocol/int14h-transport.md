@@ -26,7 +26,8 @@ The Rust types and codec are in `crates/int14h` (`Call`, `Reply`, `Envelope`, `e
   ticks argument is forwarded for information only.
 - **No link layer.** Nothing is framed or acknowledged inside this protocol; TCP or WebSocket provides
   reliability. Poll and Service report status 1 (carrier lost) when the server ends the session; statuses
-  2 and 3 never occur. IsTransmitIdle is true whenever the server holds no unsent data for the client.
+  2 and 3 never occur. IsTransmitIdle reports the client-to-server direction: it is true once the server has taken every call
+  the client sent (section 7).
 - **Connect and SwitchHost** carry the original dial string and host address. The server may use the host
   part (link-layer section 3.2) to pick a land. Results use the codes of int14h-api section 6.
 - **Executive-local exports** (1 GetSharedData, 2 SetSharedData, 6 SetAckTimeout, 9 SetNextProgram,
