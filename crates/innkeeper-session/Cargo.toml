@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 pad_thai.workspace = true
 tsn-link.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

@@ -5,6 +5,8 @@ use std::time::Instant;
 use pad_thai::{HayesConfig, Line, LineEvent, LineKind, LineOutput, ModemEvent, PadEvent};
 use tsn_link::{Link, LinkConfig, LinkEvent, LinkOutput, Message};
 
+use crate::SessionError;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SessionConfig {
     pub line: LineKind,
@@ -77,8 +79,29 @@ impl Session {
             .min()
     }
 
+    /// Queues a message for the client; it leaves with [`Session::flush`] or once a frame is full.
+    pub fn send_message(&mut self, message: &Message, now: Instant) -> Result<(), SessionError> {
+        self.online_link()?.send_message(message, now);
+        self.drain_link();
+        Ok(())
+    }
+
+    /// Sends what [`Session::send_message`] queued without waiting for a full frame.
+    pub fn flush(&mut self, now: Instant) -> Result<(), SessionError> {
+        self.online_link()?.flush(now);
+        self.drain_link();
+        Ok(())
+    }
+
     pub fn poll_output(&mut self) -> Option<SessionOutput> {
         self.outputs.pop_front()
+    }
+
+    fn online_link(&mut self) -> Result<&mut Link, SessionError> {
+        match &mut self.host {
+            HostLink::Online(link) => Ok(link),
+            HostLink::Offline => Err(SessionError::NoHostCall),
+        }
     }
 
     fn absorb_line(&mut self, line_outputs: Vec<LineOutput>, now: Instant) {

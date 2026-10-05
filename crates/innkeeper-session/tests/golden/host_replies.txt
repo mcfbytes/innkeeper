@@ -1,0 +1,24 @@
+# The first live logon (docs/protocol/captures.md): the stock client's Login and joinNet
+# frames, each answered by a host message that the client accepted. Syntax as in
+# raw_serial.txt, plus "s hex": the host sends that message and flushes.
+> @
+> D
+> \r
+< \r\nTERMINAL=
+> \r
+< \r\n@
+> c SIERRA\r
+< \r\nSIERRA CONNECTED\r\n
++1650
+>x 81 58 d8 00 21 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00 82
+<x 81 49 62 90 82
+m 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00
+s 00 00 00 00 16 00 00 00 00 00
+<x 81 a1 11 00 0a 00 00 00 00 16 00 00 00 00 00 82
++30
+>x 81 49 62 90 82
+>x 81 e7 81 01 0c 07 00 00 00 60 01 1b 81 01 00 00 0c 00 82
+<x 81 68 72 91 82
+m 07 00 00 00 60 01 81 01 00 00 0c 00
+s 08 00 60 01 00 00 00 01
+<x 81 31 5c 01 08 08 00 60 01 00 00 00 01 82

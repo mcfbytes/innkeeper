@@ -146,6 +146,7 @@ name = "innkeeper-session"
 version = "0.1.0"
 dependencies = [
  "pad_thai",
+ "thiserror",
  "tsn-link",
 ]
 

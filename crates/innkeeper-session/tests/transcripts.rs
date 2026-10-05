@@ -3,7 +3,8 @@
 
 use std::time::{Duration, Instant};
 
-use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
+use innkeeper_session::{Session, SessionConfig, SessionError, SessionEvent, SessionOutput};
+use tsn_link::Message;
 
 fn unescape(text: &str) -> Vec<u8> {
     let mut bytes = Vec::new();
@@ -98,6 +99,11 @@ fn run_transcript(transcript: &str) {
             "<" => pending.expect_to_client(&unescape(argument), line),
             "<x" => pending.expect_to_client(&hex(argument), line),
             "m" => assert_eq!(pending.messages.remove(0), hex(argument), "line {line}"),
+            "s" => {
+                let message = Message::try_new(hex(argument)).unwrap();
+                session.send_message(&message, now).unwrap();
+                session.flush(now).unwrap();
+            }
             advance if advance.starts_with('+') => {
                 pending.assert_consumed(line);
                 now += Duration::from_millis(advance[1..].parse().unwrap());
@@ -118,4 +124,21 @@ fn raw_serial_dial_escape_and_hangup() {
 #[test]
 fn modem_emulator_logon_and_land_switch() {
     run_transcript(include_str!("golden/modem_emulator.txt"));
+}
+
+#[test]
+fn host_replies_reach_the_client_in_data_frames() {
+    run_transcript(include_str!("golden/host_replies.txt"));
+}
+
+#[test]
+fn sending_without_a_call_is_refused() {
+    let now = Instant::now();
+    let mut session = Session::new(SessionConfig::default());
+    let message = Message::try_new(vec![0x24, 0x05, 0x07, 0x00]).unwrap();
+    assert_eq!(
+        session.send_message(&message, now),
+        Err(SessionError::NoHostCall)
+    );
+    assert_eq!(session.flush(now), Err(SessionError::NoHostCall));
 }
