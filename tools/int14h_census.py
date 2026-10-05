@@ -22,9 +22,10 @@ LOOKBACK_INSTRUCTIONS = 4
 JUMP_TABLE_LOOKBACK = 8
 CONTEXT_INSTRUCTIONS = 10
 TABLE_ENTRY_SIZE = 4
-LAST_EXPORT_OFFSET = 0x40
+LAST_EXPORT_OFFSET = 0x44
 FAR_CALL_OPCODE = 0x9A
 PUSH_IMMEDIATE_OPCODE = 0x68
+FAR_CALL_PATTERN = re.compile(b"(?=" + bytes([FAR_CALL_OPCODE]) + b"..)", re.DOTALL)
 STUB_PATTERN = re.compile(
     rb"\xa1(..)\x0b\x06(..)\x74\x01\xcb\xcd\x14\xa3(..)\x89\x16(..)\xcb", re.DOTALL)
 PROLOGUE_PATTERNS = (re.compile(rb"\x55\x8b\xec"), re.compile(rb"\x55\x89\xe5"),
@@ -96,7 +97,7 @@ class SegmentMap:
 def far_call_targets(image: Image) -> dict[int, tuple[int, int]]:
     """Image offset of each relocated `call seg:off` -> (segment, offset)."""
     targets = {}
-    for match in re.finditer(bytes([FAR_CALL_OPCODE]) + b"..", image.data, re.DOTALL):
+    for match in re.finditer(FAR_CALL_PATTERN, image.data):
         site = match.start()
         if site + 3 + 2 <= len(image.data) and site + 3 in image.relocated_words:
             targets[site] = (image.word(site + 3), image.word(site + 1))
@@ -257,6 +258,17 @@ def table_export_offset(instruction: capstone.CsInsn) -> int | None:
     return offset if in_table and based else None
 
 
+def is_virtual_call(function: Function, instruction: capstone.CsInsn) -> bool:
+    """A C++ virtual call reloads its base register first: `mov bx, es:[bx]; lcall [bx+N]`."""
+    earlier = preceding_instructions(function, instruction.address, 1)
+    if not earlier or earlier[0].mnemonic != "mov" or len(earlier[0].operands) != 2:
+        return False
+    destination, source = earlier[0].operands
+    base = instruction.operands[0].mem.base
+    return (destination.type == x86.X86_OP_REG and destination.reg == base
+            and source.type == x86.X86_OP_MEM and source.mem.base == base)
+
+
 def argument_bytes_after(function: Function, instruction: capstone.CsInsn) -> int | None:
     following = function.instructions.get(instruction.address + instruction.size)
     total = 0
@@ -307,7 +319,7 @@ def find_table_calls(image: Image, pointer: int, stub_offset: int | None = None)
         for address in sorted(function.instructions):
             instruction = function.instructions[address]
             export_offset = table_export_offset(instruction)
-            if export_offset is None:
+            if export_offset is None or is_virtual_call(function, instruction):
                 continue
             earlier = preceding_instructions(function, address, CONTEXT_INSTRUCTIONS)
             context = [describe(instruction, function.base) for instruction in earlier]

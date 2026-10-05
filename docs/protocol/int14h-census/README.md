@@ -61,9 +61,10 @@ Highlights (all CONFIRMED):
 - **SetSharedData is live only in LSCITV, GOLF and Red Baron.** Yserbius and Twinion never write the block.
 - **Send failure is fatal** in every DOS game (`!= 1` → "send failure" / "TSN_NetSend() failed"); SHOPADV
   discards the result.
-- Tool caveat: `tools/int14h_census.py` reports C++ virtual calls (`lcall [bx+N]` after `mov bx,es:[bx]`) as
-  table calls in DARKSTRT, CGENN, TWGENN, FATES and SHOPADV, stops at `+40`, and misses far calls after a
-  segment whose low byte is `0x9A`. The counts above exclude the false positives.
+- Tool check: `tools/int14h_census.py` reproduces the table-site counts above for all eight binaries
+  (SHOPADV reports 15: the 14 plus the `+44` site). It skips C++ virtual calls (`mov bx, es:[bx]` before
+  `lcall [bx+N]`), scans offsets up to `+44` and finds far calls that follow a segment ending in `0x9A`.
+  Tests: `python -m unittest tools.test_int14h_census`.
 
 ## 2. The TSN client library, by program
 
