@@ -2,23 +2,24 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
-use innkeeper_world::{ConnectionId, ObjectStore, World};
+use innkeeper_world::{ConnectionId, HostMessage, ObjectStore, World};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
-use tsn_link::LinkEvent;
+use tsn_link::{LinkEvent, Message};
 
 use crate::capture::{Capture, Direction};
-use crate::host::{Exchange, Host};
+use crate::host::{Exchange, Host, ReplyError};
 use crate::switchboard::Switchboard;
 
-const READ_CHUNK: usize = 4096;
+pub(crate) const READ_CHUNK: usize = 4096;
 
-type FileCapture = Capture<BufWriter<File>>;
+pub(crate) type FileCapture = Capture<BufWriter<File>>;
 
 /// What every connection shares: the session settings, the world, the host's objects, the way to
 /// reach other connections and where captures go.
@@ -29,6 +30,7 @@ pub(crate) struct ConnectionSettings {
     pub(crate) objects: Mutex<ObjectStore>,
     pub(crate) switchboard: Switchboard,
     pub(crate) capture_dir: Option<PathBuf>,
+    next_connection: AtomicU64,
 }
 
 impl ConnectionSettings {
@@ -39,7 +41,13 @@ impl ConnectionSettings {
             objects: Mutex::new(ObjectStore::new()),
             switchboard: Switchboard::default(),
             capture_dir,
+            next_connection: AtomicU64::new(1),
         }
+    }
+
+    /// A connection id no other connection of either listener has had.
+    pub(crate) fn new_connection(&self) -> ConnectionId {
+        ConnectionId(self.next_connection.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -47,10 +55,10 @@ impl ConnectionSettings {
 pub(crate) async fn serve_connection(
     stream: TcpStream,
     peer: SocketAddr,
-    id: u64,
     settings: Arc<ConnectionSettings>,
 ) {
-    let span = info_span!("session", id, %peer);
+    let id = settings.new_connection();
+    let span = info_span!("session", id = id.0, %peer);
     async move {
         info!("client connected");
         match drive(stream, peer, id, &settings).await {
@@ -65,13 +73,13 @@ pub(crate) async fn serve_connection(
 async fn drive(
     mut stream: TcpStream,
     peer: SocketAddr,
-    id: u64,
+    id: ConnectionId,
     settings: &ConnectionSettings,
 ) -> std::io::Result<()> {
     stream.set_nodelay(true)?;
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
-    let mut host = Host::new(settings, ConnectionId(id));
+    let mut host = Host::new(settings, id);
     let session = Session::new(settings.session);
     let result = pump(&mut stream, session, &mut host, &mut capture).await;
     host.hang_up();
@@ -102,7 +110,7 @@ async fn pump(
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
             Some(notice) = host.next_notice() => {
                 let now = Instant::now();
-                report(capture, now, host.pass_on(&mut session, notice, now));
+                report(capture, now, send_all(&mut session, vec![notice], now));
             }
         }
         deliver_outputs(&mut session, host, stream, capture).await?;
@@ -129,7 +137,9 @@ async fn deliver_outputs(
                 record(capture, |c| c.record_event(now, &event));
                 match &event {
                     SessionEvent::Message(message) => {
-                        report(capture, now, host.answer(session, message, now));
+                        let answer = host.answer(message.body());
+                        report(capture, now, answer.exchange);
+                        report(capture, now, send_all(session, answer.outgoing, now));
                     }
                     SessionEvent::LinkLost(_) => host.hang_up(),
                     SessionEvent::Line(_) | SessionEvent::Link(_) => {}
@@ -140,7 +150,27 @@ async fn deliver_outputs(
     Ok(())
 }
 
-fn report(capture: &mut Option<FileCapture>, now: Instant, steps: Vec<Exchange>) {
+fn send_all(session: &mut Session, messages: Vec<HostMessage>, now: Instant) -> Vec<Exchange> {
+    let mut exchange = Vec::new();
+    for message in messages {
+        exchange.push(match send(session, &message, now) {
+            Ok(()) => Exchange::Replied(message),
+            Err(error) => Exchange::NotSent(error),
+        });
+    }
+    if let Err(error) = session.flush(now) {
+        exchange.push(Exchange::NotSent(error.into()));
+    }
+    exchange
+}
+
+fn send(session: &mut Session, reply: &HostMessage, now: Instant) -> Result<(), ReplyError> {
+    let message = Message::try_new(reply.encode())?;
+    session.send_message(&message, now)?;
+    Ok(())
+}
+
+pub(crate) fn report(capture: &mut Option<FileCapture>, now: Instant, steps: Vec<Exchange>) {
     for step in steps {
         log_exchange(&step);
         record(capture, |c| c.record_event(now, &step));
@@ -169,14 +199,14 @@ fn log_event(event: &SessionEvent) {
     }
 }
 
-fn open_capture(
+pub(crate) fn open_capture(
     settings: &ConnectionSettings,
-    id: u64,
+    id: ConnectionId,
     peer: SocketAddr,
     started: Instant,
 ) -> Option<FileCapture> {
     let dir = settings.capture_dir.as_ref()?;
-    match Capture::create(dir, id, peer, started) {
+    match Capture::create(dir, id.0, peer, started) {
         Ok((capture, path)) => {
             info!(path = %path.display(), "capturing session");
             Some(capture)
@@ -189,7 +219,7 @@ fn open_capture(
 }
 
 /// Writes to the capture; a failing capture is dropped so the session itself carries on.
-fn record(
+pub(crate) fn record(
     capture: &mut Option<FileCapture>,
     write: impl FnOnce(&mut FileCapture) -> std::io::Result<()>,
 ) {

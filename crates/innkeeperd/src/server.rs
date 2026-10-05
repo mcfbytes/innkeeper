@@ -1,3 +1,4 @@
+use std::future::{self, Future};
 use std::io;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -6,11 +7,12 @@ use std::time::Duration;
 
 use innkeeper_world::{StoreError, World};
 use thiserror::Error;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tracing::{info, warn};
 
 use crate::config::Config;
 use crate::connection::{serve_connection, ConnectionSettings};
+use crate::int14h_listener::serve_transport;
 use crate::sqlite_store::SqliteStore;
 
 const DATABASE_FILE: &str = "innkeeper.db";
@@ -42,32 +44,51 @@ fn open_world(data_dir: Option<&Path>) -> Result<World, ServerError> {
 }
 
 pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
-    let bind = config.bind;
     let world = open_world(config.data_dir.as_deref())?;
-    let listener = TcpListener::bind(bind)
-        .await
-        .map_err(|source| ServerError::Bind { bind, source })?;
+    let legacy = listen(config.bind).await?;
+    let transport = match config.int14h_bind() {
+        Some(bind) => Some(listen(bind).await?),
+        None => None,
+    };
     let settings = ConnectionSettings::new(config.session_config(), world, config.capture_dir());
-    info!(%bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
+    let settings = Arc::new(settings);
+    info!(bind = %config.bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
+    let transport = async {
+        match transport {
+            Some(listener) => {
+                info!(bind = ?listener.local_addr().ok(), "serving the INT 14h transport");
+                accept_forever(listener, Arc::clone(&settings), serve_transport).await;
+            }
+            None => future::pending().await,
+        }
+    };
     tokio::select! {
-        () = accept_forever(listener, Arc::new(settings)) => {}
+        () = accept_forever(legacy, Arc::clone(&settings), serve_connection) => {}
+        () = transport => {}
         _ = tokio::signal::ctrl_c() => info!("shutting down"),
     }
     Ok(())
 }
 
-async fn accept_forever(listener: TcpListener, settings: Arc<ConnectionSettings>) {
-    let mut next_id = 1u64;
+async fn listen(bind: SocketAddr) -> Result<TcpListener, ServerError> {
+    TcpListener::bind(bind)
+        .await
+        .map_err(|source| ServerError::Bind { bind, source })
+}
+
+/// Hands every accepted socket to `serve` on a task of its own.
+pub(crate) async fn accept_forever<F, S>(
+    listener: TcpListener,
+    settings: Arc<ConnectionSettings>,
+    serve: S,
+) where
+    S: Fn(TcpStream, SocketAddr, Arc<ConnectionSettings>) -> F,
+    F: Future<Output = ()> + Send + 'static,
+{
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
-                tokio::spawn(serve_connection(
-                    stream,
-                    peer,
-                    next_id,
-                    Arc::clone(&settings),
-                ));
-                next_id += 1;
+                tokio::spawn(serve(stream, peer, Arc::clone(&settings)));
             }
             Err(error) => {
                 warn!(%error, "accept failed");
@@ -78,7 +99,7 @@ async fn accept_forever(listener: TcpListener, settings: Arc<ConnectionSettings>
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::VecDeque;
     use std::time::Instant;
@@ -89,6 +110,8 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
     use tsn_link::{Link, LinkConfig, LinkOutput, Message};
+
+    use crate::int14h_listener::tests::TransportClient;
 
     /// The stock client's first frame and the host's reply, from docs/protocol/captures.md.
     const CAPTURED_LOGIN_FRAME: [u8; 39] = [
@@ -144,7 +167,11 @@ mod tests {
         let settings = ConnectionSettings::new(session, World::stock(), Some(capture_dir.clone()));
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        tokio::spawn(accept_forever(listener, Arc::new(settings)));
+        tokio::spawn(accept_forever(
+            listener,
+            Arc::new(settings),
+            serve_connection,
+        ));
 
         let mut client = TcpStream::connect(address).await.unwrap();
         client.write_all(b"@D\r\r").await.unwrap();
@@ -256,25 +283,30 @@ mod tests {
         }
     }
 
-    fn hex(text: &str) -> Vec<u8> {
+    pub(crate) fn hex(text: &str) -> Vec<u8> {
         let pairs = text.split_whitespace();
         pairs
             .map(|pair| u8::from_str_radix(pair, 16).unwrap())
             .collect()
     }
 
-    const LOGIN: &str = "35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 \
+    pub(crate) const LOGIN: &str =
+        "35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 \
                          67 75 79 62 72 75 73 68 00";
-    const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 00 00";
-    const JOIN_PLAYER: &str = "07 00 00 00 8c 09 01 01 ff ff 1e 00";
-    const JOIN_WAITING_ROOM: &str = "07 00 00 00 c0 01 05 01 01 00 80 00";
+    pub(crate) const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 00 00";
+    pub(crate) const JOIN_PLAYER: &str = "07 00 00 00 8c 09 01 01 ff ff 1e 00";
+    pub(crate) const JOIN_WAITING_ROOM: &str = "07 00 00 00 c0 01 05 01 01 00 80 00";
     const GUARD_TIME: Duration = Duration::from_millis(50);
 
     async fn serve_on_loopback(session: SessionConfig) -> SocketAddr {
         let settings = ConnectionSettings::new(session, World::stock(), None);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        tokio::spawn(accept_forever(listener, Arc::new(settings)));
+        tokio::spawn(accept_forever(
+            listener,
+            Arc::new(settings),
+            serve_connection,
+        ));
         address
     }
 
@@ -329,5 +361,106 @@ mod tests {
         first.expect("09 00 02 01").await;
         second.stream.write_all(b"AT\r").await.unwrap();
         expect_reply(&mut second.stream, b"AT\r\r\nOK\r\n").await;
+    }
+
+    /// Both listeners on loopback ports, sharing one world and one object store.
+    struct Listeners {
+        legacy: SocketAddr,
+        transport: SocketAddr,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum Kind {
+        Legacy,
+        Transport,
+    }
+
+    /// Either kind of client, driven by the same script.
+    enum Client {
+        Legacy(Box<LinkedClient>),
+        Transport(TransportClient),
+    }
+
+    impl Listeners {
+        async fn start() -> Self {
+            let session = SessionConfig {
+                line: LineKind::Pad,
+                ..SessionConfig::default()
+            };
+            let settings = Arc::new(ConnectionSettings::new(session, World::stock(), None));
+            let legacy = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let transport = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let listeners = Listeners {
+                legacy: legacy.local_addr().unwrap(),
+                transport: transport.local_addr().unwrap(),
+            };
+            let shared = Arc::clone(&settings);
+            tokio::spawn(accept_forever(legacy, shared, serve_connection));
+            tokio::spawn(accept_forever(transport, settings, serve_transport));
+            listeners
+        }
+
+        async fn client(&self, kind: Kind) -> Client {
+            match kind {
+                Kind::Legacy => Client::Legacy(Box::new(LinkedClient::call(self.legacy).await)),
+                Kind::Transport => Client::Transport(TransportClient::dial(self.transport).await),
+            }
+        }
+    }
+
+    impl Client {
+        async fn send(&mut self, body: &str) {
+            match self {
+                Client::Legacy(client) => client.send(body).await,
+                Client::Transport(client) => client.send(body).await,
+            }
+        }
+
+        async fn expect(&mut self, body: &str) {
+            match self {
+                Client::Legacy(client) => client.expect(body).await,
+                Client::Transport(client) => client.expect(body).await,
+            }
+        }
+
+        /// Logs on and puts a player object with the given SID low byte into the waiting room.
+        async fn enter_waiting_room(&mut self, player: &str) {
+            self.send(LOGIN).await;
+            self.expect(LOGIN_ACK).await;
+            self.send(JOIN_PLAYER).await;
+            self.expect(&format!("08 00 8c 09 00 00 {player} 01")).await;
+            self.send(JOIN_WAITING_ROOM).await;
+            self.expect("08 00 c0 01 00 00 01 01").await;
+            self.send(&format!("0a 00 01 01 {player} 01 02 03 12"))
+                .await;
+            self.expect(&format!("0a 00 01 01 {player} 01")).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn a_transport_client_reads_the_replies_a_legacy_client_reads() {
+        for kind in [Kind::Legacy, Kind::Transport] {
+            let listeners = Listeners::start().await;
+            let mut client = listeners.client(kind).await;
+            client.enter_waiting_room("00").await;
+        }
+    }
+
+    async fn meet(first: Kind, second: Kind) {
+        let listeners = Listeners::start().await;
+        let mut first = listeners.client(first).await;
+        first.enter_waiting_room("00").await;
+        let mut second = listeners.client(second).await;
+        second.enter_waiting_room("02").await;
+        first.expect("0a 00 01 01 02 01").await;
+        drop(second);
+        first.expect("0b 00 01 01 02 01").await;
+        first.expect("09 00 02 01").await;
+    }
+
+    #[tokio::test]
+    async fn a_legacy_and_a_transport_client_meet_in_one_waiting_room() {
+        meet(Kind::Legacy, Kind::Transport).await;
+        meet(Kind::Transport, Kind::Legacy).await;
     }
 }

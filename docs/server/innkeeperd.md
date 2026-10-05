@@ -10,26 +10,35 @@ one object store, so players in the same waiting room see each other ([objects.m
 ```
 innkeeperd           bin: command line, tokio runtime, TCP, capture files, wiring
   ├ innkeeper-world    host behaviour: typed messages, accounts, logon, land tables, no I/O
-  └ innkeeper-session  one connection: line then link, no I/O
-      ├ pad_thai         Hayes modem (hayes_fever), SprintNet PAD dialogue, line detection, no I/O
-      └ tsn-link         TSNEXEC framing, CRC, ACK/NAK, resends, message packing, no I/O
-int14h               the 17 INT 14h exports and the transport codec (int14h-transport.md), no I/O
+  ├ innkeeper-session  one legacy connection: line then link, no I/O
+  │   ├ pad_thai         Hayes modem (hayes_fever), SprintNet PAD dialogue, line detection, no I/O
+  │   └ tsn-link         TSNEXEC framing, CRC, ACK/NAK, resends, message packing, no I/O
+  └ int14h             the 17 INT 14h exports and the transport codec (int14h-transport.md), no I/O
 ```
 
-`innkeeper-world` does not depend on the session crates: it turns message bodies into deliveries, and
-`innkeeperd` (`src/host.rs`, `Host`) carries them between the two. A delivered client message is parsed
-into a `ClientMessage` and handed to the connection's `PlayerSession` with the shared `World` and the
-host's `ObjectStore`, which every connection shares behind one `Mutex`. What comes back is a list of
-`Delivery { to, message }`: the connection's own replies are encoded, queued with `Session::send_message`
-and sent with `Session::flush`, which closes the frame; deliveries for other connections go through
-`src/switchboard.rs` to their inboxes, and each connection's pump loop sends what arrives in its inbox the
-same way.
+`innkeeperd` has two listeners on one world. The legacy one (`--bind`, `src/connection.rs`) answers the
+stock DOS client through the modem, PAD and link layer. The transport one (`--int14h-bind`,
+`src/int14h_listener/`) answers a client that implements TSNEXEC's exports itself and sends each call as an
+envelope ([int14h-transport.md](../protocol/int14h-transport.md) section 7); its `Executive` holds one
+connection's export state. Both draw their `ConnectionId`s from one counter in `ConnectionSettings`.
 
-A connection's lifecycle follows its call. A call ends when the client clears it at the PAD (`D`) or the
+`innkeeper-world` does not depend on the session crates: it turns message bodies into deliveries, and
+`innkeeperd` (`src/host.rs`, `Host`) carries them between the world and either transport. `Host::answer`
+parses a client message body into a `ClientMessage` and hands it to the connection's `PlayerSession` with
+the shared `World` and the host's `ObjectStore`, which every connection shares behind one `Mutex`. What
+comes back is a list of `Delivery { to, message }`: deliveries for other connections go through
+`src/switchboard.rs` to their inboxes, and `answer` returns the connection's own `HostMessage`s with the
+`Exchange` log. The legacy driver encodes them, queues them with `Session::send_message` and sends them with
+`Session::flush`, which closes the frame; the transport queues them for Receive. Each connection's pump loop
+treats what arrives in its inbox the same way. When the connection ends, the store releases what it held
+and tells the others ([objects.md](objects.md) section 5).
+
+On the legacy link a connection's lifecycle follows its call. A call ends when the client clears it at the PAD (`D`) or the
 emulated modem hangs up (`ATH`, `ATZ`); the session then reports `SessionEvent::LinkLost` with a `LinkLoss`,
 once per call and never for a connection that had no call. `innkeeperd` answers with `Host::hang_up`: the
 store releases what the connection held and tells the others ([objects.md](objects.md) section 5), while
-the socket stays open for a new call. When the TCP connection closes, the driver does the same.
+the socket stays open for a new call. When the TCP connection closes, or a transport client calls
+Disconnect, the driver does the same.
 `Session::is_transmit_idle` says whether everything sent to the client has been acknowledged.
 `Session::begin_program_switch` holds the host's new DATA frames while the client chains programs
 (`int14h-api.md` 9.3), until the client's next DATA frame or `PROGRAM_SWITCH_QUIET_MAX_ASSUMED` (10 s),
@@ -45,9 +54,14 @@ events come out, and timers are a `next_deadline()` that the caller sleeps on. `
 cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures] [--no-capture]
                            [--data-dir DIR]
                            [--line auto|hayes|pad] [--connect-rate 2400]
+                           [--int14h-bind 127.0.0.1:2315] [--no-int14h]
 ```
 
-- On a successful bind it logs `INT 14h hooked. Please wait while ImagiNation loads...`.
+- On a successful bind it logs `INT 14h hooked. Please wait while ImagiNation loads...`, then `serving the
+  INT 14h transport` with the transport's address.
+- `--int14h-bind` is where transport clients connect (`docs/protocol/int14h-transport.md`), and `--no-int14h`
+  leaves that listener off. A transport connection gets a capture file like a legacy one: `tx` and `rx` are
+  the envelope bytes, `ev` the decoded client and host messages.
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an
@@ -55,7 +69,8 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
   Without it every account number and password is admitted and nothing is kept, which is what the DOSBox
   scripts use.
 - `--line` says what the client's serial port reaches (section 4). `--connect-rate` is the rate in the
-  emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes).
+  emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes);
+  the transport's GetLineRate answers the same rate.
 
 ## 3. Connecting the stock client from DOSBox-X
 
@@ -197,4 +212,6 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 - Replies to 34/4 (rates), `getProp` (32) and the other services of `messages.md` section 3.3.
 - Mail beyond [mail.md](mail.md): letters arriving while the recipient is online are not pushed, and a
   new account has no stamps flag, so it cannot send until its record has `0x200`.
-- Serving the INT 14h transport.
+- On the INT 14h transport, SwitchHost and Connect accept any address and keep the client on this host; a
+  land switch between hosts is not modelled. No client speaks the transport yet (ScummVM's online executive
+  is the first one planned).

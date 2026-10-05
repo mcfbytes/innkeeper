@@ -239,6 +239,7 @@ dependencies = [
  "humantime",
  "innkeeper-session",
  "innkeeper-world",
+ "int14h",
  "pad_thai",
  "rusqlite",
  "thiserror",

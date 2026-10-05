@@ -1,20 +1,20 @@
 use std::fmt;
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::Instant;
 
-use innkeeper_session::{Session, SessionError};
+use innkeeper_session::SessionError;
 use innkeeper_world::{
     ClientMessage, ConnectionId, Delivery, HostMessage, MessageError, ObjectStore, PlayerSession,
     World,
 };
+use int14h::Int14hError;
 use thiserror::Error;
-use tsn_link::{LinkError, Message};
+use tsn_link::LinkError;
 
 use crate::connection::ConnectionSettings;
 use crate::switchboard::{Inbox, Switchboard};
 
-/// The application end of one connection: decodes client messages, sends the world's replies and
-/// what other connections caused, and releases the connection's objects when it ends.
+/// The application end of one connection, whatever its transport: decodes client messages, returns
+/// the world's replies and what other connections caused, and releases the connection's objects.
 #[derive(Debug)]
 pub(crate) struct Host<'s> {
     world: &'s World,
@@ -34,12 +34,22 @@ pub(crate) enum Exchange {
     NotSent(ReplyError),
 }
 
+/// Why a host message did not reach the client, on either transport.
 #[derive(Debug, Error)]
 pub(crate) enum ReplyError {
     #[error(transparent)]
     Link(#[from] LinkError),
     #[error(transparent)]
     Session(#[from] SessionError),
+    #[error(transparent)]
+    Transport(#[from] Int14hError),
+}
+
+/// What one client message caused: how it was read, and the host messages this connection is owed.
+#[derive(Debug)]
+pub(crate) struct Answer {
+    pub(crate) exchange: Vec<Exchange>,
+    pub(crate) outgoing: Vec<HostMessage>,
 }
 
 impl<'s> Host<'s> {
@@ -54,15 +64,15 @@ impl<'s> Host<'s> {
         }
     }
 
-    pub(crate) fn answer(
-        &mut self,
-        session: &mut Session,
-        message: &Message,
-        now: Instant,
-    ) -> Vec<Exchange> {
-        let received = match ClientMessage::parse(message.body()) {
+    pub(crate) fn answer(&mut self, body: &[u8]) -> Answer {
+        let received = match ClientMessage::parse(body) {
             Ok(received) => received,
-            Err(error) => return vec![Exchange::Undecodable(error)],
+            Err(error) => {
+                return Answer {
+                    exchange: vec![Exchange::Undecodable(error)],
+                    outgoing: Vec::new(),
+                }
+            }
         };
         let mut objects = lock(self.objects);
         // Under the store lock the inbox holds everything caused before this message, in order.
@@ -72,23 +82,15 @@ impl<'s> Host<'s> {
             .handle(self.world, &mut objects, self.connection, &received);
         outgoing.extend(self.dispatch(caused));
         drop(objects);
-        let mut exchange = vec![Exchange::Received(received)];
-        exchange.extend(send_all(session, outgoing, now));
-        exchange
+        Answer {
+            exchange: vec![Exchange::Received(received)],
+            outgoing,
+        }
     }
 
     /// Waits for a message that another connection caused for this one.
     pub(crate) async fn next_notice(&mut self) -> Option<HostMessage> {
         self.inbox.next().await
-    }
-
-    pub(crate) fn pass_on(
-        &mut self,
-        session: &mut Session,
-        notice: HostMessage,
-        now: Instant,
-    ) -> Vec<Exchange> {
-        send_all(session, vec![notice], now)
     }
 
     /// The connection ended: everything it held is released and the peers are told.
@@ -116,26 +118,6 @@ impl<'s> Host<'s> {
 
 fn lock(objects: &Mutex<ObjectStore>) -> MutexGuard<'_, ObjectStore> {
     objects.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-fn send_all(session: &mut Session, messages: Vec<HostMessage>, now: Instant) -> Vec<Exchange> {
-    let mut exchange = Vec::new();
-    for message in messages {
-        exchange.push(match send(session, &message, now) {
-            Ok(()) => Exchange::Replied(message),
-            Err(error) => Exchange::NotSent(error),
-        });
-    }
-    if let Err(error) = session.flush(now) {
-        exchange.push(Exchange::NotSent(error.into()));
-    }
-    exchange
-}
-
-fn send(session: &mut Session, reply: &HostMessage, now: Instant) -> Result<(), ReplyError> {
-    let message = Message::try_new(reply.encode())?;
-    session.send_message(&message, now)?;
-    Ok(())
 }
 
 impl fmt::Display for Exchange {

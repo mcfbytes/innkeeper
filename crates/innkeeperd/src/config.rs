@@ -16,6 +16,12 @@ pub(crate) struct Config {
     /// Address to accept client connections on.
     #[arg(long, default_value = "127.0.0.1:2314")]
     pub(crate) bind: SocketAddr,
+    /// Address to accept INT 14h transport clients on (docs/protocol/int14h-transport.md).
+    #[arg(long, default_value = "127.0.0.1:2315")]
+    pub(crate) int14h_bind: SocketAddr,
+    /// Do not serve the INT 14h transport.
+    #[arg(long)]
+    pub(crate) no_int14h: bool,
     /// Directory for one hex capture file per session.
     #[arg(long, default_value = "work/captures")]
     pub(crate) capture_dir: PathBuf,
@@ -61,6 +67,10 @@ impl Config {
     pub(crate) fn capture_dir(&self) -> Option<PathBuf> {
         (!self.no_capture).then(|| self.capture_dir.clone())
     }
+
+    pub(crate) fn int14h_bind(&self) -> Option<SocketAddr> {
+        (!self.no_int14h).then_some(self.int14h_bind)
+    }
 }
 
 #[cfg(test)]
@@ -74,6 +84,18 @@ mod tests {
         assert_eq!(config.capture_dir(), Some(PathBuf::from("work/captures")));
         assert_eq!(config.session_config().line, LineKind::Auto);
         assert_eq!(config.data_dir, None);
+        assert_eq!(
+            config.int14h_bind(),
+            Some("127.0.0.1:2315".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn the_int14h_transport_can_move_or_be_switched_off() {
+        let moved = Config::parse_from(["innkeeperd", "--int14h-bind", "0.0.0.0:4000"]);
+        assert_eq!(moved.int14h_bind(), Some("0.0.0.0:4000".parse().unwrap()));
+        let off = Config::parse_from(["innkeeperd", "--no-int14h"]);
+        assert_eq!(off.int14h_bind(), None);
     }
 
     #[test]

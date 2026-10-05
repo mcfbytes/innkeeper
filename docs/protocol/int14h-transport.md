@@ -9,8 +9,8 @@ INT 14h API locally and `innkeeperd`. It replaces the modem, the X.25 PAD and th
 
 The export semantics are those of `docs/protocol/int14h-api.md`; this file only defines how they travel.
 The Rust types and codec are in `crates/int14h` (`Call`, `Reply`, `Envelope`, `encode_envelope`,
-`EnvelopeParser`). Status: version 1, specified and implemented as a codec; `innkeeperd` does not
-listen for it yet.
+`EnvelopeParser`). Status: version 1, specified and implemented as a codec; `innkeeperd` serves it on
+`--int14h-bind` (default `127.0.0.1:2315`), with the choices in section 7.
 
 ## 1. Model
 
@@ -120,9 +120,34 @@ These are the golden bytes in `crates/int14h/tests/golden/envelopes.txt`, length
 | CALL tag 6, SetNextProgram(NULL) | `05 00 00 00` `10` `06 00` `09` `00` |
 | REPLY tag 7, GetStatus: driver 3, connected | `06 00 00 00` `11` `07 00` `00` `03 80` |
 
-## 7. Open points
+## 7. The server in `innkeeperd`, and open points
+
+`innkeeperd` (`crates/innkeeperd/src/int14h_listener/`) serves version 1 on its own TCP port. Each
+transport connection is one connection to the same world and object store as a legacy client, so the two
+kinds meet in the same rooms. Its choices, where section 1 and `int14h-api.md` leave room:
+
+| Export | `innkeeperd` answers |
+|---|---|
+| GetStatus | driver version 3 and `AH` `80` from Connect until Disconnect, `00` otherwise; LSCITV takes 3 as "dial a modem string" and skips Connect while `AH` is nonzero (`int14h-census/lsci.md` section 10) |
+| Connect | result 0 for any dial string, also when already connected; the dial string is logged, not used |
+| Send | the body goes through the same message handler as a legacy client's; `true` once handled, `false` when not connected or empty |
+| Receive | the oldest waiting message: the replies to this client and the messages other connections caused, in the order the object store made them |
+| Poll, Service | 0, and 1 exactly once after the server ended the call; the server ends it when more than 1024 messages wait unreceived (`RECEIVE_QUEUE_LIMIT`) |
+| IsTransmitIdle | always true: calls are handled in order, so when a REPLY arrives nothing the client sent is still unprocessed |
+| SwitchHost | 0 for any address, and the waiting messages are dropped, as TSNEXEC flushes its queues; 1 when not connected. The login and the objects stay, since the client logs in again after a switch |
+| Disconnect | releases what the connection holds, as a hang-up does, and drops the waiting messages |
+| Flush | nothing to do |
+| GetLineRate | the `--connect-rate` the legacy modem announces |
+| GetSharedData, SetSharedData | one 256-byte block per connection |
+| SetAckTimeout, SetNextProgram, SetCallbacks | acknowledged and logged; the client keeps the clock, runs the programs and holds the callbacks, so nothing on the server reads them |
+| GetPreviousProgram | NULL: the server runs no program, so none ran before |
+
+Closing the socket ends the call like Disconnect. A first envelope other than HELLO, a HELLO of another
+version, a malformed envelope, or anything but CALL after HELLO closes the connection without an answer.
+
+Open points:
 
 - Version 1 polls: the client learns about new messages only through Poll and Receive, one round trip each.
   A later version may let the server push a "messages waiting" notice.
 - There is no authentication; logon happens in the application messages.
-- `innkeeperd` does not serve this transport yet, and no client implements it yet.
+- No client implements the transport yet, and SwitchHost does not move the client to another host.
