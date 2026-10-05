@@ -4,8 +4,8 @@ use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
-    Ack, Command, GroupLeave, GroupMembers, MailReply, MailboxAnswer, Notice, ObjectLocated,
-    SendMessage, SetInt, SetStr,
+    Ack, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply, MailboxAnswer,
+    MemberProperties, Notice, ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -44,6 +44,12 @@ pub enum HostMessage {
     LandOccupancy(Vec<Occupancy>),
     Mail(MailReply),
     Mailbox(MailboxAnswer),
+    LockRefused(LockRefused),
+    InvokeMethod(InvokeMethod),
+    /// `SetMsg`: the answer to a getProp.
+    Properties(PropertyValues),
+    /// `GrpGetProp`: the answer to a member-properties request.
+    MemberProperties(MemberProperties),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -194,6 +200,10 @@ impl HostMessage {
             }
             HostMessage::Mail(reply) => reply.write(&mut writer),
             HostMessage::Mailbox(answer) => answer.write(&mut writer),
+            HostMessage::LockRefused(refused) => refused.write(&mut writer),
+            HostMessage::InvokeMethod(call) => call.write(&mut writer),
+            HostMessage::Properties(values) => values.write(&mut writer),
+            HostMessage::MemberProperties(table) => table.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -279,7 +289,17 @@ impl HostMessage {
             Command::WaitGroup => parse_wait_group(&mut reader)?,
             Command::Mail => HostMessage::Mail(MailReply::parse(&mut reader)?),
             Command::NewBox => HostMessage::Mailbox(MailboxAnswer::parse(&mut reader)?),
-            Command::JoinNet
+            Command::InvokeMethod => HostMessage::InvokeMethod(InvokeMethod::parse(&mut reader)?),
+            Command::Properties => HostMessage::Properties(PropertyValues::parse(&mut reader)?),
+            Command::MemberProperties => {
+                HostMessage::MemberProperties(MemberProperties::parse(&mut reader)?)
+            }
+            Command::Lock
+            | Command::Unlock
+            | Command::PlayerObjectNotice
+            | Command::Register
+            | Command::GetProperties
+            | Command::JoinNet
             | Command::Multicast
             | Command::ChangePassword
             | Command::UserInfo
@@ -328,6 +348,11 @@ fn parse_nak(reader: &mut WireReader) -> Result<HostMessage, MessageError> {
     reader.byte("flags")?;
     let to = Sid(reader.word("toSID")?);
     let which_cmd = reader.byte("whichCmd")?;
+    if which_cmd == Command::Lock.byte() {
+        return Ok(HostMessage::LockRefused(LockRefused::parse_after(
+            reader, to,
+        )?));
+    }
     let which_sub = reader.byte("whichSub")?;
     match which_cmd {
         MAIL_COMMAND => Ok(HostMessage::Mail(MailReply::parse_nak_after(

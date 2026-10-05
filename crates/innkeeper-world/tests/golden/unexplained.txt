@@ -1,0 +1,5 @@
+# Commands of unknown purpose (26, 30): 26 as the live Clubhouse sent it (captures.md section 11), 30 as
+# hub/type31.558 class_61::register builds it. Rows as in send.txt.
+> command 26 for the new player | 1a 00 02 01 02 01
+> register one SID | 1e 02 01
+> register two SIDs | 1e 02 01 08 01

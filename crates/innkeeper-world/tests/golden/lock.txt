@@ -1,0 +1,7 @@
+# Host locks (lock 4, unlock 6), built from messages.md section 3.2, the sends of hub/type31.558
+# class_61::lock and unlock, and the Nak word 5 that hub/script.121 inviteScript reads. Rows as in send.txt.
+> lock one word | 04 00 00 00 02 01
+> lock the inviter and two guests | 04 00 00 00 02 01 05 01 07 01
+> unlock the same | 06 00 00 00 02 01 05 01 07 01
+< lock granted | 00 00 00 00 04 00
+< lock refused, 0x0105 is taken | 01 00 00 00 04 05 01 00

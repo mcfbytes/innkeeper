@@ -88,7 +88,32 @@ impl PlayerSession {
             ClientMessage::Mail(ref request) => {
                 self.when_logged_in(|account| reply(mail::answer(world, account, request)))
             }
-            ClientMessage::SetInt(_) | ClientMessage::SetStr(_) | ClientMessage::ObjExists(_) => {
+            ClientMessage::SetInt(ref set) => {
+                self.when_logged_in(|_| router::set_int(objects, connection, set))
+            }
+            ClientMessage::SetStr(ref set) => {
+                self.when_logged_in(|_| router::set_str(objects, connection, set))
+            }
+            ClientMessage::InvokeMethod(ref call) => {
+                self.when_logged_in(|_| router::invoke_method(objects, connection, call))
+            }
+            ClientMessage::Lock(ref request) => {
+                self.when_logged_in(|_| objects.lock(connection, request))
+            }
+            ClientMessage::Unlock(ref request) => {
+                self.when_logged_in(|_| objects.unlock(connection, request))
+            }
+            ClientMessage::GetProperties(ref request) => {
+                self.when_logged_in(|_| objects.properties(connection, request))
+            }
+            ClientMessage::GetMemberProperties(ref request) => {
+                self.when_logged_in(|_| objects.member_properties(connection, request))
+            }
+            ClientMessage::Unexplained(_) => {
+                info!(?message, "purpose unknown, no reply expected: absorbed");
+                Vec::new()
+            }
+            ClientMessage::ObjExists(_) => {
                 info!(?message, "decoded, no handler yet: ignored");
                 Vec::new()
             }
@@ -268,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn property_commands_are_ignored_until_replication_exists() {
+    fn a_property_update_nobody_else_replicates_goes_nowhere() {
         let world = World::stock();
         let mut objects = ObjectStore::new();
         let mut player = PlayerSession::new();

@@ -64,3 +64,13 @@ pub(crate) const NO_ACCOUNT_MAILBOX_STATUS_ASSUMED: u8 = 2;
 pub(crate) const STORE_FAULT_MAILBOX_STATUS_ASSUMED: u8 = 4;
 /// Mail requests name a box, and only the requester's own box may be checked, listed, read or emptied.
 pub(crate) const OTHER_BOXES_ARE_PRIVATE_ASSUMED: bool = true;
+/// The word at byte 4 of a `SetMsg`: the client reads the property records from byte 6 (section 3.2).
+pub(crate) const PROPERTIES_UNREAD_WORD_ASSUMED: u16 = 0;
+/// An unlock gets no reply: the invitation scripts send it and move on without waiting (section 3.2).
+pub(crate) const UNLOCK_IS_ACKNOWLEDGED_ASSUMED: bool = false;
+/// A property update or remote call reaches every connection that shares a group with the object, not
+/// only its holders: a waiting room builds a replica of each member it is told about (section 3.2).
+pub(crate) const REPLICAS_INCLUDE_GROUP_FELLOWS_ASSUMED: bool = true;
+/// A member-properties cell the mirror lacks: the client's table has a value for every member and
+/// column, so the host sends 0 or empty text (section 3.2).
+pub(crate) const UNSET_INT_PROPERTY_ASSUMED: u16 = 0;

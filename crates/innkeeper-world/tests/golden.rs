@@ -127,7 +127,7 @@ fn kind_3_parses_and_kind_6_and_unknown_commands_are_errors() {
             value: 6
         })
     );
-    for command in [3, 4, 5, 6, 17, 25, 200] {
+    for command in [3, 5, 17, 18, 200] {
         let bytes = [command, 0, 2, 1, 2, 1];
         let error = MessageError::UnsupportedCommand(command);
         assert_eq!(ClientMessage::parse(&bytes), Err(error.clone()));

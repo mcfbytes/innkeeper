@@ -1,3 +1,6 @@
+mod locks;
+mod mirror;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter;
 
@@ -12,6 +15,8 @@ use crate::{
     GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest, HostMessage, JoinNet, LandType, Nak,
     ObjectKind, Sid,
 };
+use locks::LockTable;
+use mirror::PropertyMirror;
 
 /// Server choice: SIDs below this stay free for well-known objects.
 const FIRST_SID: u16 = 0x0100;
@@ -58,6 +63,8 @@ pub struct ObjectStore {
     objects: BTreeMap<Sid, NetObject>,
     shared_groups: HashMap<GroupKey, Sid>,
     next_sid: u16,
+    locks: LockTable,
+    mirror: PropertyMirror,
 }
 
 #[derive(Debug)]
@@ -109,6 +116,8 @@ impl ObjectStore {
             objects: BTreeMap::new(),
             shared_groups: HashMap::new(),
             next_sid: FIRST_SID,
+            locks: LockTable::default(),
+            mirror: PropertyMirror::default(),
         }
     }
 
@@ -252,8 +261,9 @@ impl ObjectStore {
         }
     }
 
-    /// Releases everything the connection holds, as when it hangs up or logs in again.
+    /// Releases everything the connection holds, its locks included, as when it hangs up or logs in again.
     pub fn disconnect(&mut self, connection: ConnectionId) -> Vec<Delivery> {
+        self.locks.release_all(connection);
         let mut held: Vec<(Sid, bool)> = self
             .objects
             .iter()
@@ -371,6 +381,7 @@ impl ObjectStore {
             .into_iter()
             .flat_map(|group| self.remove_member(actor, group, sid))
             .collect();
+        self.mirror.forget(sid);
         if let Some(object) = self.objects.remove(&sid) {
             info!(sid = sid.0, request = ?object.request, "object freed");
             if let Scope::SharedGroup(key) = Scope::of(&object.request) {

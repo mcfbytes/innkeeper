@@ -33,6 +33,11 @@ pub use message::{
     Notice, ObjExists, ObjectKind, ObjectLocated, Occupancy, OutgoingLetter, PasswordSource,
     SendMessage, SetInt, SetPersona, SetStr,
 };
+pub use message::{
+    InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,
+    PropertyColumn, PropertyKind, PropertyRequest, PropertyValue, PropertyValues, Unexplained,
+    UnexplainedCommand,
+};
 pub use objects::{ConnectionId, Delivery, GroupKey, ObjectStore};
 pub use player::PlayerSession;
 #[cfg(feature = "test-support")]

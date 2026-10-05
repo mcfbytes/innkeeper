@@ -1,0 +1,11 @@
+# Remote calls and property reads (commands 25, 31, 32, 33), built from messages.md section 3.2, the sends
+# of hub/type31.608 Obj and hub/script.003 WaitingRoomGroup, and the readers in hub/type31.559.
+> invokeMethod with two arguments | 19 00 02 01 d9 00 01 00 02 00
+> invokeMethod without arguments | 19 00 03 01 d9 00
+> getProp name, game and room | 20 00 02 01 02 01 05 00 09 00 18 00
+> member properties request | 1f 01 03 01 03 01 05 00 09 00
+< invokeMethod delivered | 19 00 02 01 d9 00 01 00 02 00
+< SetMsg, text and an integer | 21 00 02 01 00 00 01 05 00 67 75 79 00 00 09 00 78 00
+< SetMsg, nothing known | 21 00 02 01 00 00
+< member properties, two members | 1f 00 03 01 03 01 02 00 02 00 05 00 01 00 09 00 00 00 02 01 67 75 79 00 78 00 04 01 00 00 00
+< member properties, empty group | 1f 00 03 01 03 01 00 00 01 00 05 00 00 00

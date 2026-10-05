@@ -34,14 +34,20 @@ impl<'a> WireReader<'a> {
 
     /// A NUL-terminated ASCII string; the NUL is consumed and not returned.
     pub(crate) fn text(&mut self, field: &'static str) -> Result<String, MessageError> {
+        let text = self.until_nul(field)?;
+        ascii(&text, field)
+    }
+
+    /// The bytes before the next NUL, whatever they hold; the NUL is consumed and not returned.
+    pub(crate) fn until_nul(&mut self, field: &'static str) -> Result<Vec<u8>, MessageError> {
         let end = self
             .rest
             .iter()
             .position(|&byte| byte == 0)
             .ok_or(MessageError::Truncated { field })?;
-        let (text, tail) = self.rest.split_at(end);
+        let (bytes, tail) = self.rest.split_at(end);
         self.rest = tail.get(1..).unwrap_or_default();
-        ascii(text, field)
+        Ok(bytes.to_vec())
     }
 
     /// Everything not read yet, for a body the host relays without interpreting it.

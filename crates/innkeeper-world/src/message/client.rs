@@ -2,8 +2,9 @@ use std::fmt;
 
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
-    Command, GroupLeave, GroupMembersRequest, MailRequest, MailboxRequest, Multicast, ObjExists,
-    ObjectKind, SendMessage, SetInt, SetPersona, SetStr,
+    Command, GroupLeave, GroupMembersRequest, InvokeMethod, LockRequest, MailRequest,
+    MailboxRequest, Multicast, ObjExists, ObjectKind, PropertyRequest, SendMessage, SetInt,
+    SetPersona, SetStr, Unexplained,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -27,6 +28,14 @@ pub enum ClientMessage {
     LandOccupancyRequest,
     Mail(MailRequest),
     NewMailbox(MailboxRequest),
+    Lock(LockRequest),
+    Unlock(LockRequest),
+    InvokeMethod(InvokeMethod),
+    /// getProp (32): the properties of one object.
+    GetProperties(PropertyRequest),
+    /// GrpGetProp (31): the properties of every member of a group.
+    GetMemberProperties(PropertyRequest),
+    Unexplained(Unexplained),
 }
 
 /// Command 53, or 59 with a Prodigy ID: the first message after every Connect.
@@ -154,9 +163,23 @@ impl ClientMessage {
             }
             Command::Mail => ClientMessage::Mail(MailRequest::parse(&mut reader)?),
             Command::NewBox => ClientMessage::NewMailbox(MailboxRequest::parse(&mut reader)?),
-            Command::Ack | Command::Nak | Command::ObjId | Command::Notice => {
-                return Err(MessageError::UnsupportedCommand(command.byte()))
+            Command::Lock => ClientMessage::Lock(LockRequest::parse(&mut reader)?),
+            Command::Unlock => ClientMessage::Unlock(LockRequest::parse(&mut reader)?),
+            Command::InvokeMethod => ClientMessage::InvokeMethod(InvokeMethod::parse(&mut reader)?),
+            Command::GetProperties => {
+                ClientMessage::GetProperties(PropertyRequest::parse(&mut reader)?)
             }
+            Command::MemberProperties => {
+                ClientMessage::GetMemberProperties(PropertyRequest::parse(&mut reader)?)
+            }
+            Command::PlayerObjectNotice | Command::Register => {
+                ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
+            }
+            Command::Ack
+            | Command::Nak
+            | Command::ObjId
+            | Command::Notice
+            | Command::Properties => return Err(MessageError::UnsupportedCommand(command.byte())),
         };
         reader.finish()?;
         Ok(message)
@@ -191,6 +214,16 @@ impl ClientMessage {
             }
             ClientMessage::Mail(request) => request.write(&mut writer),
             ClientMessage::NewMailbox(request) => request.write(&mut writer),
+            ClientMessage::Lock(request) => request.write(&mut writer, Command::Lock),
+            ClientMessage::Unlock(request) => request.write(&mut writer, Command::Unlock),
+            ClientMessage::InvokeMethod(call) => call.write(&mut writer),
+            ClientMessage::GetProperties(request) => {
+                request.write(&mut writer, Command::GetProperties);
+            }
+            ClientMessage::GetMemberProperties(request) => {
+                request.write(&mut writer, Command::MemberProperties);
+            }
+            ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()
     }
