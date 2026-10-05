@@ -49,6 +49,7 @@ impl SqliteStore {
         Self::with_connection(Connection::open(path))
     }
 
+    #[cfg(test)]
     pub(crate) fn open_in_memory() -> Result<Self, StoreError> {
         Self::with_connection(Connection::open_in_memory())
     }

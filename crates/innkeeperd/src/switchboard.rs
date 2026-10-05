@@ -76,16 +76,10 @@ mod tests {
         let switchboard = Switchboard::default();
         let freed = HostMessage::ObjectFreed(Sid(0x0100));
         let mut inbox = switchboard.register(ConnectionId(1));
-        switchboard.deliver(Delivery {
-            to: ConnectionId(1),
-            message: freed.clone(),
-        });
+        switchboard.deliver(Delivery::new(ConnectionId(1), freed.clone()));
         assert_eq!(inbox.next().await, Some(freed.clone()));
         drop(inbox);
-        switchboard.deliver(Delivery {
-            to: ConnectionId(1),
-            message: freed,
-        });
+        switchboard.deliver(Delivery::new(ConnectionId(1), freed));
         assert!(switchboard.lock().is_empty());
     }
 }

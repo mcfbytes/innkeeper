@@ -114,10 +114,7 @@ impl PlayerSession {
 fn replies_to(connection: ConnectionId, messages: Vec<HostMessage>) -> Vec<Delivery> {
     let replies = messages.into_iter();
     replies
-        .map(|message| Delivery {
-            to: connection,
-            message,
-        })
+        .map(|message| Delivery::new(connection, message))
         .collect()
 }
 

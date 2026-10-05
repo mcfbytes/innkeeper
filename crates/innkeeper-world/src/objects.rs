@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::hash::{Hash, Hasher};
 use std::iter;
 
 use tracing::{info, warn};
@@ -28,18 +27,18 @@ pub struct Delivery {
     pub message: HostMessage,
 }
 
+impl Delivery {
+    pub fn new(to: ConnectionId, message: HostMessage) -> Self {
+        Delivery { to, message }
+    }
+}
+
 /// What a shared group is found by: every joiner with the same key gets the same SID.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GroupKey {
     pub kind: ObjectKind,
     pub land_type: LandType,
     pub parameter: u16,
-}
-
-impl Hash for GroupKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.kind.byte(), self.land_type, self.parameter).hash(state);
-    }
 }
 
 /// Why a GrpJoin is refused; the DOS clients read the code from word 5 of the Nak.
@@ -132,13 +131,13 @@ impl ObjectStore {
             Scope::SharedGroup(key) => self.share(connection, key, join),
         };
         match sid {
-            Some(sid) => deliveries.push(Delivery {
-                to: connection,
-                message: HostMessage::ObjId {
+            Some(sid) => deliveries.push(Delivery::new(
+                connection,
+                HostMessage::ObjId {
                     cookie: join.cookie,
                     sid,
                 },
-            }),
+            )),
             None => warn!(?join, "every SID is taken"),
         }
         deliveries
@@ -170,10 +169,7 @@ impl ObjectStore {
     ) -> Vec<Delivery> {
         if let Err(refusal) = self.admit(connection, join) {
             warn!(?join, ?refusal, "group join refused");
-            return vec![Delivery {
-                to: connection,
-                message: refusal.nak(join.group),
-            }];
+            return vec![Delivery::new(connection, refusal.nak(join.group))];
         }
         info!(?join, "group member added");
         let mut audience = if GROUP_JOIN_TELLS_MEMBERS_ASSUMED {
@@ -186,10 +182,7 @@ impl ObjectStore {
             group: join.group,
             member: join.member,
         };
-        let echo = Delivery {
-            to: connection,
-            message: joined.clone(),
-        };
+        let echo = Delivery::new(connection, joined.clone());
         iter::once(echo).chain(tell(audience, joined)).collect()
     }
 
@@ -213,13 +206,13 @@ impl ObjectStore {
         request: GroupMembersRequest,
     ) -> Vec<Delivery> {
         match self.objects.get(&request.group).map(|object| &object.role) {
-            Some(Role::Group { members, .. }) => vec![Delivery {
-                to: connection,
-                message: HostMessage::GroupMembers(GroupMembers {
+            Some(Role::Group { members, .. }) => vec![Delivery::new(
+                connection,
+                HostMessage::GroupMembers(GroupMembers {
                     group: request.group,
                     members: members.clone(),
                 }),
-            }],
+            )],
             Some(Role::Object) | None => {
                 warn!(?request, "member list of something that is not a group");
                 Vec::new()
@@ -443,10 +436,7 @@ impl GroupJoinRefusal {
 fn tell(audience: BTreeSet<ConnectionId>, message: HostMessage) -> Vec<Delivery> {
     let deliveries = audience.into_iter();
     deliveries
-        .map(|to| Delivery {
-            to,
-            message: message.clone(),
-        })
+        .map(|to| Delivery::new(to, message.clone()))
         .collect()
 }
 

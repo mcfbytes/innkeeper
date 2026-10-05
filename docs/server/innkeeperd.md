@@ -2,8 +2,8 @@
 
 The host daemon. It accepts the stock DOS client over TCP, answers the modem, PAD and link layer, plays
 the host side of the logon, and records everything. With it the stock client logs in, reaches the town map
-and enters the Clubhouse waiting room (`docs/protocol/captures.md` sections 9 to 11). It serves one player
-at a time: nothing is shared between connections yet.
+and enters the Clubhouse waiting room (`docs/protocol/captures.md` sections 9 to 11). Connections share
+one object store, so players in the same waiting room see each other ([objects.md](objects.md)).
 
 ## 1. Crates
 
@@ -166,9 +166,8 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 
 ## 7. Not done yet
 
-- Anything shared between players: each connection has its own `PlayerSession`, SIDs are only unique per
-  connection, and a `Send` (2) or a group change is not routed to anyone. The next step is a world task that
-  owns SIDs and groups, fed by the connections through a channel.
+- Routing between players: a `Send` (2) and a multicast (28) are decoded and ignored until the router
+  (C3) exists; the object store already tells the members of a group about joins, leaves and frees.
 - Password hashing (Phase 7): the encoded password is stored as the client sends it. A second Login for an
   account that is already online is not refused.
 - Replies to 34/4 (rates), 45/1 (mailbox), 37 (mail), 40/4 (name), `getProp` (32) and the other services of

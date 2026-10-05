@@ -2,7 +2,7 @@ use crate::MessageError;
 
 /// The `kind` byte of joinNet: how the host scopes the new object. Which game thing a kind stands
 /// for depends on the land that sends it (docs/protocol/messages.md section 3.2).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ObjectKind {
     Object = 1,

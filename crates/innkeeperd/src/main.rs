@@ -6,10 +6,6 @@ mod config;
 mod connection;
 mod host;
 mod server;
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "nothing opens the database until accounts use it")
-)]
 mod sqlite_store;
 mod switchboard;
 
