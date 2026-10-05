@@ -176,14 +176,14 @@ writes 0.
 
 | Cmd | Client to host | Host to client | Notes |
 |---|---|---|---|
-| 2 | `ClientMessage::Send(SendMessage)` | `HostMessage::Send` | `to`, `from`, then the payload from byte 6 kept raw. LSCI's `msgType` is a word, the DOS libraries' a byte, so only `msg_type_word()` interprets it, and only for LSCI traffic |
+| 2 | `ClientMessage::Send(SendMessage)` | `HostMessage::Send` | `to`, `from`, then the payload from byte 6 kept raw. LSCI's `msgType` is a word, the DOS libraries' a byte, so only `msg_type_word()` interprets it, and only for LSCI traffic. The host relays it to the holders of `to`, or of a member of the group `to`, unchanged ([router.md](../server/router.md)) |
 | 9 | `LeaveNet(Sid)` | `ObjectFreed(Sid)` | the host form is the header only |
 | 10 | `GroupJoin` | `GroupJoined` | unchanged |
 | 11 | `GroupLeave` | `GroupLeft` | `group`, `member` |
 | 12 | `GroupMembers(GroupMembersRequest)` | `GroupMembers` | the list is every word from byte 6; the word at byte 4 is unread (INFERRED 0) |
 | 13 | `SetInt` | `SetInt` | `target`, `from`, then `(propOffset, value)` pairs to the end |
 | 14 | `SetStr` | `SetStr` | `target`, `from`, `propOffset`, then the value verbatim: arrays are not text |
-| 28 | `Multicast` | none | `from`, `n` word SIDs, the body raw (`5 + 2n + body`); the body's first word is LSCI's `msgType` |
+| 28 | `Multicast` | none | `from`, `n` word SIDs, the body raw (`5 + 2n + body`); the body's first word is LSCI's `msgType`. The host answers with one `Send` of the body per recipient SID, in list order ([router.md](../server/router.md)) |
 | 41 | `ObjExists::Name` (sub 0, raw name tail), `ObjExists::Service` (sub 2: `w 0, w userSID, b landType, w 0`) | `ObjectLocated` | the located SID is at w@6; the word at byte 4 is unread (INFERRED 0) |
 | 48 | none | `Notice` | text from byte 2, byte 1 unread; the NUL that ends the text is INFERRED |
 | 0 | none | `Ack` (`to`, `whichCmd`, `whichSub`, tail) | `whichCmd` 22 stays `LoginAccepted` |
@@ -472,7 +472,9 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
   known, and 3, 5, 18–21 and 22 are never sent.
 - `notify`: a `class_61` flag ORed into byte 1 of object commands; never set by any script.
 - Whether the host fans a `Send` to a group SID out to every member, and whether it echoes it to the
-  sender. Game handlers suggest every member including the sender gets it; a capture would settle it.
+  sender. Game handlers suggest every member including the sender gets it, so `innkeeperd` sends one copy
+  to each connection with a member, the sender's included (INFERRED, `GROUP_SEND_ECHOES_SENDER_ASSUMED`,
+  `docs/server/router.md` section 3); a capture would settle it.
 - Whether a `GrpJoin` reaches the other members of the group as well as the joiner, and a `GrpDel` the
   remaining members. The waiting room fetches a newcomer's name in `addMember`
   (`hub/script.003 WaitingRoomGroup::addMember`) and the DOS games drop a remote player on `GrpDel`

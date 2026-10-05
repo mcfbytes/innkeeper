@@ -107,6 +107,7 @@ DATA frame per client message.
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory and occupancy |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store |
+| `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
 | `store` | `Store`: accounts, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
@@ -123,14 +124,16 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | add (10) to a group | `GrpJoin` for the member to the joiner and to every other connection with a member in the group; Nak 10 with code 1 (no such group), 2 (full) or 3 (not the sender's object) |
 | delete (11) | `GrpDel` to the connections of the remaining members |
 | `GrpMem` (12) | the member list, from byte 6 in joining order |
+| `Send` (2) | the same `Send` to every connection that holds the object `to`, or a member of the group `to`, the sender's own connection included (INFERRED); nothing for a SID nobody holds, and no Nak |
+| multicast (28) | one `Send` of the body per recipient SID, in list order, under the same rules |
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
 | 47/1 | occupancy for the same lands: maximum 64, current 0 |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |
 
-Commands 2, 13, 14, 28 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply until
-the router and the property replication handle them. Every other command is logged as "not decoded" and gets no reply. At
+Commands 13, 14 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply until
+the property replication and the service lookup handle them. Every other command is logged as "not decoded" and gets no reply. At
 logon that is 34/4, 45/1, 37/32 and 40/4, and in the Clubhouse 26; the client carries on without answers
 (`captures.md` section 9).
 
@@ -166,8 +169,9 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 
 ## 7. Not done yet
 
-- Routing between players: a `Send` (2) and a multicast (28) are decoded and ignored until the router
-  (C3) exists; the object store already tells the members of a group about joins, leaves and frees.
+- Property replication: `SetInt` (13) and `SetStr` (14) are decoded and ignored, so a client that sets a
+  property on an object does not reach its replicas; `Send` (2) and multicast (28) are routed
+  ([router.md](router.md)).
 - Password hashing (Phase 7): the encoded password is stored as the client sends it. A second Login for an
   account that is already online is not refused.
 - Replies to 34/4 (rates), 45/1 (mailbox), 37 (mail), 40/4 (name), `getProp` (32) and the other services of
