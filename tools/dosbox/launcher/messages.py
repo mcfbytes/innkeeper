@@ -11,7 +11,10 @@ PASSWORD_FROM_FILE = 1
 HUB_LAND_TYPE = 1
 SHARED_BLOCK_LIMIT = 256
 USER_SID_OFFSET = 0x00
+USER_FLAGS_OFFSET = 0x02
 HANDED_SID_OFFSET = 0x04
+LAND_NUMBER_OFFSET = 0x06
+LAND_TYPE_OFFSET = 0x08
 USER_NAME_OFFSET = 0x10
 PARAMETERS_OFFSET = 0x80
 
@@ -52,13 +55,19 @@ class SharedBlock:
     handed_sid: int
     user_name: str
     parameters: bytes
+    user_flags: int = 0
+    land_number: int = 0
+    land_type: int = 0
 
 
 def encode_shared_block(block: SharedBlock) -> bytes:
     """The words and name the DOS games read, zeros elsewhere, then the game's parameters."""
     image = bytearray(PARAMETERS_OFFSET)
     struct.pack_into("<H", image, USER_SID_OFFSET, block.user_sid)
+    struct.pack_into("<H", image, USER_FLAGS_OFFSET, block.user_flags)
     struct.pack_into("<H", image, HANDED_SID_OFFSET, block.handed_sid)
+    struct.pack_into("<H", image, LAND_NUMBER_OFFSET, block.land_number)
+    struct.pack_into("<H", image, LAND_TYPE_OFFSET, block.land_type)
     name = block.user_name.encode("ascii")[: NAME_FIELD_LENGTH - 1]
     image[USER_NAME_OFFSET : USER_NAME_OFFSET + len(name)] = name
     image += block.parameters

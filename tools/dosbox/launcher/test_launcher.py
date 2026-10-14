@@ -87,6 +87,13 @@ class MessageLayoutTest(unittest.TestCase):
         self.assertEqual(block[0x10:0x1B], b"guybrush\0\0\0")
         self.assertEqual(block[0x84], 1)
 
+    def test_rpg_blocks_name_the_land_place(self):
+        for name, land_type in (("YSERBIUS", 4), ("TWINION", 8)):
+            block = encode_shared_block(GAME_LAUNCHES[name].shared_block("guybrush"))
+            self.assertEqual(len(block), 0x80)
+            self.assertEqual(block[0:2], b"\x00\x01")
+            self.assertEqual(block[6:10], bytes([1, 0, land_type, 0]))
+
 
 class LauncherTest(unittest.TestCase):
     def test_code_disassembles_without_gaps(self):
