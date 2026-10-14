@@ -182,11 +182,11 @@ All Clubhouse, SierraLand and CasinoLand games, the Dec-93 and TSN 2.1 variants,
 ### Phase 5: The Shadow of Yserbius
 - [x] **Server, single player:** service lookup 41/2, land and map groups, personal parties, the land version
   gate, the bulletin board (directory, index, reads, posts, persisted per title) and the land rows in the
-  directory; reference in `docs/protocol/yserbius.md`. Verified live in `dosrt` (INN-Decomp) through the
-  launcher: gallery, town, tavern posts written and read back, dungeon.
+  directory, land rights in the login Ack; reference in `docs/protocol/yserbius.md`. Verified live in `dosrt`
+  (INN-Decomp) from the hub's place list and through the launcher: gallery, town, tavern posts written and
+  read back, dungeon.
 - [ ] **Server, multiplayer:** two clients already share land and map groups and exchange 200/217; still to
-  check in play: seeing each other, party join (212/211/204), chat (207), challenges (213/214), and a launch
-  from the hub's place list rather than the launcher.
+  check in play: seeing each other, party join (212/211/204), chat (207), challenges (213/214).
 - [ ] Twinion: same code (land 8, version 1.0.22, 17/2 absorbed, boards apart); TWGENN reaches its gallery,
   FATES not yet driven.
 - **ScummVM:** a new engine for the Ybarra Productions engine (working name `engines/ybarra`), reimplemented from `DARKSTRT.EXE` and `CGENN.EXE`. It reuses ScummVM's XMIDI/Miles audio support and connects through `int14h`.
