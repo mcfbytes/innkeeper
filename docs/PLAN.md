@@ -201,6 +201,14 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   over WSS. ScummVM connects over WSS directly.
 - The client sends its password as reversible obfuscation (`docs/protocol/messages.md` 4.1); the server stores
   only an Argon2id hash of it, and TLS protects the wire.
+- **Admin portal** (ledgered 2026-10-14; build it once the store's schema settles): a web page served by
+  `innkeeperd` on its own bind address, behind an operator login, that can view and edit every table in the
+  SQLite store: accounts (persona, `userFlags` such as INN stamps and staff level, `rating` land rights,
+  password reset or expiry), mailboxes and letters, board posts, and whatever later phases add. Edits go
+  through the `store` trait, not raw SQL, so its rules (`docs/server/store.md` section 2) still hold, and a
+  change to a logged-on account reaches the live session or is refused while it is online. Before that the
+  schema needs: a schema version and migrations, the address books and mailing lists, per-game records
+  (character rosters if they move server-side, ratings and standings), and an audit log of portal edits.
 
 ### Deferred
 - **Red Baron and 3-D Golf:** DOSBox only, through the same server, whenever we get to them. Their server needs are game-channel relay plus host time.
