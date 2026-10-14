@@ -10,7 +10,8 @@ use innkeeper_world::{ClientMessage, ConnectionId, Delivery, ObjectStore, Player
 
 pub const LOGIN: &str = "35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 \
                      67 75 79 62 72 75 73 68 00";
-pub const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 00 00";
+/// The rating word carries the rights to the five stock lands (types 1, 2, 3, 4 and 8).
+pub const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 8f 00";
 
 pub struct Table {
     pub world: World,

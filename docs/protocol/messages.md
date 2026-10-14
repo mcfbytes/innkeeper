@@ -288,7 +288,9 @@ All CONFIRMED in `hub/script.101` unless noted.
 
 Fields in step 3: bit `0x04` of `userFlags` gives level 3, `0x80` level 2, `0x02` level 1 (global 82);
 `status` 11 means "Your password is out of date", which prompts for a new one and sends command 44
-(`+0x0320`..`+0x0374`); `rating` 0 is stored as 1 (global 253). CONFIRMED (code); meanings INFERRED.
+(`+0x0320`..`+0x0374`); `rating` 0 is stored as 1 (global 253). CONFIRMED (code); meanings INFERRED. `rating` is a
+land-rights mask: the hub enters a land only when bit `landType - 1` is set (`hub/script.050 proc_310`, CONFIRMED live
+with Yserbius); `innkeeperd` sends one bit per catalog land for an account whose rating is 0.
 
 Host notes (`innkeeper-world::logon`, INFERRED): the Ack's three fields come from the stored account, and
 a record whose password is expired logs in with `status` 11, so the client sends command 44 and the host

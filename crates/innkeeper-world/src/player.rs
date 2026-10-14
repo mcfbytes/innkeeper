@@ -1,5 +1,6 @@
 use tracing::{info, info_span, warn};
 
+use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::{
     bbs, logon, mail, presence, router, rpg, Account, ClientMessage, ConnectionId, Delivery,
     HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place, World,
@@ -185,7 +186,10 @@ impl PlayerSession {
         match logon::admit(world, login) {
             Ok(account) => {
                 info!(account = account.id.0, persona = %account.persona, "logged in");
-                let ack = account.login_ack();
+                let mut ack = account.login_ack();
+                if ack.rating == 0 && UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED {
+                    ack.rating = world.lands.rights();
+                }
                 self.state = PlayerState::LoggedIn(Player {
                     account,
                     place: None,

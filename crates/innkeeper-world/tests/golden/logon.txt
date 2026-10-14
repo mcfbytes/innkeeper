@@ -1,8 +1,9 @@
 # The stock client's logon and Clubhouse entry as captured live (docs/protocol/captures.md),
 # with the host replies it accepted. Format: "> name | hex" from the client, "< name | hex"
-# a host reply to the latest client message, in order. Every row also round-trips.
+# a host reply to the latest client message, in order. Every row also round-trips. The login Ack's
+# rating is now the land-rights mask of the three LSCI lands (07); the live capture had 0.
 > login | 35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 67 75 79 62 72 75 73 68 00
-< login ack | 00 00 00 00 16 00 00 00 00 00
+< login ack | 00 00 00 00 16 00 00 00 07 00
 > join game object | 07 00 00 00 60 01 81 01 00 00 0c 00
 < object id | 08 00 60 01 00 00 00 01
 > host number | 24 05

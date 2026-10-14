@@ -105,6 +105,16 @@ impl LandCatalog {
         self
     }
 
+    /// The login Ack's `rating` word as the hub reads it: bit `landType - 1` lets the player enter
+    /// lands of that type (`hub/script.050 proc_310`). One bit per land type this host runs.
+    pub fn rights(&self) -> u16 {
+        let bits = self.lands.iter().filter_map(|land| {
+            let bit = u32::from(land.land_type.0).checked_sub(1)?;
+            1u16.checked_shl(bit)
+        });
+        bits.fold(0, |rights, bit| rights | bit)
+    }
+
     /// Whether some land of this type runs here.
     pub fn runs(&self, land_type: LandType) -> bool {
         self.lands.iter().any(|land| land.land_type == land_type)
@@ -178,5 +188,7 @@ mod tests {
         assert!(table.runs(LandType(3)) && table.runs(LandType(4)));
         assert!(!table.runs(LandType(0x8B)));
         assert_eq!(occupancy[3].maximum, 100);
+        assert_eq!(table.rights(), 0x008F);
+        assert_eq!(LandCatalog::lsci().rights(), 0x0007);
     }
 }

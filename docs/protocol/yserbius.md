@@ -21,6 +21,7 @@ exercised live), **INFERRED** (a host choice the client does not pin down; each 
 | The programs never dial or log in; they inherit the land's session | `PlayerSession` stays logged in across the program switch; without a hub, `tools/dosbox/launcher` logs in and writes the shared block (`docs/dosbox.md` section 6) | CONFIRMED |
 | Shared block `+0` user SID (joinNet cookie), `+2` userFlags, `+6` land number, `+8` land type | the hub writes them; the launcher's YSERBIUS / TWINION blocks name place 1 of land type 4 / 8 | CONFIRMED |
 | `LAND.CFG`: Yserbius is land type 4, Twinion 8 | `LandCatalog::stock()` lists both after the three LSCI lands (place 1, maximum 100, description `Yserbius` / `Twinion`, any version), directory stamp 2 | CONFIRMED (data); row values INFERRED |
+| The hub lets a player into a land only if bit `landType - 1` of the login Ack's `rating` word is set (`hub/script.050 proc_310`; 0 counts as 1, the Clubhouse alone): otherwise "Sorry, but you do not have access rights for …" | an account whose stored rating is 0 logs in with one bit per land the catalog lists (`0x8F` for the stock five) | CONFIRMED (code and live); the default INFERRED (`UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED`) |
 | Characters live in `MYCHARS.DAT` on the client; no message uploads one | nothing is stored per character; boards are the only persistent RPG state | CONFIRMED (code: no sender); INFERRED that the host never stored them |
 
 ## 2. Commands from the client
@@ -105,5 +106,7 @@ Live: TWGENN reaches its gallery against `innkeeperd`; FATES was not driven furt
 `LaunchYserbius`: CGENN joins its player and gets the 41 reply; Play starts DARKSTRT, which runs the whole
 join sequence (player, 41/2, land, 10/3, party, 40/4, 217/1, map, 200/1) and shows the town; the tavern's
 POSTS lists `Tavern Posts`, a posted message is read back as "Message 1/1 From Grunt" in a new session;
-the volcano door enters the dungeon (map group re-joined for map `0x0101`). Two clients at once share the
+the volcano door enters the dungeon (map group re-joined for map `0x0101`). From the hub (`tsnexec
+DEFAULT`, Play, town map, the Yserbius place, Play in the gallery) the same sequence follows the hub's
+leaveNet of its game object, once the login Ack grants the land. Two clients at once share the
 land and map groups and answer each other's 200/1 and 217/1.
