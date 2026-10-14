@@ -5,8 +5,9 @@ use std::fs;
 use std::path::Path;
 
 use innkeeper_world::{
-    AccountId, ClientMessage, ClientVersion, ConnectionId, HostMessage, LandType, MessageError,
-    ObjExists, ObjectKind, ObjectStore, PasswordSource, PlayerSession, SendMessage, Sid, World,
+    AccountId, ClientMessage, ClientVersion, ConnectionId, HostMessage, LandCatalog, LandType,
+    MessageError, ObjExists, ObjectKind, ObjectStore, PasswordSource, PlayerSession, SendMessage,
+    Sid, World,
 };
 
 struct Row {
@@ -180,6 +181,18 @@ fn a_lookup_names_the_land_type_only_in_its_dos_form() {
 }
 
 #[test]
+fn the_dos_objfree_has_no_trailing_word() {
+    assert_eq!(
+        ClientMessage::parse(&[9, 0, 2, 1]),
+        Ok(ClientMessage::LeaveNet(Sid(0x0102)))
+    );
+    assert_eq!(
+        ClientMessage::parse(&[9, 0, 2, 1, 0]),
+        Err(MessageError::Truncated { field: "zero" })
+    );
+}
+
+#[test]
 fn truncated_messages_are_errors() {
     for bytes in [
         &[2u8, 0, 3][..],
@@ -208,7 +221,10 @@ fn the_captured_login_decodes_to_the_persona() {
 
 #[test]
 fn the_player_session_answers_like_the_capture() {
-    let world = World::stock();
+    let world = World {
+        lands: LandCatalog::lsci(),
+        ..World::stock()
+    };
     let mut objects = ObjectStore::new();
     let mut player = PlayerSession::new();
     let mut expected: Vec<Vec<u8>> = Vec::new();

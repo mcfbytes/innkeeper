@@ -1,6 +1,7 @@
 //! Typed application messages in both directions, parsed and encoded at the link boundary.
 
 mod ack;
+mod bbs;
 mod client;
 mod command;
 mod group;
@@ -20,6 +21,7 @@ mod user_info;
 mod wire;
 
 pub use ack::Ack;
+pub use bbs::{BbsReply, BbsRequest, BoardListing, BoardRef, MessagePosition, ReadStep};
 pub use client::{
     ChangePassword, ClientMessage, EncodedPassword, GroupJoin, HostInfoRequest, JoinNet, Login,
     PasswordSource,

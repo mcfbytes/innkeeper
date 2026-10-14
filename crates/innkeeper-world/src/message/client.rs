@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
-    Command, GroupLeave, GroupMembersRequest, InvokeMethod, LockRequest, MailRequest,
+    BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod, LockRequest, MailRequest,
     MailboxRequest, Multicast, ObjExists, ObjectKind, PropertyRequest, SendMessage, SetInt,
     SetPersona, SetStr, Unexplained,
 };
@@ -35,6 +35,8 @@ pub enum ClientMessage {
     GetProperties(PropertyRequest),
     /// GrpGetProp (31): the properties of every member of a group.
     GetMemberProperties(PropertyRequest),
+    /// The RPG bulletin board (27).
+    Bbs(BbsRequest),
     Unexplained(Unexplained),
 }
 
@@ -138,7 +140,10 @@ impl ClientMessage {
             Command::LeaveNet => {
                 reader.byte("flags")?;
                 let sid = Sid(reader.word("sid")?);
-                reader.word("zero")?;
+                // LSCI adds a zero word; the DOS libraries' ObjFree is the 4-byte header alone.
+                if !reader.is_empty() {
+                    reader.word("zero")?;
+                }
                 ClientMessage::LeaveNet(sid)
             }
             Command::GroupJoin => ClientMessage::GroupJoin(GroupJoin::parse(&mut reader)?),
@@ -172,6 +177,7 @@ impl ClientMessage {
             Command::MemberProperties => {
                 ClientMessage::GetMemberProperties(PropertyRequest::parse(&mut reader)?)
             }
+            Command::Bbs => ClientMessage::Bbs(BbsRequest::parse(&mut reader)?),
             Command::PlayerObjectNotice | Command::Register => {
                 ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
             }
@@ -223,6 +229,7 @@ impl ClientMessage {
             ClientMessage::GetMemberProperties(request) => {
                 request.write(&mut writer, Command::MemberProperties);
             }
+            ClientMessage::Bbs(request) => request.write(&mut writer),
             ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()

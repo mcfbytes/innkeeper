@@ -10,6 +10,7 @@ const WAITING_ROOM: GroupKey = GroupKey {
     kind: ObjectKind::LandGroup,
     land_type: LandType(1),
     parameter: 1,
+    within: None,
 };
 
 #[test]

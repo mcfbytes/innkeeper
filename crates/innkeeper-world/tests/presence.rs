@@ -11,13 +11,14 @@ use innkeeper_world::{
 
 const CLUBHOUSE: LandType = LandType(1);
 const OCCUPANCY_REQUEST: &str = "2f 01 00 00 00 00";
-/// The 47/1 header: two unread words, then the row count 3.
-const OCCUPANCY_HEADER: &str = "2f 01 00 00 00 00 00 00 00 00 03 00";
+/// The 47/1 header: two unread words, then the row count 5.
+const OCCUPANCY_HEADER: &str = "2f 01 00 00 00 00 00 00 00 00 05 00";
 const WAITING_ROOM_SIZE: u64 = 128;
 const WAITING_ROOM: GroupKey = GroupKey {
     kind: ObjectKind::LandGroup,
     land_type: CLUBHOUSE,
     parameter: 1,
+    within: None,
 };
 
 fn hex(text: &str) -> Vec<u8> {
@@ -27,9 +28,11 @@ fn hex(text: &str) -> Vec<u8> {
         .collect()
 }
 
-/// The 47/1 reply: the three stock lands with maximum 64, the Clubhouse holding `clubhouse` players.
+/// The 47/1 reply: the three LSCI lands with maximum 64, the Clubhouse holding `clubhouse` players,
+/// then Yserbius and Twinion with maximum 100.
 fn occupancy(clubhouse: u8) -> String {
-    let rows = format!("07 01 01 40 {clubhouse:02x} 07 02 01 40 00 07 03 01 40 00");
+    let lsci = format!("07 01 01 40 {clubhouse:02x} 07 02 01 40 00 07 03 01 40 00");
+    let rows = format!("{lsci} 07 04 01 64 00 07 08 01 64 00");
     format!("{OCCUPANCY_HEADER} {rows}")
 }
 

@@ -2,6 +2,7 @@ use crate::assumptions::{
     ANY_VERSION_MAX_ASSUMED, ANY_VERSION_MIN_ASSUMED, OPEN_LAND_FLAGS_ASSUMED,
 };
 use crate::presence::waiting_room;
+use crate::rpg::{RpgTitle, RPG_TITLES};
 use crate::{
     ClientVersion, HostNumber, LandDirectory, LandEntry, LandNumber, LandType, ObjectStore,
     Occupancy, Stamp,
@@ -20,7 +21,7 @@ pub(crate) struct Land {
 }
 
 /// The lands of the stock CD client's `LAND.CFG` that run in `LSCITV` itself.
-const STOCK_LANDS: [Land; 3] = [
+const LSCI_LANDS: [Land; 3] = [
     Land {
         land_type: LandType(1),
         land_number: LandNumber(1),
@@ -54,11 +55,35 @@ pub struct LandCatalog {
     lands: Vec<Land>,
 }
 
+impl Land {
+    /// Place 1 of an RPG title; its directory row admits any version, the land GrpJoin checks it.
+    fn of_title(title: &RpgTitle) -> Self {
+        Land {
+            land_type: title.land_type,
+            land_number: LandNumber(1),
+            description: title.description,
+            maximum: title.land_capacity,
+            min_version: ANY_VERSION_MIN_ASSUMED,
+            max_version: ANY_VERSION_MAX_ASSUMED,
+        }
+    }
+}
+
 impl LandCatalog {
+    /// Every land of the stock `LAND.CFG`: the three LSCI lands, then Yserbius and Twinion.
     pub fn stock() -> Self {
+        let mut catalog = LandCatalog::lsci();
+        catalog.lands.extend(RPG_TITLES.iter().map(Land::of_title));
+        // A client that kept the three-land directory under stamp 1 must not keep it.
+        catalog.stamp = Stamp(2);
+        catalog
+    }
+
+    /// The three LSCI lands only, as the live logon capture was served.
+    pub fn lsci() -> Self {
         LandCatalog {
             stamp: Stamp(1),
-            lands: STOCK_LANDS.to_vec(),
+            lands: LSCI_LANDS.to_vec(),
         }
     }
 
@@ -130,7 +155,7 @@ mod tests {
 
     #[test]
     fn stock_descriptions_survive_the_clients_land_file() {
-        for land in STOCK_LANDS {
+        for land in LandCatalog::stock().lands {
             let description = land.description;
             assert!(description.is_ascii() && !description.contains([' ', '\0']));
             assert!(description.len() <= 16, "{description} is cut at 16");
@@ -141,7 +166,7 @@ mod tests {
     fn directory_and_occupancy_list_every_land_on_this_host() {
         let table = LandCatalog::stock();
         let directory = table.directory(HostNumber(7));
-        assert_eq!(directory.lands.len(), 3);
+        assert_eq!(directory.lands.len(), 5);
         assert!(directory
             .lands
             .iter()
@@ -150,6 +175,8 @@ mod tests {
         assert_eq!(occupancy[0].land_type, LandType(1));
         assert_eq!(occupancy[0].maximum, 64);
         assert!(occupancy.iter().all(|row| row.current == 0));
-        assert!(table.runs(LandType(3)) && !table.runs(LandType(0x8B)));
+        assert!(table.runs(LandType(3)) && table.runs(LandType(4)));
+        assert!(!table.runs(LandType(0x8B)));
+        assert_eq!(occupancy[3].maximum, 100);
     }
 }

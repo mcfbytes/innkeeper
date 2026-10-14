@@ -1,8 +1,8 @@
 use tracing::{info, info_span, warn};
 
 use crate::{
-    logon, mail, presence, router, Account, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
-    HostMessage, Login, ObjectStore, World,
+    bbs, logon, mail, presence, router, rpg, Account, ClientMessage, ConnectionId, Delivery,
+    HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -20,6 +20,9 @@ enum PlayerState {
 #[derive(Debug)]
 struct Player {
     account: Account,
+    /// The land place of the player's latest land joinNet; the RPG clients' map groups and boards
+    /// belong to it.
+    place: Option<Place>,
 }
 
 impl Default for PlayerSession {
@@ -52,7 +55,7 @@ impl PlayerSession {
                 deliveries.extend(reply(vec![self.log_in(world, login)]));
                 deliveries
             }
-            ClientMessage::JoinNet(join) => self.when_logged_in(|_| objects.join(connection, join)),
+            ClientMessage::JoinNet(join) => self.join_net(objects, connection, join),
             ClientMessage::LeaveNet(sid) => self.when_logged_in(|_| objects.leave(connection, sid)),
             ClientMessage::GroupJoin(join) => self
                 .when_logged_in(|_| presence::join_group(&world.lands, objects, connection, join)),
@@ -62,8 +65,8 @@ impl PlayerSession {
             ClientMessage::GroupMembers(request) => {
                 self.when_logged_in(|_| objects.list_members(connection, request))
             }
-            ClientMessage::ChangePassword(change) => self.when_logged_in(|account| {
-                reply(vec![logon::change_password(world, account, change)])
+            ClientMessage::ChangePassword(change) => self.when_logged_in(|player| {
+                reply(vec![logon::change_password(world, &player.account, change)])
             }),
             ClientMessage::HostInfo(request) => {
                 self.when_logged_in(|_| reply(answer_host_info(world, request)))
@@ -82,12 +85,15 @@ impl PlayerSession {
                 self.set_persona(&set.name);
                 Vec::new()
             }
-            ClientMessage::NewMailbox(request) => self.when_logged_in(|account| {
-                reply(vec![mail::assign_mailbox(world, account, request)])
+            ClientMessage::NewMailbox(request) => self.when_logged_in(|player| {
+                reply(vec![mail::assign_mailbox(world, &player.account, request)])
             }),
             ClientMessage::Mail(ref request) => {
-                self.when_logged_in(|account| reply(mail::answer(world, account, request)))
+                self.when_logged_in(|player| reply(mail::answer(world, &player.account, request)))
             }
+            ClientMessage::Bbs(ref request) => self.when_logged_in(|player| {
+                reply(bbs::answer(world, &player.account, player.place, request))
+            }),
             ClientMessage::SetInt(ref set) => {
                 self.when_logged_in(|_| router::set_int(objects, connection, set))
             }
@@ -113,10 +119,13 @@ impl PlayerSession {
                 info!(?message, "purpose unknown, no reply expected: absorbed");
                 Vec::new()
             }
-            ClientMessage::ObjExists(_) => {
-                info!(?message, "decoded, no handler yet: ignored");
-                Vec::new()
-            }
+            ClientMessage::ObjExists(ref lookup) => self.when_logged_in(|_| {
+                let located = rpg::locate_service(lookup);
+                if located.is_none() {
+                    info!(?message, "decoded, no handler yet: ignored");
+                }
+                reply(located.into_iter().collect())
+            }),
         }
     }
 
@@ -138,11 +147,28 @@ impl PlayerSession {
         }
     }
 
-    fn when_logged_in(&self, answer: impl FnOnce(&Account) -> Vec<Delivery>) -> Vec<Delivery> {
+    /// joinNet: a land group also becomes the player's place, which scopes the map groups after it.
+    fn join_net(
+        &mut self,
+        objects: &mut ObjectStore,
+        connection: ConnectionId,
+        join: JoinNet,
+    ) -> Vec<Delivery> {
+        let PlayerState::LoggedIn(player) = &mut self.state else {
+            warn!("message before Login ignored");
+            return Vec::new();
+        };
+        if let Some(place) = rpg::place_of(&join) {
+            player.place = Some(place);
+        }
+        rpg::join(objects, connection, join, player.place)
+    }
+
+    fn when_logged_in(&self, answer: impl FnOnce(&Player) -> Vec<Delivery>) -> Vec<Delivery> {
         match &self.state {
             PlayerState::LoggedIn(player) => {
                 let _player = info_span!("player", persona = %player.account.persona).entered();
-                answer(&player.account)
+                answer(player)
             }
             PlayerState::AwaitingLogin => {
                 warn!("message before Login ignored");
@@ -156,7 +182,10 @@ impl PlayerSession {
             Ok(account) => {
                 info!(account = account.id.0, persona = %account.persona, "logged in");
                 let ack = account.login_ack();
-                self.state = PlayerState::LoggedIn(Player { account });
+                self.state = PlayerState::LoggedIn(Player {
+                    account,
+                    place: None,
+                });
                 HostMessage::LoginAccepted(ack)
             }
             Err(nak) => HostMessage::Nak(nak),

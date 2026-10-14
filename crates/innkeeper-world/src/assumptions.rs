@@ -1,7 +1,7 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, ObjectKind};
+use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, ObjectKind, Sid};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -74,3 +74,16 @@ pub(crate) const REPLICAS_INCLUDE_GROUP_FELLOWS_ASSUMED: bool = true;
 /// A member-properties cell the mirror lacks: the client's table has a value for every member and
 /// column, so the host sends 0 or empty text (section 3.2).
 pub(crate) const UNSET_INT_PROPERTY_ASSUMED: u16 = 0;
+/// The 8 bytes that end each 17-byte board record; the client reads the first 9 (yserbius.md 4.4).
+pub(crate) const BOARD_UNREAD_BYTES_ASSUMED: [u8; 8] = [0; 8];
+/// The 4 bytes a privileged reader skips before a message's text; what they held is unknown (yserbius.md 4.4).
+pub(crate) const PRIVILEGED_UNREAD_BYTES_ASSUMED: [u8; 4] = [0; 4];
+/// The SID a 41/2 lookup of the RPG land type returns: no client reads it back, and SIDs below the
+/// first allocated one are free for well-known objects (yserbius.md 4).
+pub(crate) const RPG_SERVICE_SID_ASSUMED: Sid = Sid(0x008B);
+/// A map group (kind 2, land type 0x8B) carries only the map number, so it is shared within the
+/// requester's land place: Yserbius and Twinion maps, and two places of one land, stay apart.
+pub(crate) const MAP_GROUPS_PER_PLACE_ASSUMED: bool = true;
+/// The land GrpJoin (10/3) of an RPG title is refused with code 6 unless it carries that title's
+/// own client version (1.1.7, 1.0.22); the original host's range is unknown.
+pub(crate) const RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED: bool = true;

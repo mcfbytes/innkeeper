@@ -44,6 +44,15 @@ pub struct GroupKey {
     pub kind: ObjectKind,
     pub land_type: LandType,
     pub parameter: u16,
+    /// The land place the group belongs to; none for a group shared across the host.
+    pub within: Option<Place>,
+}
+
+/// One place of a land: the land type and number of its land group (joinNet kind 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Place {
+    pub land_type: LandType,
+    pub land_number: u16,
 }
 
 /// Why a GrpJoin is refused; the DOS clients read the code from word 5 of the Nak.
@@ -70,6 +79,8 @@ pub struct ObjectStore {
 #[derive(Debug)]
 struct NetObject {
     request: JoinNet,
+    /// The key a shared group is found by; none for objects and own groups.
+    shared: Option<GroupKey>,
     /// How many joinNet requests of each connection keep the object alive; never 0.
     holders: BTreeMap<ConnectionId, u32>,
     role: Role,
@@ -99,6 +110,7 @@ impl Scope {
                 kind: join.kind,
                 land_type: join.land_type,
                 parameter: join.parameter,
+                within: None,
             })
         }
     }
@@ -141,10 +153,7 @@ impl ObjectStore {
 
     /// The key of the shared group with this SID; none for an object, an own group or a free SID.
     pub fn group_key(&self, sid: Sid) -> Option<GroupKey> {
-        match Scope::of(&self.objects.get(&sid)?.request) {
-            Scope::SharedGroup(key) => Some(key),
-            Scope::Object | Scope::OwnGroup => None,
-        }
+        self.objects.get(&sid)?.shared
     }
 
     /// True when no connection holds anything.
@@ -153,12 +162,29 @@ impl ObjectStore {
     }
 
     /// joinNet: the requester's `ObjID`, after the notices about an object it replaces.
+    #[cfg(test)]
     pub(crate) fn join(&mut self, connection: ConnectionId, join: JoinNet) -> Vec<Delivery> {
+        self.join_within(connection, join, None)
+    }
+
+    /// joinNet whose shared group, if it is one, belongs to `place` instead of the whole host.
+    pub(crate) fn join_within(
+        &mut self,
+        connection: ConnectionId,
+        join: JoinNet,
+        place: Option<Place>,
+    ) -> Vec<Delivery> {
         let mut deliveries = self.replace_rejoined(connection, join);
         let sid = match Scope::of(&join) {
             Scope::Object => self.create(connection, join, Role::Object),
             Scope::OwnGroup => self.create(connection, join, Role::group(join.size)),
-            Scope::SharedGroup(key) => self.share(connection, key, join),
+            Scope::SharedGroup(key) => {
+                let key = GroupKey {
+                    within: place,
+                    ..key
+                };
+                self.share(connection, key, join)
+            }
         };
         match sid {
             Some(sid) => deliveries.push(Delivery::new(
@@ -300,6 +326,7 @@ impl ObjectStore {
         let holders = BTreeMap::from([(connection, 1)]);
         let object = NetObject {
             request,
+            shared: None,
             holders,
             role,
         };
@@ -311,6 +338,9 @@ impl ObjectStore {
         let existing = self.shared_groups.get(&key).copied();
         let Some(sid) = existing else {
             let sid = self.create(connection, join, Role::group(join.size))?;
+            if let Some(group) = self.objects.get_mut(&sid) {
+                group.shared = Some(key);
+            }
             self.shared_groups.insert(key, sid);
             return Some(sid);
         };
@@ -384,7 +414,7 @@ impl ObjectStore {
         self.mirror.forget(sid);
         if let Some(object) = self.objects.remove(&sid) {
             info!(sid = sid.0, request = ?object.request, "object freed");
-            if let Scope::SharedGroup(key) = Scope::of(&object.request) {
+            if let Some(key) = object.shared {
                 self.shared_groups.remove(&key);
             }
         }

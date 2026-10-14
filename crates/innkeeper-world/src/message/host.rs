@@ -4,8 +4,9 @@ use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
-    Ack, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply, MailboxAnswer,
-    MemberProperties, Notice, ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr,
+    Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply,
+    MailboxAnswer, MemberProperties, Notice, ObjectLocated, PropertyValues, SendMessage, SetInt,
+    SetStr,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -50,6 +51,8 @@ pub enum HostMessage {
     Properties(PropertyValues),
     /// `GrpGetProp`: the answer to a member-properties request.
     MemberProperties(MemberProperties),
+    /// The RPG bulletin board (27).
+    Bbs(BbsReply),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -204,6 +207,7 @@ impl HostMessage {
             HostMessage::InvokeMethod(call) => call.write(&mut writer),
             HostMessage::Properties(values) => values.write(&mut writer),
             HostMessage::MemberProperties(table) => table.write(&mut writer),
+            HostMessage::Bbs(reply) => reply.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -294,6 +298,7 @@ impl HostMessage {
             Command::MemberProperties => {
                 HostMessage::MemberProperties(MemberProperties::parse(&mut reader)?)
             }
+            Command::Bbs => HostMessage::Bbs(BbsReply::parse(&mut reader)?),
             Command::Lock
             | Command::Unlock
             | Command::PlayerObjectNotice

@@ -2,6 +2,7 @@
 
 use tracing::info;
 
+use crate::rpg;
 use crate::{
     ConnectionId, Delivery, GroupJoin, GroupKey, LandCatalog, LandNumber, LandType, ObjectKind,
     ObjectStore,
@@ -13,6 +14,7 @@ pub(crate) fn waiting_room(land_type: LandType, land_number: LandNumber) -> Grou
         kind: ObjectKind::LandGroup,
         land_type,
         parameter: u16::from(land_number.0),
+        within: None,
     }
 }
 
@@ -32,7 +34,7 @@ pub(crate) fn join_group(
                 land_type,
                 ..
             }),
-        ) if !lands.admits(land_type, version) => {
+        ) if !lands.admits(land_type, version) || !rpg::admits(land_type, version) => {
             info!(%version, land_type = land_type.0, "client version outside the land's range");
             objects.refuse_wrong_version(connection, join)
         }

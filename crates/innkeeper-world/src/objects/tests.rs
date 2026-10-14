@@ -60,6 +60,7 @@ fn a_shared_group_is_found_by_its_sid_and_nothing_else_is() {
         kind: ObjectKind::LandGroup,
         land_type: LandType(1),
         parameter: 1,
+        within: None,
     };
     assert_eq!(store.group_key(room), Some(key));
     assert_eq!(store.group_key(party), None);
