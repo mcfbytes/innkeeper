@@ -74,20 +74,18 @@ fn a_golf_group_send_reaches_both_players_of_the_waiting_room() {
 
 #[test]
 fn yserbius_game_messages_arrive_byte_for_byte() {
-    // Land type 0x8B: a map group of kind 2 (parameter 5) in place of the waiting room.
+    // Land type 0x8B: a map group of kind 2 (parameter 5) in place of the waiting room. The sender
+    // gets no copy of its own (RPG_SENDS_ECHO_SENDER_ASSUMED).
     let room = GOLF_ROOM
         .replace("05 66 01 00 80 00", "02 8b 05 00 68 00")
         .replace("01 66 ff ff", "01 8b ff ff");
     let steps = "
         # 200 hello (19 bytes), 207 chat (24) and 216 combat state (35), all from A's player.
         A > 200 | 02 00 00 01 01 01 c8 01 00 00 00 00 00 00 05 07 00 00 00
-        A < 200 to A | 02 00 00 01 01 01 c8 01 00 00 00 00 00 00 05 07 00 00 00
         B < 200 to B | 02 00 00 01 01 01 c8 01 00 00 00 00 00 00 05 07 00 00 00
         A > 207 | 02 00 00 01 01 01 cf 47 75 79 62 72 75 73 68 00 00 00 48 65 6c 6c 6f 00
-        A < 207 to A | 02 00 00 01 01 01 cf 47 75 79 62 72 75 73 68 00 00 00 48 65 6c 6c 6f 00
         B < 207 to B | 02 00 00 01 01 01 cf 47 75 79 62 72 75 73 68 00 00 00 48 65 6c 6c 6f 00
         A > 216 | 02 00 00 01 01 01 d8 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25 26 27 28 29 2a 2b
-        A < 216 to A | 02 00 00 01 01 01 d8 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25 26 27 28 29 2a 2b
         B < 216 to B | 02 00 00 01 01 01 d8 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 22 23 24 25 26 27 28 29 2a 2b
     ";
     Table::new().run(&script(&room, steps));

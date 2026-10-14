@@ -156,6 +156,11 @@ impl ObjectStore {
         self.objects.get(&sid)?.shared
     }
 
+    /// The land type the object was created with; none for a free SID.
+    pub(crate) fn land_type_of(&self, sid: Sid) -> Option<LandType> {
+        Some(self.objects.get(&sid)?.request.land_type)
+    }
+
     /// True when no connection holds anything.
     pub fn is_empty(&self) -> bool {
         self.objects.is_empty()

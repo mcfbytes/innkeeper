@@ -32,13 +32,11 @@ const A_ENTERS_MAP_5: &str = "
     A < joined | 0a 00 02 01 00 01
     A > 40/4 character name | 28 04 53 69 72 00
     A > 217/1 hello to the land | 02 00 01 01 00 01 d9 01 00 01 53 69 72 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-    A < own copy | 02 00 01 01 00 01 d9 01 00 01 53 69 72 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     A > joinNet map 5 | 07 00 00 00 00 01 02 8b 05 00 68 00
     A < map group SID | 08 00 00 01 00 00 03 01
     A > GrpJoin map | 0a 00 03 01 00 01
     A < joined | 0a 00 03 01 00 01
     A > 200/1 roster to the map | 02 00 03 01 00 01 c8 01 00 00 00 00 00 00 05 05 00 00 00
-    A < own copy | 02 00 03 01 00 01 c8 01 00 00 00 00 00 00 05 05 00 00 00
 ";
 
 /// B (shared-block SID 0x0200) follows A into the same land and map: player 0x0104, the same land
@@ -81,13 +79,11 @@ fn two_players_share_the_land_and_map_groups_and_see_each_others_messages() {
         # 200/1 from B: a leader answers hello with 200/2 to the sender (yserbius.md 5).
         B > 200/1 roster to the map | 02 00 03 01 04 01 c8 01 00 00 00 00 00 00 05 05 00 00 00
         A < A's copy | 02 00 03 01 04 01 c8 01 00 00 00 00 00 00 05 05 00 00 00
-        B < own copy | 02 00 03 01 04 01 c8 01 00 00 00 00 00 00 05 05 00 00 00
         A > 200/2 answer to B's player | 02 00 04 01 00 01 c8 02 00 00 00 00 00 00 05 05 00 00 00
         B < only B | 02 00 04 01 00 01 c8 02 00 00 00 00 00 00 05 05 00 00 00
         # 207 chat to the map group: the 11-byte name, then the text.
         B > 207 chat | 02 00 03 01 04 01 cf 53 69 72 00 00 00 00 00 00 00 00 68 69 00
         A < A's copy | 02 00 03 01 04 01 cf 53 69 72 00 00 00 00 00 00 00 00 68 69 00
-        B < own copy | 02 00 03 01 04 01 cf 53 69 72 00 00 00 00 00 00 00 00 68 69 00
     ";
     Table::new().run(&script(&[A_ENTERS_MAP_5, B_FOLLOWS, steps]));
 }
@@ -105,7 +101,6 @@ fn a_player_joins_anothers_party_and_its_members_hear_of_it() {
         A < B is in the party | 0a 00 02 01 04 01
         B > 204 joined, to the party | 02 00 02 01 04 01 cc 01 04 01 00 00 00 01 04 01 00 00 00 00
         A < A's copy | 02 00 02 01 04 01 cc 01 04 01 00 00 00 01 04 01 00 00 00 00
-        B < own copy | 02 00 02 01 04 01 cc 01 04 01 00 00 00 01 04 01 00 00 00 00
         # Leaving: GrpDel tells the remaining member.
         B > GrpDel A's party | 0b 00 02 01 04 01
         A < B left the party | 0b 00 02 01 04 01

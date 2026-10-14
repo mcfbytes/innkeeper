@@ -4,7 +4,8 @@
 use tracing::info;
 
 use crate::assumptions::{
-    MAP_GROUPS_PER_PLACE_ASSUMED, RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED, RPG_SERVICE_SID_ASSUMED,
+    MAP_GROUPS_PER_PLACE_ASSUMED, RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED,
+    RPG_SENDS_ECHO_SENDER_ASSUMED, RPG_SERVICE_SID_ASSUMED,
 };
 use crate::{
     ClientVersion, ConnectionId, Delivery, HostMessage, JoinNet, LandType, ObjExists, ObjectKind,
@@ -47,6 +48,14 @@ pub(crate) fn admits(land_type: LandType, version: ClientVersion) -> bool {
         .iter()
         .filter(|title| title.land_type == land_type);
     titles.all(|title| !RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED || title.client_version == version)
+}
+
+/// Whether a `Send` to an object of this land type also reaches the sender: not for RPG objects.
+pub(crate) fn echoes_sender(land_type: Option<LandType>) -> bool {
+    let is_rpg = |land_type: LandType| {
+        land_type == RPG_OBJECT_LAND_TYPE || RPG_TITLES.iter().any(|t| t.land_type == land_type)
+    };
+    RPG_SENDS_ECHO_SENDER_ASSUMED || !land_type.is_some_and(is_rpg)
 }
 
 /// The answer to a 41/2 service lookup of the RPG land type; other lookups have no answer yet.
@@ -132,6 +141,14 @@ mod tests {
         assert!(!admits(LandType(4), ClientVersion::new(1, 0, 22)));
         assert!(admits(LandType(8), ClientVersion::new(1, 0, 22)));
         assert!(admits(LandType(1), ClientVersion::new(2, 3, 18)));
+    }
+
+    #[test]
+    fn only_sends_to_rpg_objects_skip_the_sender() {
+        assert!(!echoes_sender(Some(RPG_OBJECT_LAND_TYPE)));
+        assert!(!echoes_sender(Some(LandType(4))));
+        assert!(echoes_sender(Some(LandType(0x66))));
+        assert!(echoes_sender(None));
     }
 
     #[test]

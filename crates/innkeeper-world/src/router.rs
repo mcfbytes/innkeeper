@@ -4,6 +4,7 @@
 use tracing::warn;
 
 use crate::assumptions::GROUP_SEND_ECHOES_SENDER_ASSUMED;
+use crate::rpg;
 use crate::{
     ConnectionId, Delivery, HostMessage, InvokeMethod, Multicast, ObjectStore, SendMessage, SetInt,
     SetStr, Sid,
@@ -44,8 +45,9 @@ fn relay(
             "Send to a SID nobody holds dropped"
         );
     }
+    let echo = GROUP_SEND_ECHOES_SENDER_ASSUMED && rpg::echoes_sender(objects.land_type_of(to));
     let audience = audience.into_iter();
-    let audience = audience.filter(|&holder| GROUP_SEND_ECHOES_SENDER_ASSUMED || holder != sender);
+    let audience = audience.filter(|&holder| echo || holder != sender);
     audience
         .map(|holder| {
             let copy = SendMessage {

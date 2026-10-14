@@ -87,3 +87,6 @@ pub(crate) const MAP_GROUPS_PER_PLACE_ASSUMED: bool = true;
 /// The land GrpJoin (10/3) of an RPG title is refused with code 6 unless it carries that title's
 /// own client version (1.1.7, 1.0.22); the original host's range is unknown.
 pub(crate) const RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED: bool = true;
+/// A `Send` to an RPG object or group skips the sender: DARKSTRT prints its own chat line when it
+/// sends it, so an echo would show it twice (yserbius.md 5).
+pub(crate) const RPG_SENDS_ECHO_SENDER_ASSUMED: bool = false;
