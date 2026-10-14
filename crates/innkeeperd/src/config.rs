@@ -22,6 +22,9 @@ pub(crate) struct Config {
     /// Do not serve the INT 14h transport.
     #[arg(long)]
     pub(crate) no_int14h: bool,
+    /// Address to accept browser clients on: each WebSocket is one line, binary messages its bytes.
+    #[arg(long)]
+    pub(crate) ws_bind: Option<SocketAddr>,
     /// Directory for one hex capture file per session.
     #[arg(long, default_value = "work/captures")]
     pub(crate) capture_dir: PathBuf,
@@ -96,6 +99,13 @@ mod tests {
         assert_eq!(moved.int14h_bind(), Some("0.0.0.0:4000".parse().unwrap()));
         let off = Config::parse_from(["innkeeperd", "--no-int14h"]);
         assert_eq!(off.int14h_bind(), None);
+    }
+
+    #[test]
+    fn websocket_lines_are_off_unless_bound() {
+        assert_eq!(Config::parse_from(["innkeeperd"]).ws_bind, None);
+        let bound = Config::parse_from(["innkeeperd", "--ws-bind", "127.0.0.1:2316"]);
+        assert_eq!(bound.ws_bind, Some("127.0.0.1:2316".parse().unwrap()));
     }
 
     #[test]

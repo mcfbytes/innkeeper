@@ -14,6 +14,7 @@ use crate::config::Config;
 use crate::connection::{serve_connection, ConnectionSettings};
 use crate::int14h_listener::serve_transport;
 use crate::sqlite_store::SqliteStore;
+use crate::websocket::serve_websocket;
 
 const DATABASE_FILE: &str = "innkeeper.db";
 const STARTUP_LINE: &str = "INT 14h hooked. Please wait while ImagiNation loads...";
@@ -46,28 +47,51 @@ fn open_world(data_dir: Option<&Path>) -> Result<World, ServerError> {
 pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
     let world = open_world(config.data_dir.as_deref())?;
     let legacy = listen(config.bind).await?;
-    let transport = match config.int14h_bind() {
-        Some(bind) => Some(listen(bind).await?),
-        None => None,
-    };
+    let transport = listen_if(config.int14h_bind()).await?;
+    let websocket = listen_if(config.ws_bind).await?;
     let settings = ConnectionSettings::new(config.session_config(), world, config.capture_dir());
     let settings = Arc::new(settings);
     info!(bind = %config.bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
-    let transport = async {
-        match transport {
-            Some(listener) => {
-                info!(bind = ?listener.local_addr().ok(), "serving the INT 14h transport");
-                accept_forever(listener, Arc::clone(&settings), serve_transport).await;
-            }
-            None => future::pending().await,
-        }
-    };
+    let transport = accept_if(
+        transport,
+        &settings,
+        serve_transport,
+        "the INT 14h transport",
+    );
+    let websocket = accept_if(websocket, &settings, serve_websocket, "WebSocket lines");
     tokio::select! {
         () = accept_forever(legacy, Arc::clone(&settings), serve_connection) => {}
         () = transport => {}
+        () = websocket => {}
         _ = tokio::signal::ctrl_c() => info!("shutting down"),
     }
     Ok(())
+}
+
+async fn listen_if(bind: Option<SocketAddr>) -> Result<Option<TcpListener>, ServerError> {
+    match bind {
+        Some(bind) => Ok(Some(listen(bind).await?)),
+        None => Ok(None),
+    }
+}
+
+/// Serves an optional listener; a listener that is switched off never finishes.
+async fn accept_if<F, S>(
+    listener: Option<TcpListener>,
+    settings: &Arc<ConnectionSettings>,
+    serve: S,
+    what: &str,
+) where
+    S: Fn(TcpStream, SocketAddr, Arc<ConnectionSettings>) -> F,
+    F: Future<Output = ()> + Send + 'static,
+{
+    match listener {
+        Some(listener) => {
+            info!(bind = ?listener.local_addr().ok(), "serving {what}");
+            accept_forever(listener, Arc::clone(settings), serve).await;
+        }
+        None => future::pending().await,
+    }
 }
 
 async fn listen(bind: SocketAddr) -> Result<TcpListener, ServerError> {
@@ -114,12 +138,12 @@ pub(crate) mod tests {
     use crate::int14h_listener::tests::TransportClient;
 
     /// The stock client's first frame and the host's reply, from docs/protocol/captures.md.
-    const CAPTURED_LOGIN_FRAME: [u8; 39] = [
+    pub(crate) const CAPTURED_LOGIN_FRAME: [u8; 39] = [
         0x81, 0x58, 0xd8, 0x00, 0x21, 0x35, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x12, 0xa1, 0x86,
         0x01, 0x00, 0x01, 0x1d, 0x7a, 0x01, 0x66, 0x16, 0x66, 0x18, 0x73, 0x03, 0x00, 0x00, 0x67,
         0x75, 0x79, 0x62, 0x72, 0x75, 0x73, 0x68, 0x00, 0x82,
     ];
-    const LOGIN_ACK_FRAME: [u8; 16] = [
+    pub(crate) const LOGIN_ACK_FRAME: [u8; 16] = [
         0x81, 0xa1, 0x11, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x82,
     ];

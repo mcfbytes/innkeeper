@@ -8,7 +8,7 @@ one object store, so players in the same waiting room see each other ([objects.m
 ## 1. Crates
 
 ```
-innkeeperd           bin: command line, tokio runtime, TCP, capture files, wiring
+innkeeperd           bin: command line, tokio runtime, TCP and WebSocket, capture files, wiring
   ├ innkeeper-world    host behaviour: typed messages, accounts, logon, land tables, no I/O
   ├ innkeeper-session  one legacy connection: line then link, no I/O
   │   ├ pad_thai         Hayes modem (hayes_fever), SprintNet PAD dialogue, line detection, no I/O
@@ -16,8 +16,10 @@ innkeeperd           bin: command line, tokio runtime, TCP, capture files, wirin
   └ int14h             the 17 INT 14h exports and the transport codec (int14h-transport.md), no I/O
 ```
 
-`innkeeperd` has two listeners on one world. The legacy one (`--bind`, `src/connection.rs`) answers the
-stock DOS client through the modem, PAD and link layer. The transport one (`--int14h-bind`,
+`innkeeperd` has up to three listeners on one world. The legacy one (`--bind`, `src/connection.rs`) answers the
+stock DOS client through the modem, PAD and link layer. The WebSocket one (`--ws-bind`, `src/websocket.rs`)
+runs the same legacy session for a browser client: each WebSocket is one serial line and its binary
+messages are the line's raw bytes (section 2). The transport one (`--int14h-bind`,
 `src/int14h_listener/`) answers a client that implements TSNEXEC's exports itself and sends each call as an
 envelope ([int14h-transport.md](../protocol/int14h-transport.md) section 7); its `Executive` holds one
 connection's export state. Both draw their `ConnectionId`s from one counter in `ConnectionSettings`.
@@ -55,6 +57,7 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
                            [--data-dir DIR]
                            [--line auto|hayes|pad] [--connect-rate 2400]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
+                           [--ws-bind 127.0.0.1:2316]
 ```
 
 - On a successful bind it logs `INT 14h hooked. Please wait while ImagiNation loads...`, then `serving the
@@ -62,6 +65,12 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
 - `--int14h-bind` is where transport clients connect (`docs/protocol/int14h-transport.md`), and `--no-int14h`
   leaves that listener off. A transport connection gets a capture file like a legacy one: `tx` and `rx` are
   the envelope bytes, `ev` the decoded client and host messages.
+- `--ws-bind` turns on WebSocket lines, used by the browser build of the client in the sibling project
+  `INN-Decomp` (its `docs/web.md`). It is off unless given. A connection upgrades over plain HTTP (`ws://`;
+  put a TLS proxy in front for `wss://`), then is a legacy session exactly like one on `--bind`: line
+  auto-detect, Hayes modem, PAD, link layer and a capture file. Binary messages carry raw bytes in both
+  directions, split anywhere; text messages are ignored; a message over 64 KiB or a handshake that takes
+  over 10 s closes the connection. Closing the WebSocket is a TCP hang-up. Any `Origin` is accepted.
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an

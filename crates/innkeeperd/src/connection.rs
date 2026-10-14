@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
 use innkeeper_world::{ConnectionId, HostMessage, ObjectStore, World};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
 use tsn_link::{LinkEvent, Message};
@@ -57,6 +57,17 @@ pub(crate) async fn serve_connection(
     peer: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
+    if let Err(error) = stream.set_nodelay(true) {
+        warn!(%error, %peer, "cannot disable Nagle; replies may lag");
+    }
+    serve_line(stream, peer, settings).await;
+}
+
+/// Runs a legacy line session over any byte stream: a TCP socket or a WebSocket's bytes.
+pub(crate) async fn serve_line<S>(stream: S, peer: SocketAddr, settings: Arc<ConnectionSettings>)
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let id = settings.new_connection();
     let span = info_span!("session", id = id.0, %peer);
     async move {
@@ -70,13 +81,15 @@ pub(crate) async fn serve_connection(
     .await;
 }
 
-async fn drive(
-    mut stream: TcpStream,
+async fn drive<S>(
+    mut stream: S,
     peer: SocketAddr,
     id: ConnectionId,
     settings: &ConnectionSettings,
-) -> std::io::Result<()> {
-    stream.set_nodelay(true)?;
+) -> std::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
     let mut host = Host::new(settings, id);
@@ -87,12 +100,15 @@ async fn drive(
     result
 }
 
-async fn pump(
-    stream: &mut TcpStream,
+async fn pump<S>(
+    stream: &mut S,
     mut session: Session,
     host: &mut Host<'_>,
     capture: &mut Option<FileCapture>,
-) -> std::io::Result<()> {
+) -> std::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let mut chunk = Vec::with_capacity(READ_CHUNK);
     loop {
         chunk.clear();
@@ -117,12 +133,15 @@ async fn pump(
     }
 }
 
-async fn deliver_outputs(
+async fn deliver_outputs<S>(
     session: &mut Session,
     host: &mut Host<'_>,
-    stream: &mut TcpStream,
+    stream: &mut S,
     capture: &mut Option<FileCapture>,
-) -> std::io::Result<()> {
+) -> std::io::Result<()>
+where
+    S: AsyncWrite + Unpin,
+{
     while let Some(output) = session.poll_output() {
         let now = Instant::now();
         match output {

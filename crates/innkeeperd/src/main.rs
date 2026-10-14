@@ -9,6 +9,7 @@ mod int14h_listener;
 mod server;
 mod sqlite_store;
 mod switchboard;
+mod websocket;
 
 use std::process::ExitCode;
 
