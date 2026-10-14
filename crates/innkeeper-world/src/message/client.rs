@@ -3,8 +3,8 @@ use std::fmt;
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
     BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod, LockRequest, MailRequest,
-    MailboxRequest, Multicast, ObjExists, ObjectKind, PropertyRequest, SendMessage, SetInt,
-    SetPersona, SetStr, Unexplained,
+    MailboxRequest, Multicast, ObjExists, ObjectKind, PropertyRequest, SendMessage,
+    ServicePropertyRequest, SetInt, SetPersona, SetStr, Unexplained,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -37,6 +37,8 @@ pub enum ClientMessage {
     GetMemberProperties(PropertyRequest),
     /// The RPG bulletin board (27).
     Bbs(BbsRequest),
+    /// Properties of a service object (17).
+    ServiceProperties(ServicePropertyRequest),
     Unexplained(Unexplained),
 }
 
@@ -178,6 +180,9 @@ impl ClientMessage {
                 ClientMessage::GetMemberProperties(PropertyRequest::parse(&mut reader)?)
             }
             Command::Bbs => ClientMessage::Bbs(BbsRequest::parse(&mut reader)?),
+            Command::ServiceProperties => {
+                ClientMessage::ServiceProperties(ServicePropertyRequest::parse(&mut reader)?)
+            }
             Command::PlayerObjectNotice | Command::Register => {
                 ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
             }
@@ -230,6 +235,7 @@ impl ClientMessage {
                 request.write(&mut writer, Command::MemberProperties);
             }
             ClientMessage::Bbs(request) => request.write(&mut writer),
+            ClientMessage::ServiceProperties(request) => request.write(&mut writer),
             ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()

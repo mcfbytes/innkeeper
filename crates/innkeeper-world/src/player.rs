@@ -115,6 +115,10 @@ impl PlayerSession {
             ClientMessage::GetMemberProperties(ref request) => {
                 self.when_logged_in(|_| objects.member_properties(connection, request))
             }
+            ClientMessage::ServiceProperties(_) => {
+                info!(?message, "no reply awaited: absorbed");
+                Vec::new()
+            }
             ClientMessage::Unexplained(_) => {
                 info!(?message, "purpose unknown, no reply expected: absorbed");
                 Vec::new()

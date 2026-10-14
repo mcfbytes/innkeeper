@@ -300,6 +300,7 @@ impl HostMessage {
             }
             Command::Bbs => HostMessage::Bbs(BbsReply::parse(&mut reader)?),
             Command::Lock
+            | Command::ServiceProperties
             | Command::Unlock
             | Command::PlayerObjectNotice
             | Command::Register

@@ -1,0 +1,4 @@
+# Service properties (command 17), from twinion.md section 4.1 (17/2, props 8 to 11 after the 41
+# reply) and redbaron.md section 5.1 (17/0, one prop). Rows as in send.txt.
+> twinion props 8 to 11 | 11 02 8b 00 09 01 08 00 09 00 0a 00 0b 00
+> red baron prop 9 | 11 00 65 00 02 01 09 00

@@ -17,6 +17,7 @@ pub(crate) enum Command {
     GroupMembers = 12,
     SetInt = 13,
     SetStr = 14,
+    ServiceProperties = 17,
     InvokeMethod = 25,
     Bbs = 27,
     PlayerObjectNotice = 26,
@@ -37,7 +38,7 @@ pub(crate) enum Command {
     LoginWithProdigyId = 59,
 }
 
-pub(crate) const COMMANDS: [Command; 31] = [
+pub(crate) const COMMANDS: [Command; 32] = [
     Command::Ack,
     Command::Nak,
     Command::Send,
@@ -51,6 +52,7 @@ pub(crate) const COMMANDS: [Command; 31] = [
     Command::GroupMembers,
     Command::SetInt,
     Command::SetStr,
+    Command::ServiceProperties,
     Command::InvokeMethod,
     Command::Bbs,
     Command::PlayerObjectNotice,

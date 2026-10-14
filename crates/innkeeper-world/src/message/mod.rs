@@ -16,6 +16,7 @@ mod properties;
 mod property_query;
 mod send;
 mod service_lookup;
+mod service_properties;
 mod unexplained;
 mod user_info;
 mod wire;
@@ -48,5 +49,6 @@ pub use property_query::{
 };
 pub use send::SendMessage;
 pub use service_lookup::{ObjExists, ObjectLocated};
+pub use service_properties::ServicePropertyRequest;
 pub use unexplained::{Unexplained, UnexplainedCommand};
 pub use user_info::SetPersona;
