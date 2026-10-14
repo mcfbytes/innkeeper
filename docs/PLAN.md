@@ -10,6 +10,8 @@ server (Rust, cloud-hosted, possibly distributed).
   1,165 script images match `tools/lsci_image.py` byte for byte. Every land boots to its first `TSN(0)` call.
 - **Census:** every program's use of TSNEXEC's exports and its host messages are in `docs/protocol/int14h-census/`;
   the server work items derived from it are in `docs/server/fanout-plan.md`.
+- **Yserbius (Phase 5):** `innkeeperd` serves CGENN and DARKSTRT through to the dungeon, with the bulletin
+  board (`docs/protocol/yserbius.md`).
 - **Next:** `kTSN` behind an offline executive and the boot-path kernels until the Clubhouse renders in
   ScummVM; the fan-out plan's waves (objects and groups, router, outbox, presence, mail) so two clients meet.
 
@@ -178,7 +180,15 @@ We start with the legacy link, because it needs no installs and gives us ground 
 All Clubhouse, SierraLand and CasinoLand games, the Dec-93 and TSN 2.1 variants, and any features later builds removed that are worth keeping.
 
 ### Phase 5: The Shadow of Yserbius
-- **Server:** the Yserbius message set (BBS, map groups, parties, player objects, version control), first tested with the DOS client in DOSBox.
+- [x] **Server, single player:** service lookup 41/2, land and map groups, personal parties, the land version
+  gate, the bulletin board (directory, index, reads, posts, persisted per title) and the land rows in the
+  directory; reference in `docs/protocol/yserbius.md`. Verified live in `dosrt` (INN-Decomp) through the
+  launcher: gallery, town, tavern posts written and read back, dungeon.
+- [ ] **Server, multiplayer:** two clients already share land and map groups and exchange 200/217; still to
+  check in play: seeing each other, party join (212/211/204), chat (207), challenges (213/214), and a launch
+  from the hub's place list rather than the launcher.
+- [ ] Twinion: same code (land 8, version 1.0.22, 17/2 absorbed, boards apart); TWGENN reaches its gallery,
+  FATES not yet driven.
 - **ScummVM:** a new engine for the Ybarra Productions engine (working name `engines/ybarra`), reimplemented from `DARKSTRT.EXE` and `CGENN.EXE`. It reuses ScummVM's XMIDI/Miles audio support and connects through `int14h`.
 
 ### Phase 6: The Fates of Twinion

@@ -144,6 +144,8 @@ DATA frame per client message.
 | `mail` | the mailbox assignment (45/1) and the `EMMsg` requests (37) over the store: new-mail check, listing, send, read, delete, forward. See [mail.md](mail.md) |
 | `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4) |
+| `rpg` | Yserbius and Twinion: the title table (land type, version, land size), the 41/2 service lookup, the place a land joinNet sets and the map groups shared within it, the land version gate, no echo of RPG sends. See [yserbius.md](../protocol/yserbius.md) |
+| `bbs` | the RPG bulletin board (27) over the store's boards: a fixed directory per location, messages numbered in posting order |
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |

@@ -85,6 +85,8 @@ The account book and `World` take a store (`World::stored`), and `innkeeperd --d
 - `letters` serves the new-mail check, the listing and the read; `delete_letter` returns false for a letter
   that is not in that mailbox, which the client sees as "that letter does not exist".
 
-Boards (`post`, `posts`) have no user yet; the RPG bulletin board will parse its own bodies on top of them.
+Boards (`post`, `posts`) serve the RPG bulletin board (`innkeeper-world::bbs`): a post body is the client's
+`author|text`, and a `BoardId` is `landType << 24 | location << 8 | section`, so the two titles keep apart
+([yserbius.md](../protocol/yserbius.md) section 3).
 A first-class delivery time on `Letter` would let the stored body be the envelope alone; that is a trait
 change for the owner of `store.rs`.

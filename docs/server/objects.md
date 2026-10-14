@@ -122,8 +122,11 @@ object's peers get `ObjFree`; GrpDel is accepted from any connection for a membe
 
 ## 7. Open
 
-- Map groups (kind 2 from Yserbius and Twinion) carry only the map number, so two lands with the same map
-  number would share a map group (`int14h-census/yserbius.md` section 8); R2 decides the RPG scoping.
+- Map groups (kind 2 from Yserbius and Twinion) carry only the map number. They are shared within the
+  requester's place: `GroupKey::within` holds the land type and number of the player's latest land joinNet
+  (kind 5), so Yserbius and Twinion maps of one number, and two places of a land, stay apart
+  (`MAP_GROUPS_PER_PLACE_ASSUMED`, [yserbius.md](../protocol/yserbius.md) section 2). Every other shared group has
+  `within` none. A shared group keeps its key on the object, which `group_key` returns.
 - LSCI's `GameGroup` sends kind 2 with a parameter from its caller; whether two tables of one game share that
   parameter is not known (D1).
 - No capture of the original host exists, so the echo policy, the re-join rule, the lock refusal word and

@@ -93,7 +93,9 @@ Status key: **done**, **partial** (what exists is named), **open**.
 ### 2.2 Yserbius and Twinion (Phases 5 and 6)
 
 Both use `hostcomm.cpp` + `rpgcomms.cpp`; a shared `game::rpg` module carries the common behaviour and a
-profile per title carries the differences (twinion.md section 7). All open.
+profile per title carries the differences (twinion.md section 7). R1 to R3 and T1 are done in `rpg`, `bbs` and
+`message::bbs` ([yserbius.md](../protocol/yserbius.md)); R4 is partial (one client to the dungeon, two clients
+exchanging 200/217 in `dosrt`); T2 is open.
 
 | Id | Item and scope | Crate / module | Depends on | Test strategy | Size | Tier |
 |---|---|---|---|---|---|---|

@@ -180,13 +180,15 @@ writes 0.
 | Cmd | Client to host | Host to client | Notes |
 |---|---|---|---|
 | 2 | `ClientMessage::Send(SendMessage)` | `HostMessage::Send` | `to`, `from`, then the payload from byte 6 kept raw. LSCI's `msgType` is a word, the DOS libraries' a byte, so only `msg_type_word()` interprets it, and only for LSCI traffic. The host relays it to the holders of `to`, or of a member of the group `to`, unchanged ([router.md](../server/router.md)) |
-| 9 | `LeaveNet(Sid)` | `ObjectFreed(Sid)` | the host form is the header only |
+| 9 | `LeaveNet(Sid)` | `ObjectFreed(Sid)` | the host form is the header only; the DOS games' `ObjFree` is the 4-byte header without LSCI's zero word, so the word is optional |
 | 10 | `GroupJoin` | `GroupJoined` | unchanged |
 | 11 | `GroupLeave` | `GroupLeft` | `group`, `member` |
 | 12 | `GroupMembers(GroupMembersRequest)` | `GroupMembers` | the list is every word from byte 6; the word at byte 4 is unread (INFERRED 0) |
 | 13 | `SetInt` | `SetInt` | `target`, `from`, then `(propOffset, value)` pairs to the end |
 | 14 | `SetStr` | `SetStr` | `target`, `from`, `propOffset`, then the value verbatim: arrays are not text |
 | 28 | `Multicast` | none | `from`, `n` word SIDs, the body raw (`5 + 2n + body`); the body's first word is LSCI's `msgType`. The host answers with one `Send` of the body per recipient SID, in list order ([router.md](../server/router.md)) |
+| 17 | `ServicePropertyRequest` (`sub`, service SID, from, prop words) | none | Twinion's 17/2 and Red Baron's 17/0; absorbed ([yserbius.md](yserbius.md) section 2) |
+| 27 | `Bbs(BbsRequest)`: directory 13, index 14, read 1 to 5, post 0 | `Bbs(BbsReply)`: sub 13, 14 and 1 | the RPG layouts of [yserbius.md](yserbius.md) section 3; LSCI's own 27 uses are not decoded yet |
 | 41 | `ObjExists::Name` (sub 0, raw name tail), `ObjExists::Service` (sub 2: `w 0, w userSID, b landType, w 0`) | `ObjectLocated` | the located SID is at w@6; the word at byte 4 is unread (INFERRED 0) |
 | 48 | none | `Notice` | text from byte 2, byte 1 unread; the NUL that ends the text is INFERRED |
 | 0 | none | `Ack` (`to`, `whichCmd`, `whichSub`, tail) | `whichCmd` 22 stays `LoginAccepted` |
@@ -222,7 +224,7 @@ Kind 6 and every other value are errors.
 | Cmd | Name | Dir | Layout | Sub-commands seen | Status |
 |---|---|---|---|---|---|
 | 23 | `GameRights` | H→C | body rebased at 4 | — (no handler found) | CONFIRMED layout |
-| 27 | `BBSMsg` | both | C→H `b 27, b sub, w …`; H→C `b 27, b whichCmd, w number @2, w toSID @4, w type @6, body @4 or @18` | 0 post/status, 1 read, 6, 8, 9 complaint (`SL/script.530 BitchToTSNMI`), 13, 14 list (`script.199`); conference and trivia directories use 27/1 and 27/0 with class 67 and 84 (`GotoConference`, `GotoTrivia`) | CONFIRMED layouts |
+| 27 | `BBSMsg` | both | C→H `b 27, b sub, w …`; H→C `b 27, b whichCmd, w number @2, w toSID @4, w type @6, body @4 or @18` | 0 post/status, 1 read, 6, 8, 9 complaint (`SL/script.530 BitchToTSNMI`), 13, 14 list (`script.199`); conference and trivia directories use 27/1 and 27/0 with class 67 and 84 (`GotoConference`, `GotoTrivia`). The RPG titles' board (subs 0, 1 to 5, 13, 14) is served as in [yserbius.md](yserbius.md) section 3 | CONFIRMED layouts |
 | 29 | `GameVersion` | H→C | `b 29, w toSID @1, b number @3, b major @4, b minor @5` | — | CONFIRMED |
 | 34 | `AccountMsg` | both | C→H `b 34, b sub, w sid`; H→C `b 34, b whichCmd, w toSID, text @4` | 4 current rates (text, shown when it changed, answered with 34/8), 5 account status (`s` at 4), 8 rates seen, detailed summary (`script.050 GetDetailedInfo`: `w len @16`, text @18) | CONFIRMED |
 | 36 | `HostInfo` | both | C→H `b 36, b sub [, w stampLow, w stampHigh]`; H→C `b 36, b type, …` | 1 HOSTADDR file (reply type 1: `w stamp @2, w stamp @4`, file text @6), 5 host number (reply type 5: `w host @2`, at most 200), 6 land directory (reply is `WaitGrpRequest` msgType 2, or Nak 36/6), 2 host time (reply type 2: `b year-1900 @2, b month0 @3, b mday @4, b hour @5, b minute @6, b second @7`; DOS games only) | CONFIRMED |
