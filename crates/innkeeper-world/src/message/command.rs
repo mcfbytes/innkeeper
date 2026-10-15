@@ -34,11 +34,12 @@ pub(crate) enum Command {
     NewBox = 45,
     WaitGroup = 47,
     Notice = 48,
+    PlayStatus = 50,
     Login = 53,
     LoginWithProdigyId = 59,
 }
 
-pub(crate) const COMMANDS: [Command; 32] = [
+pub(crate) const COMMANDS: [Command; 33] = [
     Command::Ack,
     Command::Nak,
     Command::Send,
@@ -69,6 +70,7 @@ pub(crate) const COMMANDS: [Command; 32] = [
     Command::NewBox,
     Command::WaitGroup,
     Command::Notice,
+    Command::PlayStatus,
     Command::Login,
     Command::LoginWithProdigyId,
 ];

@@ -180,8 +180,20 @@ fn assert_consistent(store: &ObjectStore) {
         let unique: BTreeSet<_> = members.iter().collect();
         assert_eq!(unique.len(), members.len());
         if let Role::Group { capacity, .. } = object.role {
-            assert!(members.len() <= usize::from(capacity));
+            // A group takes `capacity` players; one player may have several members in it. The
+            // random run also adds groups and shared objects as members, which have no one player.
+            let plain = members.iter().all(|member| {
+                let member = &store.objects[member];
+                matches!(member.role, Role::Object) && member.holders.len() == 1
+            });
+            if plain {
+                assert!(store.connections_of(members).len() <= usize::from(capacity));
+            }
         }
+    }
+    for session in store.game_sessions() {
+        let group = store.objects.get(&session.group);
+        assert!(group.is_some_and(|group| matches!(group.role, Role::Group { .. })));
     }
 }
 

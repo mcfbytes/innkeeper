@@ -31,6 +31,7 @@ const WAITING_ROOM: &str = "
     B > add player to waiting room | 0a 00 02 01 04 01 02 03 12
     B < echo to the joiner | 0a 00 02 01 04 01
     A < and to the member | 0a 00 02 01 04 01
+    B < news of A, who was in the room first | 0a 00 02 01 01 01
 ";
 
 fn run(steps: &str) {
@@ -107,6 +108,8 @@ fn a_late_joiner_reads_the_mirrored_properties() {
         C < echo to the joiner | 0a 00 02 01 06 01
         A < to a member | 0a 00 02 01 06 01
         B < to a member | 0a 00 02 01 06 01
+        C < news of A | 0a 00 02 01 01 01
+        C < news of B | 0a 00 02 01 04 01
         # Nobody set offset 0x30, so it is left out.
         C > getProp of A's player | 20 00 01 01 01 01 05 00 09 00 30 00
         C < SetMsg | 21 00 01 01 00 00 01 05 00 67 75 79 00 00 09 00 78 00

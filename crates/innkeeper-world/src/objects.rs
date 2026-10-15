@@ -1,3 +1,4 @@
+mod games;
 mod locks;
 mod mirror;
 
@@ -11,10 +12,13 @@ use crate::assumptions::{
     REJOIN_REPLACES_KIND_ASSUMED,
 };
 use crate::message::Command;
+use crate::rpg::RPG_OBJECT_LAND_TYPE;
 use crate::{
     GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest, HostMessage, JoinNet, LandType, Nak,
     ObjectKind, Sid,
 };
+use games::GameBook;
+pub use games::{GamePhase, GameSession, GameType, Invitation};
 use locks::LockTable;
 use mirror::PropertyMirror;
 
@@ -73,6 +77,7 @@ pub struct ObjectStore {
     shared_groups: HashMap<GroupKey, Sid>,
     next_sid: u16,
     locks: LockTable,
+    games: GameBook,
     mirror: PropertyMirror,
 }
 
@@ -129,6 +134,7 @@ impl ObjectStore {
             shared_groups: HashMap::new(),
             next_sid: FIRST_SID,
             locks: LockTable::default(),
+            games: GameBook::default(),
             mirror: PropertyMirror::default(),
         }
     }
@@ -149,6 +155,16 @@ impl ObjectStore {
                 Role::Group { .. } => self.connections_of(object.members()),
             },
         }
+    }
+
+    /// The members of a group in joining order; none for an object or a free SID.
+    pub(crate) fn members(&self, group: Sid) -> &[Sid] {
+        self.members_of(group)
+    }
+
+    /// Whether `member` is in `group` now.
+    pub(crate) fn group_has_member(&self, group: Sid, member: Sid) -> bool {
+        self.members_of(group).contains(&member)
     }
 
     /// The key of the shared group with this SID; none for an object, an own group or a free SID.
@@ -182,7 +198,13 @@ impl ObjectStore {
         let mut deliveries = self.replace_rejoined(connection, join);
         let sid = match Scope::of(&join) {
             Scope::Object => self.create(connection, join, Role::Object),
-            Scope::OwnGroup => self.create(connection, join, Role::group(join.size)),
+            Scope::OwnGroup => {
+                let sid = self.create(connection, join, Role::group(join.size));
+                if let Some(sid) = sid.filter(|_| join.land_type != RPG_OBJECT_LAND_TYPE) {
+                    self.games.open(sid, &join, connection);
+                }
+                sid
+            }
             Scope::SharedGroup(key) => {
                 let key = GroupKey {
                     within: place,
@@ -295,6 +317,7 @@ impl ObjectStore {
     /// Releases everything the connection holds, its locks included, as when it hangs up or logs in again.
     pub fn disconnect(&mut self, connection: ConnectionId) -> Vec<Delivery> {
         self.locks.release_all(connection);
+        self.note_connection_gone(connection);
         let mut held: Vec<(Sid, bool)> = self
             .objects
             .iter()
@@ -369,6 +392,8 @@ impl ObjectStore {
 
     fn admit(&mut self, connection: ConnectionId, join: GroupJoin) -> Result<(), GroupJoinRefusal> {
         let member_is_own = join.member != join.group && self.holds(connection, join.member);
+        // A group takes as many players as it has capacity; one player may have several members.
+        let players = self.connections_of(self.members_of(join.group));
         let role = self
             .objects
             .get_mut(&join.group)
@@ -382,10 +407,11 @@ impl ObjectStore {
         if members.contains(&join.member) {
             return Ok(());
         }
-        if members.len() >= usize::from(*capacity) {
+        if !players.contains(&connection) && players.len() >= usize::from(*capacity) {
             return Err(GroupJoinRefusal::Full);
         }
         members.push(join.member);
+        self.note_members(join.group);
         Ok(())
     }
 
@@ -423,6 +449,7 @@ impl ObjectStore {
                 self.shared_groups.remove(&key);
             }
         }
+        self.note_group_closed(sid);
         deliveries.extend(tell(peers, HostMessage::ObjectFreed(sid)));
         deliveries
     }
@@ -435,6 +462,7 @@ impl ObjectStore {
         };
         members.retain(|&kept| kept != member);
         info!(group = group.0, member = member.0, "group member left");
+        self.note_members(group);
         let mut audience = self.connections_of(self.members_of(group));
         audience.remove(&actor);
         tell(

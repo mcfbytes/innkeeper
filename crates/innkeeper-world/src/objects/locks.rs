@@ -54,6 +54,7 @@ impl ObjectStore {
         let reply = match self.locks.take(connection, &request.locks) {
             Ok(()) => {
                 info!(?request, "locks taken");
+                self.note_locks_granted(connection, request.from, &request.locks);
                 HostMessage::Ack(request.acknowledged(Command::Lock))
             }
             Err(taken) => {
@@ -71,6 +72,7 @@ impl ObjectStore {
         request: &LockRequest,
     ) -> Vec<Delivery> {
         self.locks.release(connection, &request.locks);
+        self.note_locks_released(connection, &request.locks);
         info!(?request, "locks released");
         match UNLOCK_IS_ACKNOWLEDGED_ASSUMED {
             true => {

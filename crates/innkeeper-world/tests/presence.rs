@@ -74,6 +74,7 @@ fn occupancy_counts_the_clubhouse_waiting_room_and_the_other_lands_stay_empty() 
         B > add player to waiting room | 0a 00 01 01 02 01 02 03 12
         B < group joined | 0a 00 01 01 02 01
         A < news of B | 0a 00 01 01 02 01
+        B < news of A, who was there first | 0a 00 01 01 00 01
         ",
     );
     table.run(&occupancy_is('A', 2));

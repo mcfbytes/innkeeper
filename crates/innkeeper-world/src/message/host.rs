@@ -304,6 +304,7 @@ impl HostMessage {
             | Command::Unlock
             | Command::PlayerObjectNotice
             | Command::Register
+            | Command::PlayStatus
             | Command::GetProperties
             | Command::JoinNet
             | Command::Multicast

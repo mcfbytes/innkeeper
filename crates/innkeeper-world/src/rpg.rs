@@ -42,6 +42,11 @@ pub(crate) const RPG_TITLES: [RpgTitle; 2] = [
     },
 ];
 
+/// Whether this land type is one of the RPG titles' lands.
+pub(crate) fn is_title(land_type: LandType) -> bool {
+    RPG_TITLES.iter().any(|title| title.land_type == land_type)
+}
+
 /// Whether a land GrpJoin's version bytes fit the title of that land; other lands are not gated here.
 pub(crate) fn admits(land_type: LandType, version: ClientVersion) -> bool {
     let mut titles = RPG_TITLES

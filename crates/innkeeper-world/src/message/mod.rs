@@ -12,6 +12,7 @@ mod mail;
 mod multicast;
 mod notice;
 mod object_kind;
+mod play_status;
 mod properties;
 mod property_query;
 mod send;
@@ -42,6 +43,7 @@ pub(crate) use mail::{StoredLetter, FIELD_LEN};
 pub use multicast::Multicast;
 pub use notice::Notice;
 pub use object_kind::ObjectKind;
+pub use play_status::PlayStatus;
 pub use properties::{IntProperty, SetInt, SetStr};
 pub use property_query::{
     MemberProperties, MemberRow, Property, PropertyColumn, PropertyKind, PropertyRequest,

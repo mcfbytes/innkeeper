@@ -93,3 +93,10 @@ pub(crate) const RPG_SENDS_ECHO_SENDER_ASSUMED: bool = false;
 /// An account whose stored rating is 0 logs in with the rights to every land this host runs: the
 /// hub refuses a land whose bit (`landType - 1`) is clear, and reads 0 as 1, the Clubhouse alone.
 pub(crate) const UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED: bool = true;
+/// The SID a 41/2 lookup of Red Baron's land type (101) returns, and the object its 17/0 reads and
+/// the setInt answers name: the client stores it and compares it, nothing else reads it. Below the
+/// first allocated SID, like the RPG service (redbaron.md sections 5.2 and 10).
+pub(crate) const RED_BARON_SERVICE_SID_ASSUMED: Sid = Sid(0x0065);
+/// Property 0xF of Red Baron's service: how long a game lasts, in minutes. The client accepts 5 to 30
+/// and scales it to timer ticks (redbaron.md section 6); 10 is a host choice.
+pub(crate) const RED_BARON_GAME_MINUTES_ASSUMED: u16 = 10;

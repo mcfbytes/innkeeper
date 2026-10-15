@@ -15,6 +15,7 @@ mod message;
 mod objects;
 mod player;
 mod presence;
+mod red_baron;
 pub mod router;
 mod rpg;
 mod store;
@@ -33,15 +34,18 @@ pub use message::{
     HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory, LandEntry, LetterRef,
     ListedLetter, Login, LoginAck, LoginNakReason, LoginStatus, MailFault, MailReply, MailRequest,
     MailboxAnswer, MailboxRequest, MessagePosition, Multicast, Nak, Notice, ObjExists, ObjectKind,
-    ObjectLocated, Occupancy, OutgoingLetter, PasswordSource, ReadStep, SendMessage, SetInt,
-    SetPersona, SetStr,
+    ObjectLocated, Occupancy, OutgoingLetter, PasswordSource, PlayStatus, ReadStep, SendMessage,
+    SetInt, SetPersona, SetStr,
 };
 pub use message::{
     InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,
-    PropertyColumn, PropertyKind, PropertyRequest, PropertyValue, PropertyValues, Unexplained,
-    UnexplainedCommand,
+    PropertyColumn, PropertyKind, PropertyRequest, PropertyValue, PropertyValues,
+    ServicePropertyRequest, Unexplained, UnexplainedCommand,
 };
-pub use objects::{ConnectionId, Delivery, GroupKey, ObjectStore, Place};
+pub use objects::{
+    ConnectionId, Delivery, GamePhase, GameSession, GameType, GroupKey, Invitation, ObjectStore,
+    Place,
+};
 pub use player::PlayerSession;
 #[cfg(feature = "test-support")]
 pub use store::conformance;

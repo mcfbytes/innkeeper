@@ -3,7 +3,7 @@ use std::fmt;
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
     BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod, LockRequest, MailRequest,
-    MailboxRequest, Multicast, ObjExists, ObjectKind, PropertyRequest, SendMessage,
+    MailboxRequest, Multicast, ObjExists, ObjectKind, PlayStatus, PropertyRequest, SendMessage,
     ServicePropertyRequest, SetInt, SetPersona, SetStr, Unexplained,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
@@ -39,6 +39,8 @@ pub enum ClientMessage {
     Bbs(BbsRequest),
     /// Properties of a service object (17).
     ServiceProperties(ServicePropertyRequest),
+    /// Red Baron and GOLF tell the host a player started or stopped playing (50).
+    PlayStatus(PlayStatus),
     Unexplained(Unexplained),
 }
 
@@ -183,6 +185,7 @@ impl ClientMessage {
             Command::ServiceProperties => {
                 ClientMessage::ServiceProperties(ServicePropertyRequest::parse(&mut reader)?)
             }
+            Command::PlayStatus => ClientMessage::PlayStatus(PlayStatus::parse(&mut reader)?),
             Command::PlayerObjectNotice | Command::Register => {
                 ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
             }
@@ -236,6 +239,7 @@ impl ClientMessage {
             }
             ClientMessage::Bbs(request) => request.write(&mut writer),
             ClientMessage::ServiceProperties(request) => request.write(&mut writer),
+            ClientMessage::PlayStatus(status) => status.write(&mut writer),
             ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()

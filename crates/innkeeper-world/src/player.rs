@@ -2,8 +2,9 @@ use tracing::{info, info_span, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::{
-    bbs, logon, mail, presence, router, rpg, Account, ClientMessage, ConnectionId, Delivery,
-    HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place, World,
+    bbs, logon, mail, presence, red_baron, router, rpg, Account, ClientMessage, ConnectionId,
+    Delivery, HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place, Unexplained,
+    UnexplainedCommand, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -116,16 +117,31 @@ impl PlayerSession {
             ClientMessage::GetMemberProperties(ref request) => {
                 self.when_logged_in(|_| objects.member_properties(connection, request))
             }
-            ClientMessage::ServiceProperties(_) => {
-                info!(?message, "no reply awaited: absorbed");
+            ClientMessage::ServiceProperties(ref request) => self.when_logged_in(|_| {
+                let answers = red_baron::service_properties(request);
+                if answers.is_empty() {
+                    info!(?message, "no reply awaited: absorbed");
+                }
+                reply(answers)
+            }),
+            ClientMessage::PlayStatus(status) => {
+                info!(?status, "play status noted");
                 Vec::new()
             }
+            ClientMessage::Unexplained(Unexplained {
+                command: UnexplainedCommand::Register,
+                ref sids,
+            }) => self.when_logged_in(|_| {
+                objects.register(connection, sids);
+                Vec::new()
+            }),
             ClientMessage::Unexplained(_) => {
                 info!(?message, "purpose unknown, no reply expected: absorbed");
                 Vec::new()
             }
             ClientMessage::ObjExists(ref lookup) => self.when_logged_in(|_| {
-                let located = rpg::locate_service(lookup);
+                let located =
+                    rpg::locate_service(lookup).or_else(|| red_baron::locate_service(lookup));
                 if located.is_none() {
                     info!(?message, "decoded, no handler yet: ignored");
                 }

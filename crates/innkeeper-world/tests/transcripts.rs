@@ -39,6 +39,7 @@ fn two_players_meet_in_the_clubhouse_waiting_room() {
         B > add player to waiting room | 0a 00 03 01 04 01 02 03 12
         B < echo to the joiner first | 0a 00 03 01 04 01
         A < then to the members | 0a 00 03 01 04 01
+        B < then news of each member already there | 0a 00 03 01 02 01
         B > member list | 0c 00 03 01 04 01
         B < members from byte 6, in joining order | 0c 00 03 01 00 00 02 01 04 01
         A > leave the waiting room | 0b 00 03 01 02 01
@@ -46,6 +47,7 @@ fn two_players_meet_in_the_clubhouse_waiting_room() {
         A > add player again | 0a 00 03 01 02 01 02 03 12
         A < group joined | 0a 00 03 01 02 01
         B < group joined | 0a 00 03 01 02 01
+        A < news of B, who stayed | 0a 00 03 01 04 01
         ",
     );
     assert_eq!(table.objects.member_count(WAITING_ROOM), 2);
