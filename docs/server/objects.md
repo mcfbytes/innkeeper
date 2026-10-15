@@ -170,3 +170,9 @@ connection; the sender has applied it already. An update for a SID nobody holds 
 
 So a player who arrives late reads what the others published before it came: the waiting room asks each
 newcomer's name, game and room with getProp, and `GrpGetProp` fetches every member at once.
+
+## 10. Game sessions
+
+An own group on any land type but the RPG titles' opens a game session (invitation locks, command 30
+"register" as a reference to a live group, capacity counted in player connections, roster on joining a
+waiting room): [games.md](games.md).

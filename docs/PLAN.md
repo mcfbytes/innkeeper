@@ -167,7 +167,7 @@ We start with the legacy link, because it needs no installs and gives us ground 
 ### Phase 3: `innkeeper` and live play
 - [x] **Phase 3.1:** Logon protocol (login, joinNet, ack, nak, groupJoin). Messages verified against live capture; Rust crates (innkeeper-session, innkeeper-world, innkeeperd) with typed protocol values, error handling, and test coverage.
 - [ ] **Phase 3.2:** Presence (occupancy, room state, chat, mail) and lands.
-- [ ] **Phase 3.3:** Game-session routing and persistence (SQLite dev, Postgres cloud).
+- [ ] **Phase 3.3:** Game-session routing (done for SierraLand invitations and Red Baron, see docs/server/games.md; persistence still open) and persistence (SQLite dev, Postgres cloud).
 - **Integration ladder:**
   1. [ ] A DOSBox client logs in.
   2. [ ] Two DOSBox clients chat.
