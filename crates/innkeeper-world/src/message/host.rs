@@ -5,8 +5,8 @@ use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
     Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply,
-    MailboxAnswer, MemberProperties, Notice, ObjectLocated, PropertyValues, SendMessage, SetInt,
-    SetStr,
+    MailboxAnswer, MemberProperties, MoneyReply, Notice, ObjectLocated, PropertyValues,
+    SendMessage, SetInt, SetStr,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -36,6 +36,8 @@ pub enum HostMessage {
     ObjectFreed(Sid),
     SetInt(SetInt),
     SetStr(SetStr),
+    /// The answer to a money read (40/3): the account's CasinoLand bankroll.
+    Money(MoneyReply),
     /// The answer to an `ObjExists` lookup.
     ObjectLocated(ObjectLocated),
     Notice(Notice),
@@ -174,6 +176,7 @@ impl HostMessage {
             }
             HostMessage::SetInt(set) => set.write(&mut writer),
             HostMessage::SetStr(set) => set.write(&mut writer),
+            HostMessage::Money(reply) => reply.write(&mut writer),
             HostMessage::ObjectLocated(located) => located.write(&mut writer),
             HostMessage::Notice(notice) => notice.write(&mut writer),
             HostMessage::HostNumber(host) => {
@@ -299,6 +302,7 @@ impl HostMessage {
                 HostMessage::MemberProperties(MemberProperties::parse(&mut reader)?)
             }
             Command::Bbs => HostMessage::Bbs(BbsReply::parse(&mut reader)?),
+            Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
             Command::Lock
             | Command::ServiceProperties
             | Command::Unlock
@@ -309,7 +313,6 @@ impl HostMessage {
             | Command::JoinNet
             | Command::Multicast
             | Command::ChangePassword
-            | Command::UserInfo
             | Command::Login
             | Command::LoginWithProdigyId => {
                 return Err(MessageError::UnsupportedCommand(command.byte()))

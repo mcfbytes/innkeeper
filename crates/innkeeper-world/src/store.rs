@@ -1,4 +1,4 @@
-//! The persistence boundary: accounts, mailboxes and boards behind one synchronous trait.
+//! The persistence boundary: accounts, bankrolls, mailboxes and boards behind one synchronous trait.
 //! Design and the conformance suite are described in docs/server/store.md.
 
 use std::collections::{BTreeMap, HashMap};
@@ -8,7 +8,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use thiserror::Error;
 
-use crate::{AccountId, EncodedPassword, LoginStatus};
+use crate::{AccountId, EncodedPassword, LoginStatus, Money};
 
 /// A mailbox number, the value the client keeps in `mail.cfg`; numbering starts at 1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -91,6 +91,12 @@ pub trait Store: fmt::Debug + Send + Sync {
     /// Replaces the password and clears the password-expired flag.
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError>;
 
+    /// The account's CasinoLand bankroll, or `None` when nothing has been stored for it yet.
+    fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError>;
+    /// Keeps the bankroll. Unlike the mail families this needs no account row: the balance is a value
+    /// under an account number (`store.md` section 2), so an open book remembers one too.
+    fn set_money(&self, id: AccountId, amount: Money) -> Result<(), StoreError>;
+
     /// The account's mailbox number; the first call assigns one and later calls return it again.
     fn assign_mailbox(&self, id: AccountId) -> Result<MailboxNumber, StoreError>;
     fn append_letter(&self, mailbox: MailboxNumber, body: &[u8]) -> Result<LetterId, StoreError>;
@@ -113,6 +119,7 @@ pub struct MemoryStore {
 #[derive(Debug, Default)]
 struct Tables {
     accounts: HashMap<AccountId, AccountRecord>,
+    money: HashMap<AccountId, Money>,
     mailbox_of: HashMap<AccountId, MailboxNumber>,
     letters: BTreeMap<MailboxNumber, Vec<Letter>>,
     boards: HashMap<BoardId, Vec<Post>>,
@@ -154,6 +161,15 @@ impl Store for MemoryStore {
             .ok_or(StoreError::UnknownAccount(id))?;
         record.password = password;
         record.password_expired = false;
+        Ok(())
+    }
+
+    fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError> {
+        Ok(self.tables().money.get(&id).copied())
+    }
+
+    fn set_money(&self, id: AccountId, amount: Money) -> Result<(), StoreError> {
+        self.tables().money.insert(id, amount);
         Ok(())
     }
 
@@ -258,10 +274,11 @@ pub mod conformance {
 
     /// Runs every case, each on a store from `fresh`.
     pub fn run_all<S: Store>(fresh: impl Fn() -> S) {
-        let cases: [fn(&dyn Store); 8] = [
+        let cases: [fn(&dyn Store); 9] = [
             unknown_account_is_absent,
             created_account_reads_back,
             duplicate_account_is_refused,
+            bankroll_reads_absent_then_per_account,
             password_update_clears_expiry,
             mailbox_numbers_are_per_account,
             letters_keep_order_and_isolation,
@@ -282,6 +299,7 @@ pub mod conformance {
                 .update_password(ALICE, EncodedPassword([2; 10]))
                 .unwrap();
             let mailbox = store.assign_mailbox(ALICE).unwrap();
+            store.set_money(ALICE, Money(247)).unwrap();
             let letter = store.append_letter(mailbox, b"hello").unwrap();
             store.append_letter(mailbox, b"again").unwrap();
             store.delete_letter(mailbox, letter).unwrap();
@@ -292,6 +310,8 @@ pub mod conformance {
         let kept = store.account(ALICE).unwrap().unwrap();
         assert_eq!(kept.password, EncodedPassword([2; 10]));
         assert!(!kept.password_expired);
+        assert_eq!(store.money(ALICE).unwrap(), Some(Money(247)));
+        assert_eq!(store.money(BOB).unwrap(), None);
         assert_eq!(store.assign_mailbox(ALICE).unwrap(), mailbox);
         assert_eq!(
             bodies(&store.letters(mailbox).unwrap(), |l| &l.body),
@@ -328,6 +348,22 @@ pub mod conformance {
         let error = store.create_account(ALICE, record(2)).unwrap_err();
         assert!(matches!(error, StoreError::AccountExists(ALICE)));
         assert_eq!(store.account(ALICE).unwrap(), Some(record(1)));
+    }
+
+    fn bankroll_reads_absent_then_per_account(store: &dyn Store) {
+        // A bankroll needs no account row, so a kind of account the host never created still has one.
+        assert_eq!(store.money(ALICE).unwrap(), None);
+        store.set_money(ALICE, Money(247)).unwrap();
+        assert_eq!(store.money(ALICE).unwrap(), Some(Money(247)));
+        assert_eq!(store.money(BOB).unwrap(), None);
+        // A repeated save replaces, and 0 is a balance of its own, not an absent one.
+        store.set_money(ALICE, Money(1_000_000)).unwrap();
+        assert_eq!(store.money(ALICE).unwrap(), Some(Money(1_000_000)));
+        store.set_money(ALICE, Money(0)).unwrap();
+        assert_eq!(store.money(ALICE).unwrap(), Some(Money(0)));
+        // Both words, at the top of the 32-bit range.
+        store.set_money(BOB, Money(0xFFFF_FFFF)).unwrap();
+        assert_eq!(store.money(BOB).unwrap(), Some(Money(0xFFFF_FFFF)));
     }
 
     fn password_update_clears_expiry(store: &dyn Store) {

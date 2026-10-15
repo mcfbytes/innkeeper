@@ -53,4 +53,5 @@ pub use send::SendMessage;
 pub use service_lookup::{ObjExists, ObjectLocated};
 pub use service_properties::ServicePropertyRequest;
 pub use unexplained::{Unexplained, UnexplainedCommand};
-pub use user_info::SetPersona;
+pub(crate) use user_info::parse as parse_user_info;
+pub use user_info::{MoneyReply, ReadMoney, SaveMoney, SetPersona};

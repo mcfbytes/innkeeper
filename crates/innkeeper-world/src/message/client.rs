@@ -2,9 +2,10 @@ use std::fmt;
 
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
-    BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod, LockRequest, MailRequest,
-    MailboxRequest, Multicast, ObjExists, ObjectKind, PlayStatus, PropertyRequest, SendMessage,
-    ServicePropertyRequest, SetInt, SetPersona, SetStr, Unexplained,
+    parse_user_info, BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod,
+    LockRequest, MailRequest, MailboxRequest, Multicast, ObjExists, ObjectKind, PlayStatus,
+    PropertyRequest, ReadMoney, SaveMoney, SendMessage, ServicePropertyRequest, SetInt, SetPersona,
+    SetStr, Unexplained,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -25,6 +26,10 @@ pub enum ClientMessage {
     ObjExists(ObjExists),
     ChangePassword(ChangePassword),
     SetPersona(SetPersona),
+    /// 40/3: the CasinoLand bankroll the account should have.
+    ReadMoney(ReadMoney),
+    /// 40/2: the CasinoLand bankroll the account now has.
+    SaveMoney(SaveMoney),
     LandOccupancyRequest,
     Mail(MailRequest),
     NewMailbox(MailboxRequest),
@@ -163,7 +168,7 @@ impl ClientMessage {
             Command::ChangePassword => {
                 ClientMessage::ChangePassword(ChangePassword::parse(&mut reader)?)
             }
-            Command::UserInfo => ClientMessage::SetPersona(SetPersona::parse(&mut reader)?),
+            Command::UserInfo => parse_user_info(&mut reader)?,
             Command::WaitGroup => {
                 expect_sub(&mut reader, command, LAND_OCCUPANCY)?;
                 reader.word("toSID")?;
@@ -222,6 +227,8 @@ impl ClientMessage {
             ClientMessage::ObjExists(lookup) => lookup.write(&mut writer),
             ClientMessage::ChangePassword(change) => change.write(&mut writer),
             ClientMessage::SetPersona(persona) => persona.write(&mut writer),
+            ClientMessage::ReadMoney(request) => request.write(&mut writer),
+            ClientMessage::SaveMoney(request) => request.write(&mut writer),
             ClientMessage::LandOccupancyRequest => {
                 writer.byte(Command::WaitGroup.byte()).byte(LAND_OCCUPANCY);
                 writer.word(0).word(0);

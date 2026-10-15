@@ -2,9 +2,9 @@ use tracing::{info, info_span, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::{
-    bbs, logon, mail, presence, red_baron, router, rpg, Account, ClientMessage, ConnectionId,
-    Delivery, HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place, Unexplained,
-    UnexplainedCommand, World,
+    bbs, logon, mail, money, presence, red_baron, router, rpg, Account, ClientMessage,
+    ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place,
+    Unexplained, UnexplainedCommand, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -86,6 +86,12 @@ impl PlayerSession {
             ClientMessage::SetPersona(ref set) => {
                 self.set_persona(&set.name);
                 Vec::new()
+            }
+            ClientMessage::ReadMoney(request) => {
+                self.when_logged_in(|player| reply(money::read(world, &player.account, request)))
+            }
+            ClientMessage::SaveMoney(request) => {
+                self.when_logged_in(|player| reply(money::save(world, &player.account, request)))
             }
             ClientMessage::NewMailbox(request) => self.when_logged_in(|player| {
                 reply(vec![mail::assign_mailbox(world, &player.account, request)])

@@ -1,4 +1,11 @@
-# UserInfoMsg (command 40) sub 4, the persona name: captured live in docs/protocol/captures.md 6.185
-# and 295.332, plus a short name. Rows: "> name | hex" from the client; every row round-trips byte for byte.
+# UserInfoMsg (command 40). Sub 4, the persona name: captured live in docs/protocol/captures.md 6.185
+# and 295.332, plus a short name. Subs 3 and 2, the CasinoLand bankroll: the read was seen live and
+# the save carries low 0x00F7 and high 0 (247); the read reply is the same shape with the amount, as
+# the client's reply class reads it (messages.md 3.3.1). Rows: "> name | hex" from the client and
+# "< name | hex" from the host; every row round-trips byte for byte.
 > set persona, as captured | 28 04 67 75 79 62 72 75 73 68 00
 > set persona, short name | 28 04 4d 65 00
+> read money, as seen live | 28 03 05 01 01 00 01 00
+> save money, 247 | 28 02 05 01 01 00 01 00 f7 00 00 00
+< money reply, 247 | 28 03 05 01 01 00 01 00 f7 00 00 00
+< money reply, the starting 1,000,000 | 28 03 05 01 01 00 01 00 40 42 0f 00

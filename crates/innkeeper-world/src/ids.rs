@@ -26,6 +26,20 @@ impl AccountId {
     }
 }
 
+/// A player's CasinoLand bankroll ("CasinoBucks"): the client keeps it as two words and sends both.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Money(pub u32);
+
+impl Money {
+    pub fn from_words(low: u16, high: u16) -> Self {
+        Money(join_words(low, high))
+    }
+
+    pub fn words(self) -> (u16, u16) {
+        split_words(self.0)
+    }
+}
+
 /// A host's number in `HOSTADDR` and in the land tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct HostNumber(pub u8);
@@ -105,5 +119,13 @@ mod tests {
         let account = AccountId::from_words(0x86A1, 1);
         assert_eq!(account, AccountId(100_001));
         assert_eq!(account.words(), (0x86A1, 1));
+    }
+
+    #[test]
+    fn money_splits_into_the_words_the_client_sends() {
+        // A live save carried low 0x00F7 and high 0, so 247; a live read the same words.
+        assert_eq!(Money::from_words(0x00F7, 0), Money(247));
+        assert_eq!(Money(1_000_000).words(), (0x4240, 0x000F));
+        assert_eq!(Money::from_words(0xFFFF, 0xFFFF), Money(0xFFFF_FFFF));
     }
 }

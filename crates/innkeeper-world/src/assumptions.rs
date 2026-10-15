@@ -1,7 +1,7 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, ObjectKind, Sid};
+use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, Money, ObjectKind, Sid};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -50,6 +50,10 @@ pub(crate) const GROUP_SEND_ECHOES_SENDER_ASSUMED: bool = true;
 /// carries on without one (section 3.3). The name lives for the session; the store is not written.
 #[allow(dead_code)]
 pub(crate) const PERSONA_SET_UNANSWERED_ASSUMED: bool = true;
+/// The bankroll a 40/3 read reports for an account the store has no balance for: 1,000,000, the value
+/// `LL/script.120`'s waiting room seeds a CasinoLand visitor with. The client keeps its own copy when
+/// no reply arrives, and its seed is that same value for a player who may enter the land, 0 otherwise.
+pub(crate) const MONEY_STARTING_BALANCE_ASSUMED: Money = Money(1_000_000);
 /// Byte 6 of the Ack for a delivered letter: the client reads the box words from byte 7 (section 3.3).
 pub(crate) const ACK_UNREAD_BYTE_ASSUMED: u8 = 0;
 /// Byte 0 of a listing row: only bit 0x80 (a system letter) changes what the client does (section 3.3).

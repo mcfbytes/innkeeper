@@ -12,6 +12,7 @@ mod land;
 mod logon;
 mod mail;
 mod message;
+mod money;
 mod objects;
 mod player;
 mod presence;
@@ -25,7 +26,8 @@ pub use account::{Account, AccountBook, Enrolment, Refusal};
 pub use error::MessageError;
 pub use host_time::{Clock, FixedClock, HostTime, SystemClock};
 pub use ids::{
-    AccountId, ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, Sid, Stamp,
+    AccountId, ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, Money, Sid,
+    Stamp,
 };
 pub use land::LandCatalog;
 pub use message::{
@@ -33,9 +35,9 @@ pub use message::{
     EncodedPassword, Envelope, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest,
     HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory, LandEntry, LetterRef,
     ListedLetter, Login, LoginAck, LoginNakReason, LoginStatus, MailFault, MailReply, MailRequest,
-    MailboxAnswer, MailboxRequest, MessagePosition, Multicast, Nak, Notice, ObjExists, ObjectKind,
-    ObjectLocated, Occupancy, OutgoingLetter, PasswordSource, PlayStatus, ReadStep, SendMessage,
-    SetInt, SetPersona, SetStr,
+    MailboxAnswer, MailboxRequest, MessagePosition, MoneyReply, Multicast, Nak, Notice, ObjExists,
+    ObjectKind, ObjectLocated, Occupancy, OutgoingLetter, PasswordSource, PlayStatus, ReadMoney,
+    ReadStep, SaveMoney, SendMessage, SetInt, SetPersona, SetStr,
 };
 pub use message::{
     InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,

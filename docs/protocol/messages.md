@@ -231,7 +231,7 @@ Kind 6 and every other value are errors.
 | 37 | `EMMsg` | both | C→H `b 37, b sub, w sid, w…`; H→C `b 37, b whichCmd, w toSID, w lowWord @4, w highWord @6, w status @8, …` | 17 boxes of an account (`w low, w high` of the account number; reply: boxes as word pairs from byte 8), 18 new-mail check (box; reply `w status` @8, bit 0 mail icon), 19 list a box (reply: 47-byte rows from byte 8), 20, 21, 24 send letter (`"bbwwwawwawaaa"` envelope; Ack 37/sub with `b ?, w low, w high` of the receiving box), 25 read (reply: `w idLow, w idHigh` @8, text @12), 26 delete, 27 forward (Ack 37/27), 30 form to a service box (`"AcctUpdate"`, `"MemberServ"`), 31 services, 32 system list (H→C records from 8, saved as `syslst.dat`); Nak 37/sub is `b 1, b ?, w toSID, b 37, b sub, b fault @6, w low @7, w high @9`. Host: `ClientMessage::Mail`, `HostMessage::Mail` (`docs/server/mail.md`; `golden/mail.txt`). Letters are the client's bytes; the host reads the addressee's box and the letter id. Own box only INFERRED, 18 status bits INFERRED, empty 31 and 32 lists INFERRED, 30 dropped | CONFIRMED layouts; host replies INFERRED |
 | 38 | `HintMsg` | both | C→H `b 38, b sub, w roomSID, b ×4`; H→C `b 38, b whichCmd, w toSID, b which @4, a @5` | hint room (`script.135`) | CONFIRMED |
 | 39 | `HostFile` | H→C | `b 39, b whichCmd, body @2` | — (no handler found) | CONFIRMED layout |
-| 40 | `UserInfoMsg` | both | C→H `b 40, b sub, …`; H→C `b 40, b whichCmd, w msgType @4, w whichSub @6` | 4 set name (`s` at 2), 3 read money, 2 save money (`w sid, w 1, w 1, w low, w high`, CasinoLand `script.000`). Host: sub 4 decodes as `ClientMessage::SetPersona` (`golden/user_info.txt`), `innkeeperd` renames the session's persona and sends no reply (the live client carried on, `captures.md` 6.185, `PERSONA_SET_UNANSWERED_ASSUMED`); subs 2 and 3 are not decoded | CONFIRMED; host reply INFERRED |
+| 40 | `UserInfoMsg` | both | C→H `b 40, b sub, …`; H→C `b 40, b whichCmd, w sid @2, w msgType @4, w whichSub @6 [, w low @8, w high @10]` | 4 set name (`s` at 2), 3 read money (request `bbwww` with no amount), 2 save money (`w sid, w 1, w 1, w low, w high`), the last two from CasinoLand `script.000` (section 3.3.1). Host: sub 4 decodes as `ClientMessage::SetPersona`, `innkeeperd` renames the session's persona and sends no reply (the live client carried on, `captures.md` 6.185, `PERSONA_SET_UNANSWERED_ASSUMED`); subs 2 and 3 decode as `ClientMessage::{SaveMoney, ReadMoney}` and `HostMessage::Money` answers a read (`golden/user_info.txt`) | CONFIRMED layouts; host reply INFERRED |
 | 41 | `ObjExists` | both | C→H `b 41, b 0, w sid, w sid, a name`; H→C body @6 | conference name check (`GotoConference::init`) | CONFIRMED |
 | 44 | password | C→H | `b 44, b 2, w sid, a[10] encoded password` | change password (`script.095` export 5); Ack 44/1 or 44/2 makes `RoomZeroHandler` store it in `PASS_SET.DTA`. Host: `ClientMessage::ChangePassword`; `innkeeperd` stores it, clears the expired flag and answers Ack 44/1 to the SID (`golden/logon_policy.txt`) | CONFIRMED layout; host reply INFERRED |
 | 45 | `NewBoxHandler` | both | C→H `b 45, b 1, w sid`; H→C `b 45, b whichCmd, w toSID, b status @4, w low @5, w high @7` | 1 assign mailbox: status 1 = mailbox number low/high (written to `mail.cfg`), 2–6 errors (4 prints "busy creating a mail box"). Host: `ClientMessage::NewMailbox`, `HostMessage::Mailbox`; the number comes from `Store::assign_mailbox` and is stable; the open book answers status 2, a failing store status 4 (INFERRED) | CONFIRMED layout; host replies INFERRED |
@@ -243,6 +243,52 @@ Kind 6 and every other value are errors.
 | 55 | signup | C→H | `b 55, b 1, w cookie, b 1, a form` | online signup form (`script.012 MakeConnection`); Ack 55/1 returns the new account number at w@6/w@8 | CONFIRMED |
 | 59 | Login with Prodigy ID | C→H | Login plus `s prodigyId` | — | CONFIRMED |
 | 147 | `SysOpCmd` | H→C | `b 0x93, b msgType, body @2`; target is always the SysOp object | operator commands | CONFIRMED layout |
+
+### 3.3.1 The CasinoLand bankroll (40/3 and 40/2)
+
+The client keeps its bankroll in an encrypted file of its own, `ll$$<account>.dat`, and talks to the host
+only when that file is not there. `LL/script.000 ReadMoneyFile::doit` builds the name from the account
+number, opens the file, and, when the open fails, sends the read request with
+`TSN(4, "bbwww", 40, 3, global2.sid, 1, 1)`. The reply is handled by `LL::handleMsg`, which accepts
+`command` 40, `whichCmd` 3, `msgType` 1 and `whichSub` 1 and **only when that same open failed** takes
+the amount from the message; when the file opened, its value stands. A host reply therefore wins
+exactly when the client has no local copy.
+
+The reply is built by the message class `class_7f` (`hub/type31.559`): `command` at byte 0, `whichCmd` at
+byte 1, `msgType` as the word at 4, `whichSub` as the word at 6, and, when `msgType` is 1, a 32-bit value
+made by `new class_9(word@10, word@8)` — the high word at 10, the low word at 8, because `class_9::set`
+stores its first argument in `highWord`. It does not read bytes 2 and 3; section 2.1 lists the message
+among those delivered to `SID(3, 0)`. Byte 1 is the `whichCmd`, so each reply below answers the request
+above it.
+
+| Direction | Bytes | Who |
+|---|---|---|
+| C→H | `b 40, b 3, w sid, w 1, w 1` (8 bytes) | `ReadMoneyFile::doit`, with no local file |
+| H→C | `b 40, b 3, w sid, w 1, w 1, w low, w high` (12 bytes) | the answer; the client applies it only without a local file |
+| C→H | `b 40, b 2, w sid, w 1, w 1, w low, w high` (12 bytes) | `MoneyLongInt::doit` |
+| H→C | `b 0, b 0, w sid, b 40, b 2` | the Ack that ends the client's wait |
+
+`sid` is the requester's game object (`global2.sid`) and comes first in both directions, so a save and a
+read reply are the same bytes. The two words between it and the amount are the message type and the
+variant, 1 in every request the client sends.
+
+A save is followed by a wait: `MoneyLongInt::dispose` calls `proc_14`, which loops on the event queue and
+returns as soon as an Ack (command 0) or a Nak (command 1) naming `whichCmd` 40 arrives. It never looks
+at `whichSub`. A host that stays silent leaves the client in that loop (about 420 turns of `Wait(1)`)
+before it carries on, so a save must be answered even when nothing was stored.
+
+**The starting bankroll.** `LL/script.120`'s waiting room, when the session has no bankroll object yet,
+creates `new MoneyLongInt(15, 0x4240)` for a player whose `global82` is 3 and a zeroed one otherwise.
+`class_9` puts the first argument in `highWord`, so the amount is 0x000F4240 = 1,000,000. `global82` is
+computed in `LL/script.101` from the login Ack's `userFlags`: bit 4 gives 3, bit 128 gives 2, bit 2 gives
+1, anything else 0. Bit 4 is the value the directory calls "Unrestricted CasinoLand" in section 6, but
+that is the land row's flag byte and this is the account's, so the two are separate fields. The client's
+own seed therefore matters only when no reply arrives; `innkeeperd` answers a read for an account it has
+no balance for with the same 1,000,000 (`MONEY_STARTING_BALANCE_ASSUMED`).
+
+The layouts are CONFIRMED (both send sites, the reply class and the read request seen live). That the
+original host answered at all is INFERRED: no capture of a reply exists, and the two requests reached a
+host that did not decode them.
 
 ## 4. Logon
 
@@ -518,6 +564,10 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
 - Field meanings of `GrpGetProp` (31) and `SetMsg` (33) replies, and the record format of the system
   list (`EMMsg` 32).
 - `GameRights` (23), `HostFile` (39) and `GameVersion` (29) have classes but no handler in any land.
+- How the original host answered a money read or save, and what it gave an account it had nothing for.
+  `innkeeperd` reports the 1,000,000 the client seeds itself with, keeps what a save carries, and acks a
+  save with `whichSub` 2 (`MONEY_STARTING_BALANCE_ASSUMED`). Bytes 2 and 3 of the read reply are unread
+  by the client's class for it; they hold the requester's SID, the value the request itself carried.
 - How the host derives the password check value from what the client sends, and what byte 11 of the
   Login password field holds.
 - The DOS games' shared-block offsets (section 5.3) disagree with the LSCI layout.
@@ -537,6 +587,11 @@ A second pass (2026-10-04) checked the tool's results against the raw disassembl
   `proc_82` and `script.055 proc_24`.
 - The login Ack handling (`Dialing::handleMsg +0x0319`..`+0x039C`), including the level bits.
 - GOLF's message bytes, disassembled with capstone at the four image offsets in section 9.
+
+A third pass (2026-10-14) read the CasinoLand money path in `LL/script.000` (`ReadMoneyFile::doit`,
+`MoneyLongInt::doit` and `dispose`, `proc_14`, `LL::handleMsg`), `LL/script.120`'s waiting room,
+`LL/script.101`'s flag-to-`global82` mapping, `class_9::set/init`, and the message class `class_7f` in
+`hub/type31.559`, and checked the two requests against the payloads a live session sent (section 3.3.1).
 
 Live (2026-10-05, `docs/protocol/captures.md` sections 9 to 11): the logon of section 4.2, the land
 tables of section 6 and the Clubhouse entry of section 5.4 against the stock client. No capture of the

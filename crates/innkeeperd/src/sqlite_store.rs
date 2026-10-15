@@ -5,7 +5,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use innkeeper_world::{
     AccountId, AccountRecord, BoardId, EncodedPassword, Letter, LetterId, LoginStatus,
-    MailboxNumber, Post, PostId, Store, StoreError,
+    MailboxNumber, Money, Post, PostId, Store, StoreError,
 };
 use rusqlite::types::Type;
 use rusqlite::{params, Connection, Row};
@@ -36,6 +36,13 @@ const SCHEMA: &str = "
         body BLOB NOT NULL
     );
     CREATE INDEX IF NOT EXISTS posts_by_board ON posts(board);
+    /* No foreign key: a bankroll is a value under an account number, and an open book has no rows
+       to point at (docs/server/store.md section 2). A database made before this table simply gains
+       it on the next open. */
+    CREATE TABLE IF NOT EXISTS money (
+        account INTEGER PRIMARY KEY,
+        amount INTEGER NOT NULL
+    );
 ";
 
 /// `Store` over a SQLite file or an in-memory database; one connection behind a mutex.
@@ -139,6 +146,27 @@ impl Store for SqliteStore {
             0 => Err(StoreError::UnknownAccount(id)),
             _ => Ok(()),
         }
+    }
+
+    fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError> {
+        let connection = self.connection();
+        let mut statement = connection
+            .prepare_cached("SELECT amount FROM money WHERE account = ?1")
+            .map_err(backend)?;
+        let mut rows = statement
+            .query_map([id.0], |row| Ok(Money(row.get(0)?)))
+            .map_err(backend)?;
+        rows.next().transpose().map_err(backend)
+    }
+
+    fn set_money(&self, id: AccountId, amount: Money) -> Result<(), StoreError> {
+        self.connection()
+            .execute(
+                "INSERT OR REPLACE INTO money (account, amount) VALUES (?1, ?2)",
+                params![id.0, amount.0],
+            )
+            .map_err(backend)?;
+        Ok(())
     }
 
     fn assign_mailbox(&self, id: AccountId) -> Result<MailboxNumber, StoreError> {
@@ -300,5 +328,30 @@ mod tests {
         let file = TempDatabase::new();
         file.open();
         file.open();
+    }
+
+    /// A database the host wrote before the bankroll existed keeps its rows and gains the table.
+    #[test]
+    fn a_database_from_before_the_bankroll_table_gains_it() {
+        let file = TempDatabase::new();
+        let before_money = SCHEMA
+            .split("CREATE TABLE IF NOT EXISTS money")
+            .next()
+            .unwrap();
+        let old = Connection::open(&file.0).unwrap();
+        old.execute_batch(before_money).unwrap();
+        old.execute(
+            "INSERT INTO accounts VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
+            [],
+        )
+        .unwrap();
+        drop(old);
+
+        let store = file.open();
+        let account = store.account(AccountId(1)).unwrap().unwrap();
+        assert_eq!(account.persona, "guybrush");
+        assert_eq!(store.money(AccountId(1)).unwrap(), None);
+        store.set_money(AccountId(1), Money(247)).unwrap();
+        assert_eq!(file.open().money(AccountId(1)).unwrap(), Some(Money(247)));
     }
 }

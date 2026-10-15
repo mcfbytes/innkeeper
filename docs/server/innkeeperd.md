@@ -142,6 +142,7 @@ DATA frame per client message.
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory with each row's version range, `admits(land_type, version)` against that range, and occupancy counted from the object store (`current` is the member count of the land's waiting room, `maximum` the catalog's 64) |
 | `mail` | the mailbox assignment (45/1) and the `EMMsg` requests (37) over the store: new-mail check, listing, send, read, delete, forward. See [mail.md](mail.md) |
+| `money` | the CasinoLand bankroll: a 40/3 read answered from the store with the starting 1,000,000 for an account that has none, and a 40/2 save stored and acked. See [store.md](store.md) section 5 |
 | `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4) |
 | `rpg` | Yserbius and Twinion: the title table (land type, version, land size), the 41/2 service lookup, the place a land joinNet sets and the map groups shared within it, the land version gate, no echo of RPG sends. See [yserbius.md](../protocol/yserbius.md) |
@@ -149,7 +150,7 @@ DATA frame per client message.
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
-| `store` | `Store`: accounts, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
+| `store` | `Store`: accounts, bankrolls, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
 | `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
 
 What the host answers (`docs/protocol/messages.md` for the layouts):
@@ -169,6 +170,8 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
 | 47/1 | occupancy for the same lands: maximum 64, current the number of members in the land's waiting room (0 for a land nobody entered; the room itself holds 128, the size of the stock joinNet) |
 | 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`); the name replaces the account's persona for the session and is not written to the store |
+| 40/3 | the bankroll from the store as `HostMessage::Money`; 1,000,000 (`MONEY_STARTING_BALANCE_ASSUMED`) for an account with no balance yet, and nothing at all when the store fails, so the client keeps its own copy |
+| 40/2 | Ack 40/2 after the bankroll is stored, because the client waits for a reply naming command 40; Nak 40/2 with a text when the store fails |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |
 | 45/1 | the account's mailbox number (status 1), assigned once and then stable; status 2 on the open book and 4 when the store fails |
