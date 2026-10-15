@@ -1,25 +1,32 @@
 //! WebSocket ingress for the browser client: binary messages carry the raw serial bytes of one
-//! legacy line session (docs/server/innkeeperd.md section 2).
+//! legacy line session (docs/server/innkeeperd.md section 2) and text messages are the save
+//! channel's JSON control messages (docs/server/saves.md).
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures_util::{SinkExt, StreamExt};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
 use tokio::net::TcpStream;
+use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{self, Message};
 use tokio_tungstenite::WebSocketStream;
 use tracing::{debug, info, warn};
 
+use innkeeper_world::AccountId;
+
 use crate::connection::{serve_line, ConnectionSettings, READ_CHUNK};
+use crate::save_channel::SaveChannel;
 
 /// A browser that opens the socket but never finishes the upgrade is dropped after this.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-/// Serial bytes arrive a few at a time; anything larger is not a modem line.
-const MAX_MESSAGE_SIZE: usize = 64 * 1024;
+/// Serial bytes arrive a few at a time; a binary message larger than this is not a modem line.
+const MAX_SERIAL_MESSAGE: usize = 64 * 1024;
+/// A save file is at most 1 MiB, 4/3 of that as base64 in a JSON text message.
+const MAX_MESSAGE_SIZE: usize = 2 * 1024 * 1024;
 const LINE_BUFFER: usize = 4 * READ_CHUNK;
 
 #[derive(Debug, Error)]
@@ -28,6 +35,8 @@ enum RelayError {
     HandshakeTimedOut,
     #[error("websocket: {0}")]
     Socket(#[from] tungstenite::Error),
+    #[error("a binary message of {0} bytes is not serial data")]
+    SerialTooLarge(usize),
     #[error("line: {0}")]
     Line(#[from] io::Error),
 }
@@ -50,7 +59,12 @@ pub(crate) async fn serve_websocket(
     };
     info!(%peer, "websocket upgraded");
     let (line, session_end) = tokio::io::duplex(LINE_BUFFER);
-    let (relayed, ()) = tokio::join!(relay(socket, line), serve_line(session_end, peer, settings));
+    let (logon, signed_on) = watch::channel(None);
+    let saves = SaveChannel::new(Arc::clone(&settings.world.store));
+    let (relayed, ()) = tokio::join!(
+        relay(socket, line, saves, signed_on),
+        serve_line(session_end, peer, settings, Some(logon))
+    );
     if let Err(error) = relayed {
         warn!(%error, %peer, "websocket relay stopped");
     }
@@ -67,8 +81,22 @@ async fn upgrade(stream: TcpStream) -> Result<WebSocketStream<TcpStream>, RelayE
     }
 }
 
+fn now_millis() -> u64 {
+    let since_epoch = SystemTime::now().duration_since(UNIX_EPOCH);
+    since_epoch.map_or(0, |elapsed| {
+        u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+    })
+}
+
 /// Copies bytes both ways until either side ends; dropping `line` then ends the other side too.
-async fn relay(socket: WebSocketStream<TcpStream>, line: DuplexStream) -> Result<(), RelayError> {
+/// Text messages go to the save channel, which learns the account from `signed_on`.
+async fn relay(
+    socket: WebSocketStream<TcpStream>,
+    line: DuplexStream,
+    mut saves: SaveChannel,
+    mut signed_on: watch::Receiver<Option<AccountId>>,
+) -> Result<(), RelayError> {
+    let mut watching = true;
     let (mut to_browser, mut from_browser) = socket.split();
     let (mut from_session, mut to_session) = tokio::io::split(line);
     let mut chunk = vec![0; READ_CHUNK];
@@ -77,10 +105,28 @@ async fn relay(socket: WebSocketStream<TcpStream>, line: DuplexStream) -> Result
             message = from_browser.next() => {
                 let Some(message) = message else { return Ok(()) };
                 match message? {
+                    Message::Binary(bytes) if bytes.len() > MAX_SERIAL_MESSAGE => {
+                        return Err(RelayError::SerialTooLarge(bytes.len()));
+                    }
                     Message::Binary(bytes) => to_session.write_all(&bytes).await?,
                     Message::Close(_) => return Ok(()),
-                    Message::Text(text) => debug!(len = text.len(), "ignoring a text message"),
+                    Message::Text(text) => {
+                        debug!(len = text.len(), "save channel request");
+                        for reply in saves.handle(&text, now_millis()) {
+                            to_browser.send(Message::text(reply)).await?;
+                        }
+                    }
                     Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
+                }
+            }
+            changed = signed_on.changed(), if watching => {
+                if changed.is_err() {
+                    watching = false;
+                    continue;
+                }
+                let account = *signed_on.borrow_and_update();
+                for reply in saves.set_account(account) {
+                    to_browser.send(Message::text(reply)).await?;
                 }
             }
             read = from_session.read(&mut chunk) => {
@@ -98,9 +144,12 @@ async fn relay(socket: WebSocketStream<TcpStream>, line: DuplexStream) -> Result
 mod tests {
     use super::*;
 
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use base64::Engine;
     use innkeeper_session::SessionConfig;
     use innkeeper_world::World;
     use pad_thai::LineKind;
+    use serde_json::json;
     use tokio::net::TcpListener;
     use tokio_tungstenite::client_async;
 
@@ -145,6 +194,8 @@ mod tests {
                 .unwrap()
             {
                 Message::Binary(bytes) => received.extend_from_slice(&bytes),
+                // The save channel's manifest follows a logon; it is checked in its own tests.
+                Message::Text(_) => {}
                 other => panic!("unexpected message {other:?}"),
             }
         }
@@ -172,12 +223,97 @@ mod tests {
         expect_bytes(&mut socket, &[&link_ack[..], &LOGIN_ACK_FRAME].concat()).await;
     }
 
+    async fn log_on(socket: &mut Browser) {
+        send(socket, b"@D\r\r").await;
+        expect_bytes(socket, b"\r\nTERMINAL=\r\n@").await;
+        send(socket, b"c SIERRA\r").await;
+        expect_bytes(socket, b"\r\nSIERRA CONNECTED\r\n").await;
+        send(socket, &CAPTURED_LOGIN_FRAME).await;
+    }
+
+    /// The next text message as JSON; binary line bytes in between are skipped.
+    async fn next_json(socket: &mut Browser) -> serde_json::Value {
+        loop {
+            let next = tokio::time::timeout(Duration::from_secs(5), socket.next());
+            match next
+                .await
+                .expect("server answered in time")
+                .unwrap()
+                .unwrap()
+            {
+                Message::Text(text) => return serde_json::from_str(&text).unwrap(),
+                Message::Binary(_) => {}
+                other => panic!("unexpected message {other:?}"),
+            }
+        }
+    }
+
+    async fn ask(socket: &mut Browser, request: serde_json::Value) -> serde_json::Value {
+        socket
+            .send(Message::text(request.to_string()))
+            .await
+            .unwrap();
+        next_json(socket).await
+    }
+
     #[tokio::test]
-    async fn text_messages_are_ignored_and_the_line_carries_on() {
+    async fn the_save_channel_refuses_before_logon_and_the_line_carries_on() {
         let mut socket = open(serve_on_loopback().await).await;
-        socket.send(Message::text("@D\r\r")).await.unwrap();
+        let reply = ask(&mut socket, json!({"op": "manifest", "id": 7})).await;
+        assert_eq!(
+            (reply["op"].as_str(), reply["code"].as_str()),
+            (Some("error"), Some("not_logged_on"))
+        );
+        assert_eq!(reply["id"], 7);
         send(&mut socket, b"@D\r\r").await;
         expect_bytes(&mut socket, b"\r\nTERMINAL=\r\n@").await;
+    }
+
+    #[tokio::test]
+    async fn the_manifest_follows_logon_and_saves_round_trip() {
+        let address = serve_on_loopback().await;
+        let mut socket = open(address).await;
+        log_on(&mut socket).await;
+        let manifest = next_json(&mut socket).await;
+        assert_eq!(manifest["op"], "manifest");
+        assert_eq!(manifest["files"], json!([]));
+        let account = manifest["account"].clone();
+
+        let path = "inn/yserbius/mychars.dat";
+        let big: Vec<u8> = (0..168_000u32).map(|n| (n % 251) as u8).collect();
+        let put = json!({"op": "put", "path": path, "base": 0, "mtime": 1000, "data": BASE64.encode(&big)});
+        let stored = ask(&mut socket, put).await;
+        assert_eq!(
+            (stored["op"].as_str(), stored["version"].as_u64()),
+            (Some("stored"), Some(1))
+        );
+        assert_eq!(stored["path"], "INN\\YSERBIUS\\MYCHARS.DAT");
+        assert_eq!(stored["hash"], innkeeper_world::saves::hash_hex(&big));
+
+        let file = ask(&mut socket, json!({"op": "get", "path": path})).await;
+        assert_eq!(BASE64.decode(file["data"].as_str().unwrap()).unwrap(), big);
+        let listed = ask(&mut socket, json!({"op": "manifest"})).await;
+        assert_eq!(listed["files"][0]["size"], 168_000);
+
+        // Another line that signs on as the same account finds the file in its manifest.
+        let mut second = open(address).await;
+        log_on(&mut second).await;
+        let manifest = next_json(&mut second).await;
+        assert_eq!(manifest["account"], account);
+        assert_eq!(manifest["files"][0]["version"], 1);
+    }
+
+    #[tokio::test]
+    async fn an_oversized_binary_message_closes_the_line() {
+        let mut socket = open(serve_on_loopback().await).await;
+        send(&mut socket, &vec![0; MAX_SERIAL_MESSAGE + 1]).await;
+        let next = tokio::time::timeout(Duration::from_secs(5), socket.next())
+            .await
+            .unwrap();
+        assert!(
+            matches!(next, None | Some(Ok(Message::Close(_)) | Err(_))),
+            "{next:?}"
+        );
     }
 
     #[tokio::test]

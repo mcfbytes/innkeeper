@@ -3,11 +3,12 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use innkeeper_session::SessionError;
 use innkeeper_world::{
-    ClientMessage, ConnectionId, Delivery, HostMessage, MessageError, ObjectStore, PlayerSession,
-    World,
+    AccountId, ClientMessage, ConnectionId, Delivery, HostMessage, MessageError, ObjectStore,
+    PlayerSession, World,
 };
 use int14h::Int14hError;
 use thiserror::Error;
+use tokio::sync::watch;
 use tsn_link::LinkError;
 
 use crate::connection::ConnectionSettings;
@@ -23,7 +24,11 @@ pub(crate) struct Host<'s> {
     connection: ConnectionId,
     inbox: Inbox<'s>,
     player: PlayerSession,
+    logon: Option<LogonSignal>,
 }
+
+/// Tells the connection's other tasks which account its line session is signed on as.
+pub(crate) type LogonSignal = watch::Sender<Option<AccountId>>;
 
 /// One step of a message exchange, for the log and the capture file.
 #[derive(Debug)]
@@ -61,6 +66,23 @@ impl<'s> Host<'s> {
             connection,
             inbox: settings.switchboard.register(connection),
             player: PlayerSession::new(),
+            logon: None,
+        }
+    }
+
+    /// Publishes the signed-on account (or `None` after a hang-up) on `signal` from now on.
+    pub(crate) fn announce_logon(&mut self, signal: LogonSignal) {
+        self.logon = Some(signal);
+    }
+
+    fn publish_logon(&self) {
+        if let Some(signal) = &self.logon {
+            let account = self.player.account();
+            signal.send_if_modified(|shown| {
+                let changed = *shown != account;
+                *shown = account;
+                changed
+            });
         }
     }
 
@@ -82,6 +104,7 @@ impl<'s> Host<'s> {
             .handle(self.world, &mut objects, self.connection, &received);
         outgoing.extend(self.dispatch(caused));
         drop(objects);
+        self.publish_logon();
         Answer {
             exchange: vec![Exchange::Received(received)],
             outgoing,
@@ -100,6 +123,9 @@ impl<'s> Host<'s> {
         released
             .into_iter()
             .for_each(|delivery| self.switchboard.deliver(delivery));
+        if let Some(signal) = &self.logon {
+            signal.send_replace(None);
+        }
     }
 
     /// Hands other connections' deliveries to the switchboard and returns this connection's own.

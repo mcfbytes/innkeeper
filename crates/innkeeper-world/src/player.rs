@@ -2,7 +2,7 @@ use tracing::{info, info_span, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::{
-    bbs, logon, mail, money, presence, red_baron, router, rpg, Account, ClientMessage,
+    bbs, logon, mail, money, presence, red_baron, router, rpg, Account, AccountId, ClientMessage,
     ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, Login, ObjectStore, Place,
     Unexplained, UnexplainedCommand, World,
 };
@@ -160,6 +160,14 @@ impl PlayerSession {
     pub fn persona(&self) -> Option<&str> {
         match &self.state {
             PlayerState::LoggedIn(player) => Some(&player.account.persona),
+            PlayerState::AwaitingLogin => None,
+        }
+    }
+
+    /// The account the Login opened; none before the Login is accepted.
+    pub fn account(&self) -> Option<AccountId> {
+        match &self.state {
+            PlayerState::LoggedIn(player) => Some(player.account.id),
             PlayerState::AwaitingLogin => None,
         }
     }

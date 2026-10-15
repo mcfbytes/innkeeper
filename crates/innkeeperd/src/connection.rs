@@ -14,7 +14,7 @@ use tracing::{debug, info, info_span, warn, Instrument};
 use tsn_link::{LinkEvent, Message};
 
 use crate::capture::{Capture, Direction};
-use crate::host::{Exchange, Host, ReplyError};
+use crate::host::{Exchange, Host, LogonSignal, ReplyError};
 use crate::switchboard::Switchboard;
 
 pub(crate) const READ_CHUNK: usize = 4096;
@@ -60,19 +60,24 @@ pub(crate) async fn serve_connection(
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
-    serve_line(stream, peer, settings).await;
+    serve_line(stream, peer, settings, None).await;
 }
 
 /// Runs a legacy line session over any byte stream: a TCP socket or a WebSocket's bytes.
-pub(crate) async fn serve_line<S>(stream: S, peer: SocketAddr, settings: Arc<ConnectionSettings>)
-where
+/// With a `logon` signal, it reports the account the Login opened, and `None` after the hang-up.
+pub(crate) async fn serve_line<S>(
+    stream: S,
+    peer: SocketAddr,
+    settings: Arc<ConnectionSettings>,
+    logon: Option<LogonSignal>,
+) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let id = settings.new_connection();
     let span = info_span!("session", id = id.0, %peer);
     async move {
         info!("client connected");
-        match drive(stream, peer, id, &settings).await {
+        match drive(stream, peer, id, &settings, logon).await {
             Ok(()) => info!("client hung up"),
             Err(error) => warn!(%error, "connection failed"),
         }
@@ -86,6 +91,7 @@ async fn drive<S>(
     peer: SocketAddr,
     id: ConnectionId,
     settings: &ConnectionSettings,
+    logon: Option<LogonSignal>,
 ) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -93,6 +99,9 @@ where
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
     let mut host = Host::new(settings, id);
+    if let Some(signal) = logon {
+        host.announce_logon(signal);
+    }
     let session = Session::new(settings.session);
     let result = pump(&mut stream, session, &mut host, &mut capture).await;
     host.hang_up();

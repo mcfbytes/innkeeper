@@ -8,7 +8,7 @@ and of SQL; the daemon supplies the durable implementation,
 
 ## 1. What is stored
 
-Four families, each as narrow as its first users need.
+Five families, each as narrow as its first users need.
 
 | Family | Key | Operations | Used by |
 |---|---|---|---|
@@ -16,6 +16,7 @@ Four families, each as narrow as its first users need.
 | money | `AccountId` | `money` (get), `set_money` | CasinoLand bankroll (commands 40/3 and 40/2) |
 | mailboxes | `MailboxNumber`, assigned per account | `assign_mailbox`, `append_letter`, `letters`, `delete_letter` | mail (`NewBoxHandler` 45, `EMMsg` 37) |
 | boards | `BoardId` | `post`, `posts` | the RPG bulletin board (command 27) |
+| saves | `AccountId`, canonical path, version | `saves`, `save_versions`, `save_read`, `save_write` | the browser client's game files ([saves.md](saves.md)) |
 
 An `AccountRecord` holds the `EncodedPassword` exactly as the client sends it, the persona name, the
 `user_flags` and `rating` words and the `LoginStatus` byte of the login Ack, and the
@@ -66,6 +67,8 @@ and post ids are `AUTOINCREMENT` row ids, which is how they stay unique and unre
 table has the account number as its primary key and holds `amount` as an integer, with the account's
 full 32 bits (SQLite's `INTEGER` is 64-bit and the values that reach it are `u32`).
 
+A save has no parent either (like the bankroll): it is a file under an account number. `save_write` hashes the content (SHA-256 hex), numbers the version per file without reusing a number, and trims to three versions with the current one always kept; the rules about what is stored and who wins are the save channel's ([saves.md](saves.md)). The `saves` table is likewise new, created on open, and gets the same in-place upgrade (`a_database_from_before_the_saves_table_gains_it`).
+
 The schema has no version column yet; the first change that alters a table adds one together with its
 migration. The bankroll did not need one: it is a new table, so a database the host wrote before it
 existed simply gains it on the next open and keeps every row it had
@@ -80,7 +83,7 @@ tests) holds the cases every `Store` must pass:
 
 - `run_all(fresh)` runs each case on a store from `fresh`: unknown ids, create and read back,
   duplicate create, password update, bankroll absent then per account (replacing, and 0 apart from
-  absent), mailbox numbering, letter order and isolation between mailboxes, arbitrary bytes (empty,
+  absent), saves (absent, per account and path, three versions kept, opaque bytes), mailbox numbering, letter order and isolation between mailboxes, arbitrary bytes (empty,
   NUL, high bit) and board order and isolation.
 - `run_persistence(reopen)` writes through one handle, drops it and checks a handle from `reopen`:
   accounts, the changed password, the bankroll, the mailbox number, the remaining letters and the

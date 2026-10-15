@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use innkeeper_world::saves::{hash_hex, SaveMeta, KEPT_VERSIONS};
 use innkeeper_world::{
     AccountId, AccountRecord, BoardId, EncodedPassword, Letter, LetterId, LoginStatus,
     MailboxNumber, Money, Post, PostId, Store, StoreError,
@@ -43,6 +44,20 @@ const SCHEMA: &str = "
         account INTEGER PRIMARY KEY,
         amount INTEGER NOT NULL
     );
+    /* Game save files per account (docs/server/saves.md). No foreign key, like money. The row with
+       current = 1 is what a download returns; the others are kept history. A version number is
+       never reused: the newest row is always kept. */
+    CREATE TABLE IF NOT EXISTS saves (
+        account INTEGER NOT NULL,
+        path TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        hash TEXT NOT NULL,
+        data BLOB NOT NULL,
+        updated_at INTEGER NOT NULL,
+        current INTEGER NOT NULL,
+        PRIMARY KEY (account, path, version)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS saves_one_current ON saves(account, path) WHERE current = 1;
 ";
 
 /// `Store` over a SQLite file or an in-memory database; one connection behind a mutex.
@@ -257,6 +272,138 @@ impl Store for SqliteStore {
             .map_err(backend)?;
         rows.collect::<Result<_, _>>().map_err(backend)
     }
+
+    fn saves(&self, id: AccountId) -> Result<Vec<SaveMeta>, StoreError> {
+        let connection = self.connection();
+        let mut statement = connection
+            .prepare_cached(&format!(
+                "SELECT {SAVE_COLUMNS} FROM saves WHERE account = ?1 AND current = 1 ORDER BY path"
+            ))
+            .map_err(backend)?;
+        let rows = statement.query_map([id.0], save_meta).map_err(backend)?;
+        rows.collect::<Result<_, _>>().map_err(backend)
+    }
+
+    fn save_versions(&self, id: AccountId, path: &str) -> Result<Vec<SaveMeta>, StoreError> {
+        let connection = self.connection();
+        let mut statement = connection
+            .prepare_cached(&format!(
+                "SELECT {SAVE_COLUMNS} FROM saves WHERE account = ?1 AND path = ?2 \
+                 ORDER BY version DESC"
+            ))
+            .map_err(backend)?;
+        let rows = statement
+            .query_map(params![id.0, path], save_meta)
+            .map_err(backend)?;
+        rows.collect::<Result<_, _>>().map_err(backend)
+    }
+
+    fn save_read(
+        &self,
+        id: AccountId,
+        path: &str,
+        version: Option<u64>,
+    ) -> Result<Option<(SaveMeta, Vec<u8>)>, StoreError> {
+        let connection = self.connection();
+        let mut statement = connection
+            .prepare_cached(&format!(
+                "SELECT {SAVE_COLUMNS}, data FROM saves WHERE account = ?1 AND path = ?2 \
+                 AND (version = ?3 OR (?3 IS NULL AND current = 1))"
+            ))
+            .map_err(backend)?;
+        let mut rows = statement
+            .query_map(params![id.0, path, version.map(signed)], |row| {
+                Ok((save_meta(row)?, row.get(6)?))
+            })
+            .map_err(backend)?;
+        rows.next().transpose().map_err(backend)
+    }
+
+    fn save_write(
+        &self,
+        id: AccountId,
+        path: &str,
+        data: &[u8],
+        modified: u64,
+        current: bool,
+    ) -> Result<SaveMeta, StoreError> {
+        let connection = self.connection();
+        let write = connection.unchecked_transaction().map_err(backend)?;
+        let (newest, held): (i64, i64) = write
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0), COUNT(*) FROM saves WHERE account = ?1 AND path = ?2",
+                params![id.0, path],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(backend)?;
+        let current = current || held == 0;
+        if current {
+            write
+                .execute(
+                    "UPDATE saves SET current = 0 WHERE account = ?1 AND path = ?2",
+                    params![id.0, path],
+                )
+                .map_err(backend)?;
+        }
+        let meta = SaveMeta {
+            path: path.to_owned(),
+            version: unsigned(newest) + 1,
+            hash: hash_hex(data),
+            size: data.len(),
+            modified,
+            current,
+        };
+        write
+            .execute(
+                "INSERT INTO saves (account, path, version, hash, data, updated_at, current) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    id.0,
+                    path,
+                    signed(meta.version),
+                    meta.hash,
+                    data,
+                    signed(modified),
+                    current
+                ],
+            )
+            .map_err(backend)?;
+        // The current version stays; the newest others fill the rest of the allowance.
+        let spare = KEPT_VERSIONS.saturating_sub(1);
+        write
+            .execute(
+                "DELETE FROM saves WHERE account = ?1 AND path = ?2 AND current = 0 AND version NOT IN \
+                 (SELECT version FROM saves WHERE account = ?1 AND path = ?2 AND current = 0 \
+                  ORDER BY version DESC LIMIT ?3)",
+                params![id.0, path, signed(spare as u64)],
+            )
+            .map_err(backend)?;
+        write.commit().map_err(backend)?;
+        Ok(meta)
+    }
+}
+
+/// The columns `save_meta` reads, in its order; `length(data)` keeps the content out of listings.
+const SAVE_COLUMNS: &str = "path, version, hash, length(data), updated_at, current";
+
+fn save_meta(row: &Row<'_>) -> rusqlite::Result<SaveMeta> {
+    Ok(SaveMeta {
+        path: row.get(0)?,
+        version: unsigned(row.get(1)?),
+        hash: row.get(2)?,
+        size: usize::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
+        modified: unsigned(row.get(4)?),
+        current: row.get(5)?,
+    })
+}
+
+/// SQLite integers are signed 64-bit; versions and times are far below the sign bit.
+fn unsigned(stored: i64) -> u64 {
+    u64::try_from(stored).unwrap_or(0)
+}
+
+fn signed(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
 }
 
 /// The row id the last insert on this connection produced, narrowed to the store's 32 bits.
@@ -353,5 +500,40 @@ mod tests {
         assert_eq!(store.money(AccountId(1)).unwrap(), None);
         store.set_money(AccountId(1), Money(247)).unwrap();
         assert_eq!(file.open().money(AccountId(1)).unwrap(), Some(Money(247)));
+    }
+
+    /// A database the host wrote before game saves existed keeps its rows and gains the table.
+    #[test]
+    fn a_database_from_before_the_saves_table_gains_it() {
+        let file = TempDatabase::new();
+        let before_saves = SCHEMA.split("/* Game save files").next().unwrap();
+        let old = Connection::open(&file.0).unwrap();
+        old.execute_batch(before_saves).unwrap();
+        old.execute("INSERT INTO money VALUES (1, 247)", [])
+            .unwrap();
+        old.execute(
+            "INSERT INTO accounts VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
+            [],
+        )
+        .unwrap();
+        drop(old);
+
+        let store = file.open();
+        assert_eq!(
+            store.account(AccountId(1)).unwrap().unwrap().persona,
+            "guybrush"
+        );
+        assert_eq!(store.money(AccountId(1)).unwrap(), Some(Money(247)));
+        assert_eq!(store.saves(AccountId(1)).unwrap(), []);
+        let path = "INN\\PLAYER.DIR";
+        store
+            .save_write(AccountId(1), path, b"dir", 9, true)
+            .unwrap();
+        let (meta, data) = file
+            .open()
+            .save_read(AccountId(1), path, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!((meta.version, data.as_slice()), (1, &b"dir"[..]));
     }
 }

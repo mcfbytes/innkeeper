@@ -19,6 +19,7 @@ mod presence;
 mod red_baron;
 pub mod router;
 mod rpg;
+pub mod saves;
 mod store;
 mod world;
 

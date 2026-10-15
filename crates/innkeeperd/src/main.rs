@@ -6,6 +6,7 @@ mod config;
 mod connection;
 mod host;
 mod int14h_listener;
+mod save_channel;
 mod server;
 mod sqlite_store;
 mod switchboard;

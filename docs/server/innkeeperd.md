@@ -69,8 +69,9 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
   `INN-Decomp` (its `docs/web.md`). It is off unless given. A connection upgrades over plain HTTP (`ws://`;
   put a TLS proxy in front for `wss://`), then is a legacy session exactly like one on `--bind`: line
   auto-detect, Hayes modem, PAD, link layer and a capture file. Binary messages carry raw bytes in both
-  directions, split anywhere; text messages are ignored; a message over 64 KiB or a handshake that takes
-  over 10 s closes the connection. Closing the WebSocket is a TCP hang-up. Any `Origin` is accepted.
+  directions, split anywhere; text messages are the save channel's JSON control messages once the line has
+  logged on ([saves.md](saves.md)); a binary message over 64 KiB (a text message over 2 MiB) or a handshake that
+  takes over 10 s closes the connection. Closing the WebSocket is a TCP hang-up. Any `Origin` is accepted.
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an

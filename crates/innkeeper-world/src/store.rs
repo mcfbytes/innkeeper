@@ -8,6 +8,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use thiserror::Error;
 
+use crate::saves::{hash_hex, SaveMeta, KEPT_VERSIONS};
 use crate::{AccountId, EncodedPassword, LoginStatus, Money};
 
 /// A mailbox number, the value the client keeps in `mail.cfg`; numbering starts at 1.
@@ -108,6 +109,31 @@ pub trait Store: fmt::Debug + Send + Sync {
     fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError>;
     /// Oldest first; empty for a board nobody has posted to.
     fn posts(&self, board: BoardId) -> Result<Vec<Post>, StoreError>;
+
+    /// The current version of each file the account has stored, ordered by path.
+    fn saves(&self, id: AccountId) -> Result<Vec<SaveMeta>, StoreError>;
+    /// Every version kept of one file, newest first; empty for a file never stored.
+    fn save_versions(&self, id: AccountId, path: &str) -> Result<Vec<SaveMeta>, StoreError>;
+    /// One version of a file with its content: the current one when `version` is `None`.
+    fn save_read(
+        &self,
+        id: AccountId,
+        path: &str,
+        version: Option<u64>,
+    ) -> Result<Option<(SaveMeta, Vec<u8>)>, StoreError>;
+    /// Keeps `data` as the next version of the file and returns its metadata. With `current` it
+    /// becomes the version a download returns and the old current stays as history; without, it is
+    /// kept as history beside the current one (it still counts against `KEPT_VERSIONS`). A file with
+    /// no versions yet always gets a current one. Paths are canonical (`saves::canonical_path`);
+    /// like a bankroll, a save needs no account row.
+    fn save_write(
+        &self,
+        id: AccountId,
+        path: &str,
+        data: &[u8],
+        modified: u64,
+        current: bool,
+    ) -> Result<SaveMeta, StoreError>;
 }
 
 /// A store that forgets everything at exit: the default for tests and a host without a data dir.
@@ -123,9 +149,17 @@ struct Tables {
     mailbox_of: HashMap<AccountId, MailboxNumber>,
     letters: BTreeMap<MailboxNumber, Vec<Letter>>,
     boards: HashMap<BoardId, Vec<Post>>,
+    saves: BTreeMap<(AccountId, String), SavedFile>,
     mailboxes_assigned: u32,
     letters_written: u32,
     posts_written: u32,
+}
+
+/// The versions kept of one file, oldest first, and the last version number handed out.
+#[derive(Debug, Default)]
+struct SavedFile {
+    last_version: u64,
+    versions: Vec<(SaveMeta, Vec<u8>)>,
 }
 
 impl MemoryStore {
@@ -241,6 +275,85 @@ impl Store for MemoryStore {
             .cloned()
             .unwrap_or_default())
     }
+
+    fn saves(&self, id: AccountId) -> Result<Vec<SaveMeta>, StoreError> {
+        let tables = self.tables();
+        let files = tables
+            .saves
+            .range((id, String::new())..)
+            .take_while(|((owner, _), _)| *owner == id);
+        Ok(files
+            .filter_map(|(_, file)| file.versions.iter().find(|(meta, _)| meta.current))
+            .map(|(meta, _)| meta.clone())
+            .collect())
+    }
+
+    fn save_versions(&self, id: AccountId, path: &str) -> Result<Vec<SaveMeta>, StoreError> {
+        let tables = self.tables();
+        let file = tables.saves.get(&(id, path.to_owned()));
+        let versions = file.map(|file| file.versions.iter().rev());
+        Ok(versions
+            .into_iter()
+            .flatten()
+            .map(|(meta, _)| meta.clone())
+            .collect())
+    }
+
+    fn save_read(
+        &self,
+        id: AccountId,
+        path: &str,
+        version: Option<u64>,
+    ) -> Result<Option<(SaveMeta, Vec<u8>)>, StoreError> {
+        let tables = self.tables();
+        let file = tables.saves.get(&(id, path.to_owned()));
+        let mut versions = file.into_iter().flat_map(|file| file.versions.iter());
+        Ok(versions
+            .find(|(meta, _)| version.map_or(meta.current, |wanted| meta.version == wanted))
+            .cloned())
+    }
+
+    fn save_write(
+        &self,
+        id: AccountId,
+        path: &str,
+        data: &[u8],
+        modified: u64,
+        current: bool,
+    ) -> Result<SaveMeta, StoreError> {
+        let mut tables = self.tables();
+        let file = tables.saves.entry((id, path.to_owned())).or_default();
+        let current = current || file.versions.is_empty();
+        file.last_version += 1;
+        if current {
+            for (meta, _) in &mut file.versions {
+                meta.current = false;
+            }
+        }
+        let meta = SaveMeta {
+            path: path.to_owned(),
+            version: file.last_version,
+            hash: hash_hex(data),
+            size: data.len(),
+            modified,
+            current,
+        };
+        file.versions.push((meta.clone(), data.to_vec()));
+        // The current version stays; the newest others fill the rest of the allowance.
+        let mut spare = KEPT_VERSIONS.saturating_sub(1);
+        let mut keep = Vec::new();
+        for entry in file.versions.drain(..).rev() {
+            if entry.0.current {
+                keep.push(entry);
+            } else if spare > 0 {
+                spare -= 1;
+                keep.push(entry);
+            }
+        }
+        keep.reverse();
+        file.versions = keep;
+        Ok(meta)
+    }
 }
 
 /// The number after `last`, counting from 1; a used-up 32-bit space is a backend fault.
@@ -257,6 +370,8 @@ pub mod conformance {
 
     const ALICE: AccountId = AccountId(100_001);
     const BOB: AccountId = AccountId(100_002);
+    const MYCHARS: &str = "INN\\YSERBIUS\\MYCHARS.DAT";
+    const AUTOMAPS: &str = "INN\\YSERBIUS\\AUTOMAPS.DAT";
 
     fn record(password: u8) -> AccountRecord {
         AccountRecord {
@@ -274,7 +389,7 @@ pub mod conformance {
 
     /// Runs every case, each on a store from `fresh`.
     pub fn run_all<S: Store>(fresh: impl Fn() -> S) {
-        let cases: [fn(&dyn Store); 9] = [
+        let cases: [fn(&dyn Store); 12] = [
             unknown_account_is_absent,
             created_account_reads_back,
             duplicate_account_is_refused,
@@ -284,6 +399,9 @@ pub mod conformance {
             letters_keep_order_and_isolation,
             letters_are_opaque_bytes,
             boards_keep_order_and_isolation,
+            saves_read_absent_then_per_account_and_path,
+            saves_keep_the_newest_versions_and_one_current,
+            saves_are_opaque_bytes,
         ];
         for case in cases {
             case(&fresh());
@@ -304,9 +422,24 @@ pub mod conformance {
             store.append_letter(mailbox, b"again").unwrap();
             store.delete_letter(mailbox, letter).unwrap();
             store.post(BoardId(3), b"first").unwrap();
+            store.save_write(ALICE, MYCHARS, b"one", 10, true).unwrap();
+            store.save_write(ALICE, MYCHARS, b"two", 20, true).unwrap();
+            store.save_write(ALICE, MYCHARS, b"old", 5, false).unwrap();
             (mailbox, letter)
         };
         let store = reopen();
+        let versions = store.save_versions(ALICE, MYCHARS).unwrap();
+        let held = |meta: &SaveMeta| (meta.version, meta.current, meta.modified);
+        assert_eq!(
+            versions.iter().map(held).collect::<Vec<_>>(),
+            [(3, false, 5), (2, true, 20), (1, false, 10)]
+        );
+        let (meta, data) = store.save_read(ALICE, MYCHARS, None).unwrap().unwrap();
+        assert_eq!((meta.version, data.as_slice()), (2, &b"two"[..]));
+        let next = store
+            .save_write(ALICE, MYCHARS, b"three", 30, true)
+            .unwrap();
+        assert_eq!(next.version, 4, "numbering carries on");
         let kept = store.account(ALICE).unwrap().unwrap();
         assert_eq!(kept.password, EncodedPassword([2; 10]));
         assert!(!kept.password_expired);
@@ -440,6 +573,87 @@ pub mod conformance {
             [b"a|first".to_vec(), vec![0, 1, 2]]
         );
         assert_eq!(store.posts(BoardId(2)).unwrap().len(), 1);
+    }
+
+    fn saves_read_absent_then_per_account_and_path(store: &dyn Store) {
+        assert_eq!(store.saves(ALICE).unwrap(), []);
+        assert_eq!(store.save_read(ALICE, MYCHARS, None).unwrap(), None);
+        assert_eq!(store.save_versions(ALICE, MYCHARS).unwrap(), []);
+        // A save needs no account row, like a bankroll.
+        let first = store
+            .save_write(ALICE, MYCHARS, b"hello", 1_000, true)
+            .unwrap();
+        assert_eq!(first.version, 1);
+        assert!(first.current);
+        assert_eq!((first.size, first.modified), (5, 1_000));
+        assert_eq!(first.hash, crate::saves::hash_hex(b"hello"));
+        store
+            .save_write(ALICE, AUTOMAPS, b"maps", 2_000, true)
+            .unwrap();
+        store.save_write(BOB, MYCHARS, b"bob", 3_000, true).unwrap();
+        let listed = store.saves(ALICE).unwrap();
+        let paths: Vec<_> = listed.iter().map(|meta| meta.path.as_str()).collect();
+        assert_eq!(paths, [AUTOMAPS, MYCHARS], "ordered by path");
+        assert_eq!(store.saves(BOB).unwrap().len(), 1);
+        let (_, data) = store.save_read(BOB, MYCHARS, None).unwrap().unwrap();
+        assert_eq!(data, b"bob");
+        let (meta, data) = store.save_read(ALICE, MYCHARS, Some(1)).unwrap().unwrap();
+        assert_eq!((meta, data.as_slice()), (first, &b"hello"[..]));
+        assert_eq!(store.save_read(ALICE, MYCHARS, Some(9)).unwrap(), None);
+    }
+
+    fn saves_keep_the_newest_versions_and_one_current(store: &dyn Store) {
+        for (n, text) in [b"a", b"b", b"c", b"d"].into_iter().enumerate() {
+            let version = store
+                .save_write(ALICE, MYCHARS, text, 10 + n as u64, true)
+                .unwrap();
+            assert_eq!(version.version, n as u64 + 1);
+        }
+        let held = |store: &dyn Store| -> Vec<(u64, bool)> {
+            let versions = store.save_versions(ALICE, MYCHARS).unwrap();
+            versions
+                .iter()
+                .map(|meta| (meta.version, meta.current))
+                .collect()
+        };
+        assert_eq!(
+            held(store),
+            [(4, true), (3, false), (2, false)],
+            "three kept"
+        );
+        assert_eq!(store.save_read(ALICE, MYCHARS, Some(1)).unwrap(), None);
+        // A version kept beside the current one does not replace it, and pushes out the oldest.
+        let beside = store.save_write(ALICE, MYCHARS, b"x", 1, false).unwrap();
+        assert_eq!((beside.version, beside.current), (5, false));
+        assert_eq!(held(store), [(5, false), (4, true), (3, false)]);
+        let (meta, data) = store.save_read(ALICE, MYCHARS, None).unwrap().unwrap();
+        assert_eq!((meta.version, data.as_slice()), (4, &b"d"[..]));
+        // A newer current can arrive while history is full: the old current becomes history.
+        store.save_write(ALICE, MYCHARS, b"e", 50, true).unwrap();
+        assert_eq!(held(store), [(6, true), (5, false), (4, false)]);
+        // The first version of a file is current even if asked otherwise.
+        let first = store.save_write(ALICE, AUTOMAPS, b"m", 1, false).unwrap();
+        assert!(first.current);
+        assert_eq!(store.saves(ALICE).unwrap().len(), 2);
+    }
+
+    fn saves_are_opaque_bytes(store: &dyn Store) {
+        let odd: Vec<u8> = (0..=255).chain([0, 0, 0xFF]).collect();
+        store.save_write(ALICE, MYCHARS, &odd, 1, true).unwrap();
+        store.save_write(ALICE, AUTOMAPS, b"", 1, true).unwrap();
+        let (_, data) = store.save_read(ALICE, MYCHARS, None).unwrap().unwrap();
+        assert_eq!(data, odd);
+        let (meta, data) = store.save_read(ALICE, AUTOMAPS, None).unwrap().unwrap();
+        assert_eq!((data.len(), meta.size), (0, 0));
+        let big = vec![0xA5; 300_000];
+        store
+            .save_write(ALICE, MYCHARS, &big, u64::from(u32::MAX) + 7, true)
+            .unwrap();
+        let (meta, data) = store.save_read(ALICE, MYCHARS, None).unwrap().unwrap();
+        assert_eq!(
+            (data == big, meta.modified),
+            (true, u64::from(u32::MAX) + 7)
+        );
     }
 }
 
