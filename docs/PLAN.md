@@ -209,6 +209,12 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   change to a logged-on account reaches the live session or is refused while it is online. Before that the
   schema needs: a schema version and migrations, the address books and mailing lists, per-game records
   (character rosters if they move server-side, ratings and standings), and an audit log of portal edits.
+- **Sign-in with common providers** (ledgered 2026-10-14, deferred): an optional OAuth 2.0 / OpenID Connect
+  landing page in the web client, before the INN sign-on, where a player creates or claims an account with
+  a common provider (Google, Microsoft, GitHub, Apple, Discord) instead of the original enrolment. The
+  provider identity maps to an account record (`accounts` gains linked identities); the page then hands
+  the client its INN id and password (written into the drive's `LSCI.CFG` and password file) so the
+  original logon runs unchanged. Local accounts keep working; the provider list is configuration.
 
 ### Deferred
 - **Red Baron and 3-D Golf:** DOSBox only, through the same server, whenever we get to them. Their server needs are game-channel relay plus host time.
