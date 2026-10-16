@@ -76,6 +76,8 @@ impl Account {
 pub enum Refusal {
     UnknownAccount,
     WrongPassword,
+    /// The operator suspended the account.
+    Suspended,
     /// The store failed; the account may well exist.
     StoreUnavailable,
 }
@@ -157,6 +159,9 @@ fn admit_stored(
     login: &Login,
 ) -> Result<Account, Failure> {
     if let Some(record) = store.account(login.account)? {
+        if store.suspended(login.account)? {
+            return Err(Failure::Refused(Refusal::Suspended));
+        }
         return admit_record(store, login, record);
     }
     if enrolment != Enrolment::Open {

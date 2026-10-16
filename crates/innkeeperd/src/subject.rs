@@ -273,6 +273,50 @@ fn deletion_plan(store: &SqliteStore, id: AccountId) -> Result<DeletionPlan, Sub
     })
 }
 
+/// What deleting an account would touch, for the portal's confirmation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DeletePreview {
+    pub(crate) letters_in_box: usize,
+    pub(crate) letters_sent: usize,
+    pub(crate) posts: usize,
+    pub(crate) save_versions: usize,
+}
+
+/// `None` when the account does not exist or is already disabled.
+pub(crate) fn preview_delete(
+    store: &SqliteStore,
+    id: AccountId,
+) -> Result<Option<DeletePreview>, StoreError> {
+    match deletion_plan(store, id) {
+        Ok(plan) => Ok(Some(DeletePreview {
+            letters_in_box: plan.letters_in_box,
+            letters_sent: plan.letters_sent,
+            posts: plan.posts,
+            save_versions: plan.save_versions,
+        })),
+        Err(SubjectError::Unknown(_)) => Ok(None),
+        Err(SubjectError::Database(error)) => Err(error),
+        Err(other) => Err(StoreError::backend(io::Error::other(other.to_string()))),
+    }
+}
+
+/// The same soft delete as `account delete --yes`: the account and what it owns are disabled and
+/// wait out the retention window.
+pub(crate) fn disable(store: &SqliteStore, id: AccountId) -> Result<Disable, StoreError> {
+    let plan = match deletion_plan(store, id) {
+        Ok(plan) => plan,
+        Err(SubjectError::Unknown(_)) => return Ok(Disable::Missing),
+        Err(SubjectError::Database(error)) => return Err(error),
+        Err(other) => return Err(StoreError::backend(io::Error::other(other.to_string()))),
+    };
+    let owned = OwnedRows {
+        mailbox: plan.mailbox.map(|number| number.0),
+        sent: plan.sent_ids,
+        posts: plan.post_ids,
+    };
+    retention::disable_account(store, id.0, &owned)
+}
+
 fn apply_delete(
     store: &SqliteStore,
     id: AccountId,
@@ -438,7 +482,7 @@ pub(crate) fn post_author(body: &[u8]) -> Option<&str> {
     (!author.is_empty()).then_some(author)
 }
 
-fn trim_nul(bytes: &[u8]) -> &[u8] {
+pub(crate) fn trim_nul(bytes: &[u8]) -> &[u8] {
     let end = bytes
         .iter()
         .position(|&byte| byte == 0)
@@ -446,7 +490,7 @@ fn trim_nul(bytes: &[u8]) -> &[u8] {
     bytes.get(..end).unwrap_or(bytes)
 }
 
-fn c_string(bytes: &[u8]) -> String {
+pub(crate) fn c_string(bytes: &[u8]) -> String {
     String::from_utf8_lossy(trim_nul(bytes)).into_owned()
 }
 

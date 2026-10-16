@@ -146,6 +146,12 @@ pub trait Store: fmt::Debug + Send + Sync {
 
     /// Clears a retirement, so the account can log on again.
     fn restore_account(&self, id: AccountId) -> Result<(), StoreError>;
+
+    /// Whether the operator has suspended the account: a Login for it is refused. A store with no
+    /// way to suspend never does.
+    fn suspended(&self, _id: AccountId) -> Result<bool, StoreError> {
+        Ok(false)
+    }
 }
 
 /// A store that forgets everything at exit: the default for tests and a host without a data dir.

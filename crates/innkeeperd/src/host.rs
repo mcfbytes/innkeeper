@@ -155,6 +155,16 @@ impl<'s> Host<'s> {
         self.inbox.next().await
     }
 
+    /// Notified when the operator's portal kicks this connection.
+    pub(crate) fn kick_signal(&self) -> std::sync::Arc<tokio::sync::Notify> {
+        self.inbox.kick_signal()
+    }
+
+    /// Names the transport on the switchboard, for the portal's list.
+    pub(crate) fn label(&self, transport: &'static str) {
+        self.switchboard.label(self.connection, transport);
+    }
+
     /// The connection ended: everything it held is released and the peers are told.
     pub(crate) fn hang_up(&mut self) {
         let mut objects = lock(self.objects);

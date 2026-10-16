@@ -27,8 +27,7 @@ const USER_AGENT: &str = concat!("innkeeperd/", env!("CARGO_PKG_VERSION"));
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Audience {
     Player,
-    /// The operator portal; not served yet.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// The operator portal (docs/server/innkeeperd.md section 9).
     Admin,
 }
 
@@ -167,6 +166,8 @@ pub(crate) struct Rp {
     providers: Vec<Provider>,
     http: reqwest::Client,
     base: Url,
+    /// Where the portal's callback is, when that is not `base`.
+    admin_base: Option<Url>,
 }
 
 impl std::fmt::Debug for Rp {
@@ -192,7 +193,19 @@ impl Rp {
             providers,
             http,
             base,
+            admin_base: None,
         })
+    }
+
+    /// Where the portal is as browsers reach it: its callback's origin.
+    pub(crate) fn admin_origin(&self) -> &Url {
+        self.admin_base.as_ref().unwrap_or(&self.base)
+    }
+
+    /// The origin the portal's callback hangs off, when it differs from the players'.
+    pub(crate) fn with_admin_base(mut self, base: Url) -> Self {
+        self.admin_base = Some(base);
+        self
     }
 
     pub(crate) fn providers(&self) -> &[Provider] {
@@ -204,8 +217,11 @@ impl Rp {
     }
 
     fn redirect(&self, audience: Audience) -> Result<RedirectUrl, RpError> {
-        let url = self
-            .base
+        let base = match audience {
+            Audience::Admin => self.admin_base.as_ref().unwrap_or(&self.base),
+            Audience::Player => &self.base,
+        };
+        let url = base
             .join(audience.callback_path())
             .map_err(|error| RpError::Config(format!("the callback URL: {error}")))?;
         Ok(RedirectUrl::from_url(url))

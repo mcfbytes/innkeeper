@@ -231,6 +231,10 @@ fn vault(mock: &Mock, path: &str, query: &str) -> Response<Full<Bytes>> {
                 &simple("-----BEGIN PUBLIC KEY-----\n..."),
             ),
         ),
+        ["secrets", "admin-identities"] => reply(
+            StatusCode::OK,
+            secret_body(mock, "admin-identities", &simple("# staff\nab12, cd34\n")),
+        ),
         ["secrets", "audit-key-id"] => reply(
             StatusCode::OK,
             secret_body(
@@ -282,7 +286,7 @@ async fn a_managed_identity_reads_every_startup_secret() {
     let (mock, endpoints) = start_mock().await;
     let client = VaultClient::new(endpoints, Credential::Managed { client_id: None }).unwrap();
     let names = vec!["oidc-dev-client-secret".to_owned()];
-    let secrets = client.startup(&names).await.unwrap();
+    let secrets = client.startup(&names, false).await.unwrap();
     let versions: Vec<&str> = secrets.hmac_keys.iter().map(|(v, _)| v.as_str()).collect();
     assert_eq!(
         versions,
@@ -313,7 +317,7 @@ async fn a_missing_secret_is_an_error_that_names_it_and_not_its_value() {
     let (_mock, endpoints) = start_mock().await;
     let client = VaultClient::new(endpoints, Credential::Managed { client_id: None }).unwrap();
     let error = client
-        .startup(&["oidc-absent".to_owned()])
+        .startup(&["oidc-absent".to_owned()], false)
         .await
         .err()
         .unwrap()
@@ -323,7 +327,7 @@ async fn a_missing_secret_is_an_error_that_names_it_and_not_its_value() {
         "{error}"
     );
     let refused = client
-        .startup(&["../escape".to_owned()])
+        .startup(&["../escape".to_owned()], false)
         .await
         .err()
         .unwrap()
@@ -340,7 +344,7 @@ async fn a_service_principal_uses_its_secret_or_a_signed_certificate_assertion()
         secret: Zeroizing::new("sp-secret".into()),
     };
     let client = VaultClient::new(endpoints.clone(), secret).unwrap();
-    client.startup(&[]).await.unwrap();
+    client.startup(&[], false).await.unwrap();
     assert_eq!(
         mock.seen.lock().unwrap().last().map(String::as_str),
         Some("sp-token")
@@ -355,7 +359,7 @@ async fn a_service_principal_uses_its_secret_or_a_signed_certificate_assertion()
     let certificate =
         Credential::from_certificate_pem("tenant-1".into(), "app-1".into(), &pem).unwrap();
     let client = VaultClient::new(endpoints, certificate).unwrap();
-    client.startup(&[]).await.unwrap();
+    client.startup(&[], false).await.unwrap();
     assert_eq!(
         mock.seen.lock().unwrap().last().map(String::as_str),
         Some("cert-token")
@@ -378,5 +382,21 @@ fn only_a_bare_https_vault_url_is_accepted() {
     assert_eq!(
         last_segment("https://x.vault.azure.net/secrets/n/abc?x=1"),
         Some("abc")
+    );
+}
+
+#[tokio::test]
+async fn the_admin_allowlist_is_read_only_when_the_portal_is_on_and_may_be_absent() {
+    let (_mock, endpoints) = start_mock().await;
+    let client = VaultClient::new(endpoints, Credential::Managed { client_id: None }).unwrap();
+    let off = client.startup(&[], false).await.unwrap();
+    assert!(off.admin_identities.is_none());
+    let token = client.token().await.unwrap();
+    let absent = client.optional_secret(&token, "admin-none").await.unwrap();
+    assert!(absent.is_none(), "a 404 is no list, not an error");
+    let on = client.startup(&[], true).await.unwrap();
+    assert_eq!(
+        on.admin_identities.as_deref().map(String::as_str),
+        Some("# staff\nab12, cd34\n")
     );
 }

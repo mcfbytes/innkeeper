@@ -34,6 +34,9 @@ pub(crate) enum AuthConfigError {
 pub(crate) struct AuthFile {
     /// The auth origin as browsers and providers reach it; the callback URL hangs off it.
     pub(crate) public_url: Option<String>,
+    /// The portal's origin when it differs from `public_url` (a local run, where it has a port of its
+    /// own); the portal's callback is `<admin_public_url>/admin/auth/callback`.
+    pub(crate) admin_public_url: Option<String>,
     #[serde(default, rename = "provider")]
     pub(crate) providers: Vec<ProviderEntry>,
     /// DEVELOPMENT ONLY: client secrets by name when there is no vault.
@@ -112,6 +115,9 @@ impl AuthFile {
         }
         if let Some(url) = &self.public_url {
             parse_origin(url).map_err(|why| invalid(format!("public_url {url}: {why}")))?;
+        }
+        if let Some(url) = &self.admin_public_url {
+            parse_origin(url).map_err(|why| invalid(format!("admin_public_url {url}: {why}")))?;
         }
         Ok(self)
     }

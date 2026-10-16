@@ -79,6 +79,7 @@ async fn drive(
     };
     wire.greet().await?;
     let mut host = Host::new(settings, id);
+    host.label("int14h");
     host.watch_audit(crate::audit::begin(settings.audit.as_ref(), peer, "tcp"));
     let mut executive = Executive::new(host, line_rate(settings));
     let result = serve_calls(&mut wire, &mut executive).await;
@@ -93,6 +94,7 @@ fn line_rate(settings: &ConnectionSettings) -> LineRate {
 }
 
 async fn serve_calls(wire: &mut Wire, executive: &mut Executive<'_>) -> Result<(), TransportError> {
+    let kick = executive.kick_signal();
     loop {
         tokio::select! {
             envelope = wire.next_envelope() => {
@@ -116,6 +118,7 @@ async fn serve_calls(wire: &mut Wire, executive: &mut Executive<'_>) -> Result<(
                 }
                 wire.send(&Envelope { tag, body: Body::Reply(handled.reply) }).await?;
             }
+            () = kick.notified() => return Ok(()),
             Some(notice) = executive.next_notice() => wire.report(executive.pass_on(notice)),
         }
     }

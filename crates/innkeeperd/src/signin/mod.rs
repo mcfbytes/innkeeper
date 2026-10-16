@@ -137,6 +137,16 @@ impl SignIn {
         }
     }
 
+    /// The relying party, for the portal's own login.
+    pub(crate) fn rp(&self) -> &Rp {
+        &self.rp
+    }
+
+    /// The identity key ring, for the portal's allowlist check.
+    pub(crate) fn keys(&self) -> &KeyRing {
+        &self.keys
+    }
+
     pub(crate) fn has_providers(&self) -> bool {
         !self.rp.providers().is_empty()
     }

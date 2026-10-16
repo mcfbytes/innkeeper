@@ -129,6 +129,7 @@ where
     let started = Instant::now();
     let mut capture = open_capture(settings, id, peer, started);
     let mut host = Host::new(settings, id);
+    host.label(transport);
     if let Some(signal) = logon {
         host.announce_logon(signal);
     }
@@ -155,6 +156,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut chunk = Vec::with_capacity(READ_CHUNK);
+    let kick = host.kick_signal();
     loop {
         chunk.clear();
         let run_deadline = capture.as_ref().and_then(Capture::run_deadline);
@@ -169,6 +171,10 @@ where
             }
             () = sleep_until(session.next_deadline()) => session.handle_timeout(Instant::now()),
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
+            () = kick.notified() => {
+                info!("connection ended by the operator");
+                return Ok(());
+            }
             Some(notice) = host.next_notice() => {
                 let now = Instant::now();
                 report(

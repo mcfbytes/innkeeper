@@ -61,7 +61,7 @@ pub use message::{
 };
 pub use objects::{
     ConnectionId, Delivery, GamePhase, GameSession, GameType, GroupKey, Invitation, ObjectStore,
-    Place,
+    OnlineEntry, Place,
 };
 pub use player::PlayerSession;
 pub use retention::RetentionPolicy;

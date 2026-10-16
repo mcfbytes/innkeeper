@@ -55,6 +55,8 @@ pub(crate) struct PurgeCounts {
     pub saves: u64,
     pub sessions: u64,
     pub identities: u64,
+    pub admin_audit: u64,
+    pub admin_sessions: u64,
 }
 
 pub(crate) fn log_counts(counts: &PurgeCounts) {
@@ -69,6 +71,8 @@ pub(crate) fn log_counts(counts: &PurgeCounts) {
         saves = counts.saves,
         sessions = counts.sessions,
         identities = counts.identities,
+        admin_audit = counts.admin_audit,
+        admin_sessions = counts.admin_sessions,
         "retention purge"
     );
 }
@@ -351,6 +355,7 @@ pub(crate) fn purge_expired(
     let (accounts, mailboxes, money, saves) = purge_accounts(&tx, now, policy)?;
     let sessions = purge_sessions(&tx, now, policy)?;
     let identities = purge_identities(&tx, now)?;
+    let (admin_audit, admin_sessions) = purge_admin(&tx, now, policy)?;
     let counts = PurgeCounts {
         audit,
         letters,
@@ -362,6 +367,8 @@ pub(crate) fn purge_expired(
         saves,
         sessions,
         identities,
+        admin_audit,
+        admin_sessions,
     };
     tx.commit().map_err(StoreError::backend)?;
     Ok(counts)
@@ -605,6 +612,39 @@ fn purge_sessions(conn: &Connection, now: i64, policy: RetentionPolicy) -> Resul
         )
         .map_err(StoreError::backend)?;
     Ok(changed(n))
+}
+
+/// The portal's audit entries past their window (a hold on the account an entry concerns keeps
+/// it), its expired cookies, and the handled marks of complaints that are gone.
+fn purge_admin(
+    conn: &Connection,
+    now: i64,
+    policy: RetentionPolicy,
+) -> Result<(u64, u64), StoreError> {
+    let cutoff = now.saturating_sub(RetentionPolicy::seconds(policy.admin_audit_days));
+    let audit = conn
+        .execute(
+            "DELETE FROM admin_audit
+             WHERE at < ?1
+             AND NOT EXISTS (
+                 SELECT 1 FROM holds
+                 WHERE holds.account = admin_audit.account AND holds.hold_until > ?2
+             )",
+            params![cutoff, now],
+        )
+        .map_err(StoreError::backend)?;
+    let sessions = conn
+        .execute(
+            "DELETE FROM admin_sessions WHERE expiry < ?1",
+            [now.saturating_sub(86_400)],
+        )
+        .map_err(StoreError::backend)?;
+    conn.execute(
+        "DELETE FROM complaint_handled WHERE post_id NOT IN (SELECT id FROM posts)",
+        [],
+    )
+    .map_err(StoreError::backend)?;
+    Ok((changed(audit), changed(sessions)))
 }
 
 /// An identity that owns no account and has no session row left is gone. An hour's grace
@@ -1088,5 +1128,63 @@ mod tests {
         assert_eq!(count(&store, &open), 0);
         restore_account(&store, 2, policy(), dates::unix_now()).unwrap();
         assert_eq!(count(&store, live), 1);
+    }
+
+    #[test]
+    fn the_admin_audit_is_kept_a_year_unless_a_hold_covers_the_account() {
+        let store = memory();
+        let now = 1_800_000_000;
+        let old = now - 366 * 86_400;
+        let recent = now - 100 * 86_400;
+        store
+            .connection()
+            .execute(
+                "INSERT INTO admin_audit (at, handle, identity_key, action, target, account)
+                 VALUES (?1, 'h', x'00', 'a', 't', NULL), (?1, 'h', x'00', 'a', 't', 1),
+                        (?1, 'h', x'00', 'a', 't', 2), (?2, 'h', x'00', 'a', 't', NULL)",
+                params![old, recent],
+            )
+            .unwrap();
+        place_hold(&store, 2, now + 86_400).unwrap();
+        let counts = purge_expired(&store, policy(), now).unwrap();
+        assert_eq!(
+            counts.admin_audit, 2,
+            "the old entries of accounts 1 and none"
+        );
+        assert_eq!(
+            count(&store, "SELECT COUNT(*) FROM admin_audit WHERE account = 2"),
+            1,
+            "held"
+        );
+        assert_eq!(count(&store, "SELECT COUNT(*) FROM admin_audit"), 2);
+        clear_hold(&store, 2).unwrap();
+        purge_expired(&store, policy(), now).unwrap();
+        assert_eq!(count(&store, "SELECT COUNT(*) FROM admin_audit"), 1);
+    }
+
+    #[test]
+    fn expired_portal_cookies_and_orphaned_complaint_marks_are_purged() {
+        let store = memory();
+        let now = 1_800_000_000;
+        let board = BoardId(u32::from(COMPLAINT_BOARD_LOCATION) << 8 | 3);
+        let kept = store.post(board, b"a|Complaint: x").unwrap();
+        {
+            let conn = store.connection();
+            conn.execute(
+                "INSERT INTO complaint_handled (post_id, handled_at, handle) VALUES (?1, 1, 'h'), (999, 1, 'h')",
+                [kept.0],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO admin_sessions (token_hash, identity_key, created_at, last_seen, expiry)
+                 VALUES (x'01', x'00', 1, 1, ?1), (x'02', x'00', 1, 1, ?2)",
+                params![now - 2 * 86_400, now + 60],
+            )
+            .unwrap();
+        }
+        let counts = purge_expired(&store, policy(), now).unwrap();
+        assert_eq!(counts.admin_sessions, 1);
+        assert_eq!(count(&store, "SELECT COUNT(*) FROM complaint_handled"), 1);
+        assert_eq!(count(&store, "SELECT COUNT(*) FROM admin_sessions"), 1);
     }
 }

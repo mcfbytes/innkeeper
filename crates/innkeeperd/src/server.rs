@@ -13,6 +13,8 @@ use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{info, warn};
 
+use crate::admin::allowlist::Allowlist;
+use crate::admin::{Admin, AdminSetup};
 use crate::audit::AuditSeal;
 use crate::config::Config;
 use crate::connection::{serve_connection, ConnectionSettings};
@@ -46,6 +48,10 @@ pub(crate) enum ServerError {
     SignIn(#[from] crate::signin::startup::StartupError),
     #[error("cannot use a listening socket: {0}")]
     Adopt(io::Error),
+    #[error("{0}")]
+    Admin(String),
+    #[error("{0}")]
+    AdminList(#[from] crate::admin::allowlist::AllowlistError),
 }
 
 /// Startup finished, sockets bound, sandbox not yet applied.
@@ -54,6 +60,8 @@ pub(crate) struct Prepared {
     legacy: Option<StdListener>,
     transport: Option<StdListener>,
     websocket: Option<StdListener>,
+    /// The operator portal's listener and state (`--admin-bind`).
+    admin: Option<(StdListener, Arc<Admin>)>,
     lock: Option<crate::subject::DataDirLock>,
     store: Option<Arc<SqliteStore>>,
     policy: RetentionPolicy,
@@ -70,12 +78,22 @@ impl Prepared {
         self.capture_dir.as_deref()
     }
 
+    /// Directories the sandbox keeps readable after startup: the portal's allowlist file lives in one.
+    pub(crate) fn read_dirs(&self) -> Vec<PathBuf> {
+        self.admin
+            .as_ref()
+            .and_then(|(_, admin)| admin.allowlist_dir())
+            .into_iter()
+            .collect()
+    }
+
     /// Ports already bound. Port 0 is not a Landlock rule (it means the ephemeral range).
     pub(crate) fn bound_ports(&self) -> Vec<u16> {
         let listeners = [
             self.legacy.as_ref(),
             self.transport.as_ref(),
             self.websocket.as_ref(),
+            self.admin.as_ref().map(|(listener, _)| listener),
         ];
         let mut ports = Vec::new();
         for listener in listeners.into_iter().flatten() {
@@ -159,6 +177,7 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     let legacy = listen_std_if(plan.legacy)?;
     let transport = listen_std_if(plan.int14h)?;
     let websocket = listen_std_if(plan.websocket)?;
+    let admin_listener = listen_std_if(config.admin_bind)?;
     let capture_dir = config.capture_dir();
     let mut settings =
         ConnectionSettings::new(config.session_config(), opened.world, capture_dir.clone());
@@ -166,11 +185,20 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     settings.sign_in = startup.sign_in;
     settings.require_session = config.public;
     settings.signup_open = enrolment.login_enrols();
+    let settings = Arc::new(settings);
+    let admin = match (admin_listener, opened.store.as_ref()) {
+        (Some(listener), Some(store)) => {
+            let admin = build_admin(&config, &settings, store, startup.admin_vault, policy)?;
+            Some((listener, admin))
+        }
+        _ => None,
+    };
     Ok(Prepared {
-        settings: Arc::new(settings),
+        settings,
         legacy,
         transport,
         websocket,
+        admin,
         lock,
         store: opened.store,
         policy,
@@ -179,12 +207,55 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     })
 }
 
+/// The portal's state and the open-door rule (docs/server/innkeeperd.md section 9): with no vault
+/// list, no file and no staff rows it is open to any signed-in identity, which `--public` refuses.
+fn build_admin(
+    config: &Config,
+    settings: &Arc<ConnectionSettings>,
+    store: &Arc<SqliteStore>,
+    vault: Option<std::collections::HashSet<crate::signin::keys::IdentityKey>>,
+    retention: RetentionPolicy,
+) -> Result<Arc<Admin>, ServerError> {
+    let Some(sign_in) = settings.sign_in.clone() else {
+        return Err(ServerError::Admin(
+            "--admin-bind needs --auth-config: staff sign in with the same providers".into(),
+        ));
+    };
+    let allowlist = Allowlist::new(vault, config.admin_allowlist.clone(), config.admin_dev_open)?;
+    let open = allowlist
+        .is_open(store)
+        .map_err(|error| ServerError::Admin(error.to_string()))?;
+    if open && config.public {
+        return Err(ServerError::Admin(
+            "--public refuses an open admin portal: give the admin-identities vault secret, an \
+             --admin-allowlist file, or run `innkeeperd admin allow` first"
+                .into(),
+        ));
+    }
+    if open {
+        warn!(
+            "DEV: the admin portal is OPEN to any signed-in identity (no admin-identities secret, \
+             no --admin-allowlist file, no staff rows). Every page shows a red banner."
+        );
+    }
+    let origin = sign_in.rp().admin_origin().clone();
+    Ok(Arc::new(Admin::new(AdminSetup {
+        settings: Arc::clone(settings),
+        sign_in,
+        store: Arc::clone(store),
+        allowlist,
+        origin,
+        retention,
+    })))
+}
+
 pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
     let Prepared {
         settings,
         legacy,
         transport,
         websocket,
+        admin,
         lock,
         store,
         policy,
@@ -206,6 +277,10 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
     let legacy = adopt_if(legacy)?;
     let transport = adopt_if(transport)?;
     let websocket = adopt_if(websocket)?;
+    let admin = match admin {
+        Some((listener, admin)) => Some((adopt(listener)?, admin)),
+        None => None,
+    };
     match legacy
         .as_ref()
         .and_then(|listener| listener.local_addr().ok())
@@ -228,7 +303,17 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
         "the INT 14h transport",
     );
     let websocket = accept_if(websocket, &settings, serve_websocket, "WebSocket lines");
+    let admin = async {
+        match admin {
+            Some((listener, admin)) => {
+                info!(bind = ?listener.local_addr().ok(), "serving the operator portal under /admin/");
+                accept_forever(listener, admin, crate::admin::serve).await;
+            }
+            None => future::pending().await,
+        }
+    };
     tokio::select! {
+        () = admin => {}
         () = legacy => {}
         () = transport => {}
         () = websocket => {}
@@ -302,12 +387,10 @@ async fn accept_if<F, S>(
 }
 
 /// Hands every accepted socket to `serve` on a task of its own.
-pub(crate) async fn accept_forever<F, S>(
-    listener: TcpListener,
-    settings: Arc<ConnectionSettings>,
-    serve: S,
-) where
-    S: Fn(TcpStream, SocketAddr, Arc<ConnectionSettings>) -> F,
+pub(crate) async fn accept_forever<T, F, S>(listener: TcpListener, settings: Arc<T>, serve: S)
+where
+    T: Send + Sync + 'static,
+    S: Fn(TcpStream, SocketAddr, Arc<T>) -> F,
     F: Future<Output = ()> + Send + 'static,
 {
     loop {

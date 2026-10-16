@@ -15,6 +15,8 @@ pub(crate) use credential::Credential;
 pub(crate) const HMAC_SECRET: &str = "identity-hmac-key";
 pub(crate) const AUDIT_KEY_SECRET: &str = "audit-public-key";
 pub(crate) const AUDIT_KID_SECRET: &str = "audit-key-id";
+/// The operator portal's staff allowlist (docs/server/innkeeperd.md section 9). Optional.
+pub(crate) const ADMIN_SECRET: &str = "admin-identities";
 const API_VERSION: &str = "7.4";
 const IMDS: &str = "http://169.254.169.254";
 const AUTHORITY: &str = "https://login.microsoftonline.com";
@@ -83,6 +85,8 @@ pub(crate) struct StartupSecrets {
     pub(crate) client_secrets: HashMap<String, Zeroizing<String>>,
     pub(crate) audit_public_key: String,
     pub(crate) audit_key_id: String,
+    /// `admin-identities`: asked for only when the portal is on; `None` when the vault has none.
+    pub(crate) admin_identities: Option<Zeroizing<String>>,
 }
 
 /// Fetches the startup secrets on a runtime of its own, before the sandbox and the server's
@@ -91,6 +95,7 @@ pub(crate) fn fetch_startup(
     endpoints: &Endpoints,
     credential: Credential,
     client_secret_names: &[String],
+    want_admin: bool,
 ) -> Result<StartupSecrets, VaultError> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -98,7 +103,7 @@ pub(crate) fn fetch_startup(
         .map_err(|error| VaultError::Client(error.to_string()))?;
     let result = runtime.block_on(async {
         VaultClient::new(endpoints.clone(), credential)?
-            .startup(client_secret_names)
+            .startup(client_secret_names, want_admin)
             .await
     });
     runtime.shutdown_timeout(Duration::from_secs(1));
@@ -135,6 +140,7 @@ impl VaultClient {
     pub(crate) async fn startup(
         &self,
         client_secret_names: &[String],
+        want_admin: bool,
     ) -> Result<StartupSecrets, VaultError> {
         let token = self.token().await?;
         let hmac_keys = self.all_versions(&token, HMAC_SECRET).await?;
@@ -156,12 +162,30 @@ impl VaultClient {
             .value
             .trim()
             .to_owned();
+        let admin_identities = match want_admin {
+            true => self.optional_secret(&token, ADMIN_SECRET).await?,
+            false => None,
+        };
         Ok(StartupSecrets {
             hmac_keys,
             client_secrets,
             audit_public_key,
             audit_key_id,
+            admin_identities,
         })
+    }
+
+    /// A secret that may be absent: a 404 is `None`, any other failure stops startup.
+    async fn optional_secret(
+        &self,
+        token: &str,
+        name: &str,
+    ) -> Result<Option<Zeroizing<String>>, VaultError> {
+        match self.secret(token, name, None).await {
+            Ok(found) => Ok(Some(found.value)),
+            Err(VaultError::Secret { why, .. }) if why.starts_with("status 404") => Ok(None),
+            Err(other) => Err(other),
+        }
     }
 
     async fn token(&self) -> Result<Zeroizing<String>, VaultError> {

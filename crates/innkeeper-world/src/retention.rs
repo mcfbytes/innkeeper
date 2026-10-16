@@ -17,6 +17,9 @@ pub struct RetentionPolicy {
     pub audit_days: u32,
     /// Expired session tokens, counted from expiry. The sessions table is not built yet.
     pub session_days: u32,
+    /// The operator portal's audit log (who changed what, and every letter read), counted from the
+    /// entry. A hold on the account an entry concerns keeps it.
+    pub admin_audit_days: u32,
 }
 
 impl Default for RetentionPolicy {
@@ -28,6 +31,7 @@ impl Default for RetentionPolicy {
             complaint_days: 365,
             audit_days: 90,
             session_days: 30,
+            admin_audit_days: 365,
         }
     }
 }

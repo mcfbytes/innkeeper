@@ -1,7 +1,7 @@
 //! Startup for sign-in and the audit key: the auth file, the vault or the development keys, read
 //! once before the sandbox (docs/server/innkeeperd.md section 8).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -32,6 +32,8 @@ pub(crate) enum StartupError {
     Key(#[from] KeyError),
     #[error("{0}")]
     Rp(#[from] RpError),
+    #[error("{0}")]
+    Admin(#[from] crate::admin::allowlist::AllowlistError),
     #[error("the audit public key cannot be used: {0}")]
     Audit(String),
     #[error("{0}")]
@@ -42,6 +44,8 @@ pub(crate) enum StartupError {
 pub(crate) struct Prepared {
     pub(crate) sign_in: Option<Arc<SignIn>>,
     pub(crate) recipient: Option<Recipient>,
+    /// The portal's staff keys from the vault secret `admin-identities`, when the vault has one.
+    pub(crate) admin_vault: Option<HashSet<super::keys::IdentityKey>>,
 }
 
 pub(crate) fn prepare(
@@ -66,13 +70,25 @@ pub(crate) fn prepare(
                 config.test_imds_endpoint.as_deref(),
                 config.test_authority_endpoint.as_deref(),
             )?;
-            let secrets = keyvault::fetch_startup(&endpoints, Credential::from_env()?, &names)?;
+            let secrets = keyvault::fetch_startup(
+                &endpoints,
+                Credential::from_env()?,
+                &names,
+                config.admin_bind.is_some(),
+            )?;
             info!(vault = %url, "server vault secrets read");
             Some(secrets)
         }
         None => None,
     };
     let recipient = audit_recipient(config, vault.as_ref())?;
+    let admin_vault = vault
+        .as_ref()
+        .and_then(|secrets| secrets.admin_identities.as_ref())
+        .map(|text| {
+            crate::admin::allowlist::parse_strict("the vault secret admin-identities", text)
+        })
+        .transpose()?;
     let sign_in = match (file, store) {
         (Some(file), Some(store)) => {
             let built = build(
@@ -86,7 +102,11 @@ pub(crate) fn prepare(
         }
         _ => None,
     };
-    Ok(Prepared { sign_in, recipient })
+    Ok(Prepared {
+        sign_in,
+        recipient,
+        admin_vault,
+    })
 }
 
 fn audit_recipient(
@@ -148,10 +168,22 @@ fn build(
         warn!("no audit public key: identities are stored without their sealed subject");
     }
     info!(providers = providers.len(), callback = %base, "sign-in is on");
+    let mut rp = Rp::new(providers, base)?;
+    if let Some(admin) = config.admin_bind {
+        let origin = file
+            .admin_public_url
+            .clone()
+            .or_else(|| file.public_url.clone())
+            .unwrap_or_else(|| format!("http://{admin}"));
+        let origin = Url::parse(&origin)
+            .map_err(|error| StartupError::Config(format!("admin_public_url: {error}")))?;
+        info!(callback = %origin, "the operator portal's sign-in callback is under /admin/auth/callback");
+        rp = rp.with_admin_base(origin);
+    }
     Ok(SignIn::new(SignInSetup {
         store,
         keys,
-        rp: Rp::new(providers, base)?,
+        rp,
         origins,
         enrolment: config.enrolment(),
         session_lifetime: Duration::from_secs(u64::from(config.session_hours) * 3600),

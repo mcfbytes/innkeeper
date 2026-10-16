@@ -40,6 +40,17 @@ pub(crate) fn format_date(unix: i64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+/// `YYYY-MM-DD HH:MM UTC` of `unix`, for the portal's tables.
+pub(crate) fn format_datetime(unix: i64) -> String {
+    let minutes = unix.div_euclid(60).rem_euclid(1440);
+    format!(
+        "{} {:02}:{:02} UTC",
+        format_date(unix),
+        minutes / 60,
+        minutes % 60
+    )
+}
+
 pub(crate) fn add_days(unix: i64, days: u32) -> i64 {
     unix.saturating_add(i64::from(days).saturating_mul(DAY))
 }

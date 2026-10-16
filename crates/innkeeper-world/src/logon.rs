@@ -66,6 +66,11 @@ fn nak_for(refusal: Refusal) -> Nak {
             0,
             "This account is not known here.",
         ),
+        Refusal::Suspended => Nak::login(
+            LoginNakReason::UnknownAccount,
+            0,
+            "This account is suspended. Write to Member Services.",
+        ),
         Refusal::StoreUnavailable => Nak::login(
             LoginNakReason::UnknownAccount,
             0,

@@ -27,6 +27,8 @@ pub(crate) struct ConfineRequest<'a> {
     pub(crate) data_dir: Option<&'a Path>,
     pub(crate) capture_dir: Option<&'a Path>,
     pub(crate) ports: &'a [u16],
+    /// Directories to keep readable (and nothing more): the portal's allowlist file lives in one.
+    pub(crate) read_dirs: &'a [std::path::PathBuf],
 }
 
 pub(crate) fn refuse_root(euid: u32, allow_root: bool) -> Result<(), SandboxError> {
@@ -129,7 +131,7 @@ mod linux {
         super::refuse_root(request.euid, request.allow_root)?;
         prctl::set_no_new_privileges(true).map_err(SandboxError::NoNewPrivs)?;
         warn_if_capture_is_outside(request.data_dir, request.capture_dir);
-        let (abi, fs, net) = apply_landlock(request.data_dir, request.ports)?;
+        let (abi, fs, net) = apply_landlock(request.data_dir, request.ports, request.read_dirs)?;
         let seccomp = apply_seccomp(request.log_only)?;
         tracing::info!("{}", summary_line(&abi, fs, net, seccomp));
         Ok(())
@@ -178,8 +180,9 @@ mod linux {
     fn apply_landlock(
         data_dir: Option<&Path>,
         ports: &[u16],
+        read_dirs: &[PathBuf],
     ) -> Result<(String, &'static str, &'static str), SandboxError> {
-        let built = build_ruleset(data_dir, ports)?;
+        let built = build_ruleset(data_dir, ports, read_dirs)?;
         if !built.missing.is_empty() {
             tracing::warn!(
                 paths = %built.missing.join(", "),
@@ -206,10 +209,14 @@ mod linux {
         data_dir: Option<&Path>,
         ports: &[u16],
     ) -> Result<(), SandboxError> {
-        build_ruleset(data_dir, ports).map(|_| ())
+        build_ruleset(data_dir, ports, &[]).map(|_| ())
     }
 
-    fn build_ruleset(data_dir: Option<&Path>, ports: &[u16]) -> Result<Built, SandboxError> {
+    fn build_ruleset(
+        data_dir: Option<&Path>,
+        ports: &[u16],
+        read_dirs: &[PathBuf],
+    ) -> Result<Built, SandboxError> {
         // ConnectTcp is not handled, so outbound TLS (Key Vault, IMDS) stays allowed.
         let mut ruleset = Ruleset::default()
             .set_compatibility(CompatLevel::BestEffort)
@@ -225,6 +232,9 @@ mod linux {
         let mut missing = Vec::new();
         for path in read_only_paths() {
             ruleset = grant_optional(ruleset, &path, &mut missing)?;
+        }
+        for dir in read_dirs {
+            ruleset = grant_optional(ruleset, dir, &mut missing)?;
         }
         for port in unique_ports(ports) {
             ruleset = ruleset

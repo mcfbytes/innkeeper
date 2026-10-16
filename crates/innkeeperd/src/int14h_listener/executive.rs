@@ -134,6 +134,11 @@ impl<'s> Executive<'s> {
         self.host.next_notice().await
     }
 
+    /// Notified when the operator's portal kicks the connection.
+    pub(crate) fn kick_signal(&self) -> std::sync::Arc<tokio::sync::Notify> {
+        self.host.kick_signal()
+    }
+
     /// The transport closed: whatever the call held is released.
     pub(crate) fn hang_up(&mut self) {
         self.host.hang_up();

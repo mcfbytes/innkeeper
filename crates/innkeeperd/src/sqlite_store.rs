@@ -20,7 +20,8 @@ const SCHEMA: &str = "
         rating INTEGER NOT NULL,
         status INTEGER NOT NULL,
         password_expired INTEGER NOT NULL,
-        deleted_at INTEGER
+        deleted_at INTEGER,
+        suspended_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS mailboxes (
         number INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,6 +111,39 @@ const SCHEMA: &str = "
     );
     CREATE INDEX IF NOT EXISTS sessions_by_identity ON sessions(identity_key);
     CREATE INDEX IF NOT EXISTS audit_by_identity ON audit_sessions(identity_key);
+    /* The operator portal (docs/server/innkeeperd.md section 9). staff: identities added or revoked
+       from the command line; a revoked row beats every other allowlist source. admin_sessions: the
+       portal's own cookies, hashed. admin_audit: every change and letter read. complaint_handled:
+       a mark beside a complaint post, which is never edited. */
+    CREATE TABLE IF NOT EXISTS staff (
+        identity_key BLOB PRIMARY KEY,
+        note TEXT,
+        added_at INTEGER NOT NULL,
+        revoked_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+        token_hash BLOB PRIMARY KEY,
+        identity_key BLOB NOT NULL,
+        created_at INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        expiry INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS admin_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at INTEGER NOT NULL,
+        handle TEXT NOT NULL,
+        identity_key BLOB NOT NULL,
+        action TEXT NOT NULL,
+        target TEXT NOT NULL,
+        reason TEXT,
+        account INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS admin_audit_by_time ON admin_audit(at);
+    CREATE TABLE IF NOT EXISTS complaint_handled (
+        post_id INTEGER PRIMARY KEY,
+        handled_at INTEGER NOT NULL,
+        handle TEXT NOT NULL
+    );
 ";
 
 /// `Store` over a SQLite file or an in-memory database; one connection behind a mutex.
@@ -151,9 +185,10 @@ fn backend(error: rusqlite::Error) -> StoreError {
     StoreError::backend(error)
 }
 
-/// Version 1 added `deleted_at` and the audit tables, version 2 the sign-in tables. Fresh files are
+/// Version 1 added `deleted_at` and the audit tables, version 2 the sign-in tables, version 3 the
+/// operator portal's tables and `accounts.suspended_at`. Fresh files are
 /// created at this version; older files gain what they lack on open (docs/server/store.md).
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 fn migrate(connection: &Connection) -> Result<(), StoreError> {
     connection.execute_batch(SCHEMA).map_err(backend)?;
@@ -167,6 +202,7 @@ fn migrate(connection: &Connection) -> Result<(), StoreError> {
     ] {
         add_column(connection, table, "deleted_at")?;
     }
+    add_column(connection, "accounts", "suspended_at")?;
     add_column(connection, "posts", "created_at")?;
     connection
         .execute(
@@ -186,6 +222,7 @@ fn add_column(connection: &Connection, table: &str, column: &str) -> Result<(), 
     }
     let sql = match (table, column) {
         ("accounts", "deleted_at") => "ALTER TABLE accounts ADD COLUMN deleted_at INTEGER",
+        ("accounts", "suspended_at") => "ALTER TABLE accounts ADD COLUMN suspended_at INTEGER",
         ("mailboxes", "deleted_at") => "ALTER TABLE mailboxes ADD COLUMN deleted_at INTEGER",
         ("letters", "deleted_at") => "ALTER TABLE letters ADD COLUMN deleted_at INTEGER",
         ("posts", "deleted_at") => "ALTER TABLE posts ADD COLUMN deleted_at INTEGER",
@@ -486,6 +523,19 @@ impl Store for SqliteStore {
         } else {
             Err(StoreError::UnknownAccount(id))
         }
+    }
+
+    fn suspended(&self, id: AccountId) -> Result<bool, StoreError> {
+        let stamp: Option<Option<i64>> = self
+            .connection()
+            .query_row(
+                "SELECT suspended_at FROM accounts WHERE id = ?1",
+                [id.0],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(backend)?;
+        Ok(stamp.flatten().is_some())
     }
 
     fn restore_account(&self, id: AccountId) -> Result<(), StoreError> {
@@ -855,7 +905,15 @@ mod tests {
         drop(old);
         let store = file.open();
         let connection = store.connection();
-        for table in ["identities", "identity_accounts", "sessions"] {
+        for table in [
+            "identities",
+            "identity_accounts",
+            "sessions",
+            "staff",
+            "admin_sessions",
+            "admin_audit",
+            "complaint_handled",
+        ] {
             let found: i64 = connection
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
@@ -868,6 +926,10 @@ mod tests {
         let version: i32 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, SCHEMA_VERSION);
+        assert!(
+            column_exists(&connection, "accounts", "suspended_at").unwrap(),
+            "suspension needs its column"
+        );
     }
 }

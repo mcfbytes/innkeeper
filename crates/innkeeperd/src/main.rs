@@ -1,6 +1,7 @@
 //! innkeeperd: wires one sans-IO session per TCP connection; usage is in docs/server/innkeeperd.md.
 #![forbid(unsafe_code)]
 
+mod admin;
 mod audit;
 mod capture;
 mod config;
@@ -44,6 +45,7 @@ fn main() -> ExitCode {
         Some(config::Command::Release { account, data_dir }) => {
             return audit::run_release(account, &data_dir)
         }
+        Some(config::Command::Admin { action }) => return admin::cli::run(action),
         Some(config::Command::DevOidc { bind, issuer }) => return dev_oidc::run(bind, issuer),
         None => {}
     }
@@ -59,6 +61,7 @@ fn main() -> ExitCode {
         // Name resolution loads NSS modules. A later dlopen dies once mmap cannot be executable.
         sandbox::preload_resolver();
         let ports = prepared.bound_ports();
+        let read_dirs = prepared.read_dirs();
         let request = sandbox::ConfineRequest {
             euid: sandbox::current_euid(),
             allow_root,
@@ -66,6 +69,7 @@ fn main() -> ExitCode {
             data_dir: prepared.data_dir(),
             capture_dir: prepared.capture_dir(),
             ports: &ports,
+            read_dirs: &read_dirs,
         };
         if let Err(error) = sandbox::confine(&request) {
             return failed(error);

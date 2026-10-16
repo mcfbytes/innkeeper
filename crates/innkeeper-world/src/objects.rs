@@ -403,6 +403,19 @@ impl ObjectStore {
         self.online.remove(&connection);
     }
 
+    /// Who is logged in now, in connection order: for the operator's portal.
+    pub fn online(&self) -> Vec<OnlineEntry> {
+        self.online
+            .iter()
+            .map(|(&connection, player)| OnlineEntry {
+                connection,
+                account: player.account,
+                persona: player.persona.clone(),
+                place: player.place,
+            })
+            .collect()
+    }
+
     /// Logged-in players, in connection order.
     pub(crate) fn online_players(&self) -> impl Iterator<Item = (ConnectionId, &OnlinePlayer)> {
         self.online
@@ -635,6 +648,16 @@ impl GroupJoinRefusal {
             text: String::new(),
         })
     }
+}
+
+/// A logged-in player as the operator sees them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OnlineEntry {
+    pub connection: ConnectionId,
+    pub account: AccountId,
+    pub persona: String,
+    /// The land the player's latest land joinNet named, if any.
+    pub place: Option<Place>,
 }
 
 /// One logged-in player the phone book can name. The persona is what a hit prints.

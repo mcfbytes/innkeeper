@@ -32,6 +32,17 @@ pub(crate) struct Config {
     /// Address to accept browser clients on: each WebSocket is one line, binary messages its bytes.
     #[arg(long)]
     pub(crate) ws_bind: Option<SocketAddr>,
+    /// Address of the operator portal, served under /admin/ (docs/server/innkeeperd.md section 9).
+    /// Off unless given; needs --auth-config. With --public it must be a loopback address.
+    #[arg(long)]
+    pub(crate) admin_bind: Option<SocketAddr>,
+    /// File of staff identity keys (64 hex digits, newline or comma separated, `#` comments) that
+    /// may enter the portal. Read again on every request.
+    #[arg(long, value_name = "FILE", requires = "admin_bind")]
+    pub(crate) admin_allowlist: Option<PathBuf>,
+    /// DEVELOPMENT ONLY: any signed-in identity may enter the portal. Refused with --public.
+    #[arg(long, requires = "admin_bind")]
+    pub(crate) admin_dev_open: bool,
     /// Directory for one hex capture file per session.
     #[arg(long, default_value = "work/captures")]
     pub(crate) capture_dir: PathBuf,
@@ -84,6 +95,9 @@ pub(crate) struct Config {
     /// Days an expired or revoked session token is kept, unless a hold covers it.
     #[arg(long, default_value_t = 30)]
     pub(crate) retain_session_days: u32,
+    /// Days an entry of the operator portal's audit log is kept, unless a hold covers its account.
+    #[arg(long, default_value_t = 365)]
+    pub(crate) retain_admin_audit_days: u32,
     /// TOML file naming the sign-in providers (docs/server/innkeeperd.md section 8). Needs --data-dir.
     #[arg(long, value_name = "FILE")]
     pub(crate) auth_config: Option<PathBuf>,
@@ -160,6 +174,11 @@ pub(crate) enum Command {
         #[arg(long)]
         data_dir: PathBuf,
     },
+    /// Staff identities for the operator portal (docs/server/innkeeperd.md section 9).
+    Admin {
+        #[command(subcommand)]
+        action: AdminAction,
+    },
     /// DEVELOPMENT ONLY: a mock OpenID Connect provider with an Allow button, on loopback.
     DevOidc {
         /// Loopback address to listen on.
@@ -168,6 +187,32 @@ pub(crate) enum Command {
         /// The issuer URL it announces. Default http://BIND.
         #[arg(long)]
         issuer: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, clap::Subcommand)]
+pub(crate) enum AdminAction {
+    /// Let an identity into the portal. Works while the server runs.
+    Allow {
+        /// The identity key: 64 hex digits, as the portal's refusal page shows it.
+        identity_key: String,
+        /// A reminder of whose key this is. Kept in the database, so keep names out of it.
+        #[arg(long)]
+        note: Option<String>,
+        /// Directory holding innkeeper.db.
+        #[arg(long)]
+        data_dir: PathBuf,
+    },
+    /// Shut an identity out of the portal, whichever source lists it. Works while the server runs.
+    Revoke {
+        identity_key: String,
+        #[arg(long)]
+        data_dir: PathBuf,
+    },
+    /// List the identities this table allows or has revoked.
+    List {
+        #[arg(long)]
+        data_dir: PathBuf,
     },
 }
 
@@ -348,6 +393,7 @@ impl Config {
             self.no_int14h = true;
         }
         self.check_sign_in()?;
+        self.check_admin()?;
         Ok(self)
     }
 
@@ -385,6 +431,35 @@ impl Config {
         }
         if self.session_hours == 0 {
             return Err(conflict("--session-hours must be at least 1\n"));
+        }
+        Ok(())
+    }
+
+    /// The portal's flags (docs/server/innkeeperd.md section 9). The rest of the open-door rule needs
+    /// the vault and is checked at startup.
+    fn check_admin(&self) -> Result<(), clap::Error> {
+        let Some(admin) = self.admin_bind else {
+            return Ok(());
+        };
+        if self.auth_config.is_none() {
+            return Err(conflict(
+                "--admin-bind requires --auth-config: staff sign in with the same providers\n",
+            ));
+        }
+        if self.public && !is_loopback(admin) {
+            return Err(conflict(concat!(
+                "--public requires --admin-bind on a loopback address (127.0.0.0/8 or ::1); ",
+                "the TLS proxy routes /admin/ to it\n"
+            )));
+        }
+        if self.public && self.admin_dev_open {
+            return Err(conflict(concat!(
+                "--public cannot be used with --admin-dev-open: ",
+                "a public host never leaves the portal open to any sign-in\n"
+            )));
+        }
+        if Some(admin) == self.ws_bind {
+            return Err(conflict("--admin-bind and --ws-bind must differ\n"));
         }
         Ok(())
     }
@@ -431,6 +506,7 @@ impl Config {
             complaint_days: self.retain_complaint_days,
             audit_days: self.audit_retention_days,
             session_days: self.retain_session_days,
+            admin_audit_days: self.retain_admin_audit_days,
         }
     }
 
@@ -804,5 +880,112 @@ mod tests {
         assert!(missing.unwrap_err().to_string().contains("--data-dir"));
         let bad = Config::try_load_from(["innkeeperd", "--page-origin", "https://x.test/page"]);
         assert!(bad.is_err());
+    }
+
+    #[test]
+    fn the_portal_is_off_unless_bound_and_needs_sign_in() {
+        assert_eq!(Config::parse_from(["innkeeperd"]).admin_bind, None);
+        let bare = Config::try_load_from(["innkeeperd", "--admin-bind", "127.0.0.1:9"]);
+        assert!(bare.unwrap_err().to_string().contains("--auth-config"));
+        let flag_alone = Config::try_load_from(["innkeeperd", "--admin-dev-open"]);
+        assert!(
+            flag_alone.is_err(),
+            "the flag means nothing without a portal"
+        );
+        let list_alone = Config::try_load_from(["innkeeperd", "--admin-allowlist", "staff.txt"]);
+        assert!(list_alone.is_err());
+        let ok = Config::try_load_from([
+            "innkeeperd",
+            "--admin-bind",
+            "127.0.0.1:9",
+            "--auth-config",
+            "auth.toml",
+            "--data-dir",
+            "d",
+            "--admin-dev-open",
+        ])
+        .unwrap();
+        assert!(ok.admin_dev_open);
+    }
+
+    #[test]
+    fn public_mode_keeps_the_portal_on_loopback_and_never_open() {
+        let base = [
+            "innkeeperd",
+            "--public",
+            "--insecure-dev-keys",
+            "--ws-bind",
+            "127.0.0.1:9",
+            "--auth-config",
+            "auth.toml",
+            "--data-dir",
+            "d",
+        ];
+        let remote =
+            Config::try_load_from(base.iter().copied().chain(["--admin-bind", "0.0.0.0:10"]));
+        let text = remote.unwrap_err().to_string();
+        assert!(
+            text.contains("--admin-bind") && text.contains("loopback"),
+            "{text}"
+        );
+        let open = Config::try_load_from(base.iter().copied().chain([
+            "--admin-bind",
+            "127.0.0.1:10",
+            "--admin-dev-open",
+        ]));
+        let text = open.unwrap_err().to_string();
+        assert!(
+            text.contains("--admin-dev-open") && text.contains("--public"),
+            "{text}"
+        );
+        let same =
+            Config::try_load_from(base.iter().copied().chain(["--admin-bind", "127.0.0.1:9"]));
+        assert!(same.unwrap_err().to_string().contains("must differ"));
+        let fine = Config::try_load_from(base.iter().copied().chain([
+            "--admin-bind",
+            "[::1]:10",
+            "--admin-allowlist",
+            "staff.txt",
+        ]));
+        assert!(fine.is_ok());
+    }
+
+    #[test]
+    fn the_admin_audit_window_is_a_year_and_has_its_own_flag() {
+        assert_eq!(
+            Config::parse_from(["innkeeperd"])
+                .retention()
+                .admin_audit_days,
+            365
+        );
+        let short = Config::parse_from(["innkeeperd", "--retain-admin-audit-days", "30"]);
+        assert_eq!(short.retention().admin_audit_days, 30);
+    }
+
+    #[test]
+    fn admin_allow_revoke_and_list_parse() {
+        let config = Config::parse_from([
+            "innkeeperd",
+            "admin",
+            "allow",
+            "ab",
+            "--note",
+            "ops",
+            "--data-dir",
+            "d",
+        ]);
+        assert!(matches!(
+            config.command,
+            Some(Command::Admin {
+                action: AdminAction::Allow { note: Some(_), .. }
+            })
+        ));
+        for verb in ["revoke", "list"] {
+            let args: Vec<&str> = match verb {
+                "revoke" => vec!["innkeeperd", "admin", "revoke", "ab", "--data-dir", "d"],
+                _ => vec!["innkeeperd", "admin", "list", "--data-dir", "d"],
+            };
+            assert!(Config::parse_from(args).command.is_some());
+        }
     }
 }
