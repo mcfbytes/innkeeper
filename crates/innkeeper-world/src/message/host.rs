@@ -6,7 +6,7 @@ use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
     Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply,
     MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjNewListReply, ObjectLocated,
-    PropertyValues, SendMessage, SetInt, SetStr,
+    PropertyValues, SendMessage, SetInt, SetStr, UserFindReply,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -59,6 +59,8 @@ pub enum HostMessage {
     Mall(MallReply),
     /// PaintBall `ObjNewList` (51): the caller's cookie and one SID per new object.
     ObjNewList(ObjNewListReply),
+    /// The phone book (49): who is online.
+    UserFind(UserFindReply),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -217,6 +219,7 @@ impl HostMessage {
             HostMessage::Bbs(reply) => reply.write(&mut writer),
             HostMessage::Mall(reply) => reply.write(&mut writer),
             HostMessage::ObjNewList(reply) => reply.write(&mut writer),
+            HostMessage::UserFind(reply) => reply.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -311,6 +314,7 @@ impl HostMessage {
             Command::Mall => HostMessage::Mall(MallReply::parse(&mut reader)?),
             Command::ObjNewList => HostMessage::ObjNewList(ObjNewListReply::parse(&mut reader)?),
             Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
+            Command::UserFind => HostMessage::UserFind(UserFindReply::parse(&mut reader)?),
             Command::Lock
             | Command::ServiceProperties
             | Command::Unlock

@@ -22,6 +22,7 @@ mod service_lookup;
 mod service_properties;
 mod signup;
 mod unexplained;
+mod user_find;
 mod user_info;
 mod wire;
 
@@ -59,5 +60,6 @@ pub use service_lookup::{ObjExists, ObjectLocated};
 pub use service_properties::ServicePropertyRequest;
 pub use signup::Signup;
 pub use unexplained::{Unexplained, UnexplainedCommand};
+pub use user_find::{FoundUser, UserFind, UserFindReply};
 pub(crate) use user_info::parse as parse_user_info;
 pub use user_info::{MoneyReply, ReadMoney, SaveMoney, SetPersona};

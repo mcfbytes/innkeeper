@@ -163,3 +163,9 @@ pub(crate) const OBJ_FREE_LIST_TELLS_PEERS_ASSUMED: bool = true;
 /// original service sold stamps; this host gives every account them. An original account record would
 /// settle which other bits a plain member had.
 pub(crate) const NEW_ACCOUNT_USER_FLAGS_ASSUMED: u16 = 0x0200;
+/// A name search also matches the Login name. A 40/4 replaces only the persona (section 3.3); the
+/// reply still prints the persona. A capture of a renamed player found under the old name would settle it.
+pub(crate) const FIND_ALSO_MATCHES_LOGIN_NAME_ASSUMED: bool = true;
+/// Find results follow connection order. `FindPerson::handleMsg` prints records as they arrive
+/// (section 3.3). A capture of two hits would settle the order.
+pub(crate) const FIND_RESULTS_IN_CONNECTION_ORDER_ASSUMED: bool = true;

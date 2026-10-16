@@ -1,0 +1,9 @@
+# Phone book finder (command 49), from hub/script.126 FindPerson::handleMsg.
+# A request is 49/1 by account or 49/2 by name. The reply echoes whichCmd, toSID 0, and a count
+# at byte 4. Sub 1 then echoes the account words. Each hit is host, land type, land number, name.
+> find account 100001 | 31 01 00 00 a1 86 01 00
+> find name Guybrush | 31 02 00 00 00 00 47 75 79 62 72 75 73 68 00
+< account, nobody | 31 01 00 00 00 00 a1 86 01 00
+< account, Guybrush in the Clubhouse | 31 01 00 00 01 00 a1 86 01 00 07 01 01 47 75 79 62 72 75 73 68 00
+< name, nobody | 31 02 00 00 00 00
+< name, Guybrush in the Clubhouse and Elaine on the map | 31 02 00 00 02 00 07 01 01 47 75 79 62 72 75 73 68 00 07 00 00 45 6c 61 69 6e 65 00

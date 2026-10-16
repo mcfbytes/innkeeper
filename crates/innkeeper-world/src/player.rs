@@ -1,9 +1,10 @@
 use tracing::{info, info_span, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
+use crate::objects::OnlinePlayer;
 use crate::{
     bbs, conference, logon, mail, mall, money, object_list, presence, red_baron, router, rpg,
-    signup, Account, AccountId, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
+    signup, user_find, Account, AccountId, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
     HostMessage, JoinNet, Login, ObjectStore, Place, Unexplained, UnexplainedCommand, World,
 };
 
@@ -22,9 +23,22 @@ enum PlayerState {
 #[derive(Debug)]
 struct Player {
     account: Account,
+    /// The name the Login presented. A 40/4 renames the persona and leaves this.
+    login_name: String,
     /// The land place of the player's latest land joinNet; the RPG clients' map groups and boards
-    /// belong to it.
+    /// belong to it. A group leave does not clear it.
     place: Option<Place>,
+}
+
+impl Player {
+    fn signed_on(&self) -> OnlinePlayer {
+        OnlinePlayer {
+            account: self.account.id,
+            login_name: self.login_name.clone(),
+            persona: self.account.persona.clone(),
+            place: self.place,
+        }
+    }
 }
 
 impl Default for PlayerSession {
@@ -51,7 +65,7 @@ impl PlayerSession {
         message: &ClientMessage,
     ) -> Vec<Delivery> {
         let reply = |messages: Vec<HostMessage>| replies_to(connection, messages);
-        match *message {
+        let deliveries = match *message {
             ClientMessage::Signup(ref form) => reply(signup::answer(world, form)),
             ClientMessage::Login(ref login) => {
                 let mut deliveries = objects.disconnect(connection);
@@ -164,7 +178,12 @@ impl PlayerSession {
                 }
                 reply(located.into_iter().collect())
             }),
-        }
+            ClientMessage::UserFind(ref request) => {
+                self.when_logged_in(|_| reply(user_find::answer(world, objects, request)))
+            }
+        };
+        self.publish(objects, connection);
+        deliveries
     }
 
     /// The persona the player plays now; none before the Login is accepted.
@@ -180,6 +199,14 @@ impl PlayerSession {
         match &self.state {
             PlayerState::LoggedIn(player) => Some(player.account.id),
             PlayerState::AwaitingLogin => None,
+        }
+    }
+
+    /// Keeps the phone book's copy of this session in step with the player.
+    fn publish(&self, objects: &mut ObjectStore, connection: ConnectionId) {
+        match &self.state {
+            PlayerState::LoggedIn(player) => objects.sign_on(connection, player.signed_on()),
+            PlayerState::AwaitingLogin => objects.sign_off(connection),
         }
     }
 
@@ -232,6 +259,7 @@ impl PlayerSession {
                     ack.rating = world.lands.rights();
                 }
                 self.state = PlayerState::LoggedIn(Player {
+                    login_name: login.name.clone(),
                     account,
                     place: None,
                 });

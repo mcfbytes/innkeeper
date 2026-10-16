@@ -139,22 +139,23 @@ DATA frame per client message.
 
 | Module | Holds |
 |---|---|
-| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `object_kind`, `object_list`, `mail`, `mall`, `signup`); the type names are in `messages.md` section 3.2.1 |
+| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `user_find`, `object_kind`, `object_list`, `mail`, `mall`, `signup`); the type names are in `messages.md` section 3.2.1 |
 | `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the dev default; `listed(...)` checks number and encoded password; `stored(store, Enrolment)` reads the `AccountRecord` and gives the `Account` its `user_flags`, `rating` and `LoginStatus` (11 while the record's password is expired), and `change_password` updates the record |
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory with each row's version range, `admits(land_type, version)` against that range, and occupancy counted from the object store (`current` is the member count of the land's waiting room, `maximum` the catalog's 64) |
 | `mail` | the mailbox assignment (45/1) and the `EMMsg` requests (37) over the store: new-mail check, listing, send, read, delete, forward. See [mail.md](mail.md) |
 | `money` | the CasinoLand bankroll: a 40/3 read answered from the store with the starting 1,000,000 for an account that has none, and a 40/2 save stored and acked. See [store.md](store.md) section 5 |
 | `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
-| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4) |
+| `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4). Each message republishes the signed-on player for the phone book |
 | `rpg` | Yserbius and Twinion: the title table (land type, version, land size), the 41/2 service lookup, the place a land joinNet sets and the map groups shared within it, the land version gate, no echo of RPG sends. See [yserbius.md](../protocol/yserbius.md) |
 | `bbs` | the RPG bulletin board (27) over the store's boards: a fixed directory per location, messages numbered in posting order |
 | `mall` | Shoppers Advantage (54): the gate launches Shop, the join is answered, and one line says the mall is closed |
 | `signup` | command 55/1, before Login: create an account and return its number on Ack 55/1 |
 | `conference` | command 41/0: a free conference name is SID 0, a taken name is that object's SID |
+| `user_find` | command 49: who is logged in, by account (49/1) or by name (49/2), and the land they are still in |
 | `object_list` | commands 51/0 and 52/0: create a list of plain objects and free them the way leaveNet does |
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
-| `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
+| `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. It also keeps who is logged in, and drops them on hang-up. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
 | `store` | `Store`: accounts, bankrolls, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
 | `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
@@ -167,6 +168,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | signup (55/1) | Ack 55/1 with the new account number at words 6 and 8, before Login, and the session stays logged out. The form has no password, so the row keeps `SIGNUP_PASSWORD_ASSUMED` until that first Login (`SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED`). Numbers start at `SIGNUP_FIRST_ACCOUNT_ASSUMED`. An explicit signup creates a row even when enrolment is closed (`SIGNUP_CREATES_WHEN_ENROLMENT_IS_CLOSED_ASSUMED`). A store fault sends nothing |
 | 54/27, 54/25, 54/24, 54/26 | The gate launches Shop (`MALL_LAUNCHES_SHOP_ASSUMED`): one 54/19, then 54/17 and a 54/16 kind 1 that says the mall is closed (`MALL_CLOSED_TEXT_ASSUMED`, `MALL_NOTICE_FOLLOWS_JOIN_ASSUMED`). Word 2 of each reply is `MALL_HEADER_SLOT_ASSUMED`. A typed `/EXIT` also gets 54/20 kind `0x1A`. 54/26 gets 54/19 kind `0x1A`. There is no mall back end |
 | 41/0 | `ObjectLocated` with the SID at word 6. Zero means the name is free; the bound object's SID means it is taken. The check does not create the conference. The key is the raw tail (`CONFERENCE_KEY_IS_THE_RAW_TAIL_ASSUMED`) |
+| 49/1, 49/2 | one reply to the requester. `whichCmd` echoes the sub, `toSID` is 0, and `w count` is at byte 4. Sub 1 echoes the account words before the records; sub 2 does not. Each record is `b host, b landType, b landNumber, s persona`. The search is logged-in players. A name matches the persona, and the Login name (`FIND_ALSO_MATCHES_LOGIN_NAME_ASSUMED`); the printed name is the persona. `host` is this world's host number. The land is the player's place only while they still hold a member of that land's waiting room; otherwise both are 0, so the client prints "the Map". Count 0 means not found. Order is connection order (`FIND_RESULTS_IN_CONNECTION_ORDER_ASSUMED`) |
 | 51/0 | one plain object per requested count, no `ObjID`. Command 51 echoes the caller's cookie at word 4 and lists the new SIDs from byte 8. A longer list is cut to `OBJ_NEW_LIST_MAX_ASSUMED`. The words at bytes 2 and 6 are `OBJ_NEW_LIST_PREFACE_WORD_ASSUMED` and `OBJ_NEW_LIST_UNREAD_WORD_ASSUMED` |
 | 52/0 | nothing to the sender. Each listed SID is released like leaveNet, so a peer hears `ObjFree` (9), not command 52 (`OBJ_FREE_LIST_TELLS_PEERS_ASSUMED`) |
 | 44 | Ack 44/1 to the request's SID after the password is stored and the expired flag cleared; Nak 44 when the store refuses. The open book stores nothing and still acks |
@@ -232,7 +234,7 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 
 - Password hashing (Phase 7): the encoded password is stored as the client sends it. A second Login for an
   account that is already online is not refused.
-- Replies still open in `messages.md` section 3.3: 34/4 (rates), hints (38), the finder (49) and LSCI's own
+- Replies still open in `messages.md` section 3.3: 34/4 (rates), hints (38) and LSCI's own
   bulletin-board subs 27/6, 27/8 and 27/9. See [coverage.md](coverage.md) section 3.2.
 - Mail beyond [mail.md](mail.md): letters arriving while the recipient is online are not pushed. (New
   accounts start with INN Stamps, `userFlags` `0x200`, so they can send.)

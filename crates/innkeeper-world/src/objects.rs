@@ -16,8 +16,8 @@ use crate::rpg::RPG_OBJECT_LAND_TYPE;
 #[cfg(test)]
 use crate::Cookie;
 use crate::{
-    GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest, HostMessage, JoinNet, LandType, Nak,
-    ObjectKind, Sid,
+    AccountId, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest, HostMessage, JoinNet,
+    LandType, Nak, ObjectKind, Sid,
 };
 use games::GameBook;
 pub use games::{GamePhase, GameSession, GameType, Invitation};
@@ -83,6 +83,8 @@ pub struct ObjectStore {
     locks: LockTable,
     games: GameBook,
     mirror: PropertyMirror,
+    /// Logged-in players. Dropped when the connection hangs up; the phone book reads it.
+    online: BTreeMap<ConnectionId, OnlinePlayer>,
 }
 
 #[derive(Debug)]
@@ -141,6 +143,7 @@ impl ObjectStore {
             locks: LockTable::default(),
             games: GameBook::default(),
             mirror: PropertyMirror::default(),
+            online: BTreeMap::new(),
         }
     }
 
@@ -370,8 +373,37 @@ impl ObjectStore {
         }
     }
 
+    /// Whether `connection` holds a member of the shared group `key`.
+    pub(crate) fn holds_member_of(&self, connection: ConnectionId, key: GroupKey) -> bool {
+        let Some(&group) = self.shared_groups.get(&key) else {
+            return false;
+        };
+        self.members_of(group)
+            .iter()
+            .any(|&member| self.holds(connection, member))
+    }
+
+    /// Remembers a logged-in player. A later sign-on for the same connection replaces it.
+    pub(crate) fn sign_on(&mut self, connection: ConnectionId, player: OnlinePlayer) {
+        self.online.insert(connection, player);
+    }
+
+    /// Drops the logged-in player, as a hang-up does. A connection that was not signed on is
+    /// unchanged.
+    pub(crate) fn sign_off(&mut self, connection: ConnectionId) {
+        self.online.remove(&connection);
+    }
+
+    /// Logged-in players, in connection order.
+    pub(crate) fn online_players(&self) -> impl Iterator<Item = (ConnectionId, &OnlinePlayer)> {
+        self.online
+            .iter()
+            .map(|(&connection, player)| (connection, player))
+    }
+
     /// Releases everything the connection holds, its locks included, as when it hangs up or logs in again.
     pub fn disconnect(&mut self, connection: ConnectionId) -> Vec<Delivery> {
+        self.sign_off(connection);
         self.locks.release_all(connection);
         self.note_connection_gone(connection);
         let mut held: Vec<(Sid, bool)> = self
@@ -594,6 +626,15 @@ impl GroupJoinRefusal {
             text: String::new(),
         })
     }
+}
+
+/// One logged-in player the phone book can name. The persona is what a hit prints.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OnlinePlayer {
+    pub account: AccountId,
+    pub login_name: String,
+    pub persona: String,
+    pub place: Option<Place>,
 }
 
 fn tell(audience: BTreeSet<ConnectionId>, message: HostMessage) -> Vec<Delivery> {
