@@ -26,8 +26,25 @@ pub(crate) const HOST_TIME_ZONE_UTC_ASSUMED: bool = true;
 /// every other value shows error 100 + reason (section 4.2).
 pub(crate) const UNLISTED_LAND_NAK_ASSUMED: LoginNakReason = LoginNakReason::UnlistedLand;
 /// A host with a data directory creates an unknown account from the password the Login presents, so
-/// a dev machine needs no sign-up (command 55 is not answered). The original host's policy is unknown.
+/// a dev machine needs no sign-up. The original host's policy is unknown.
 pub(crate) const STORED_BOOK_ENROLS_ASSUMED: bool = true;
+/// The first account number a signup issues when the store has none higher. Six-digit numbers are
+/// what the stock client keeps in `LSCI.CFG`. The original host's allocator is unknown.
+pub(crate) const SIGNUP_FIRST_ACCOUNT_ASSUMED: u32 = 100_001;
+/// Placeholder password stored at signup. The form has no password (`hub/script.012`); the first
+/// Login replaces these bytes (`SIGNUP_ADOPTS_PRESENTED_PASSWORD_ASSUMED`). A form field that
+/// carried the encoded password would settle it.
+pub(crate) const SIGNUP_PASSWORD_ASSUMED: [u8; 10] = *b"SIGNUP\0\0\0\0";
+/// The first Login after signup stores the password that Login presented. The signup form does not
+/// carry one (`hub/script.012`, and `hub/script.004` global91 is a Prodigy id file). A form field
+/// that did would settle it.
+pub(crate) const SIGNUP_ADOPTS_PRESENTED_PASSWORD_ASSUMED: bool = true;
+/// Signup keeps an account and nothing from the form. `AccountRecord` has no address or card
+/// columns (`store.md`). A column for those fields would settle it the other way.
+pub(crate) const SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED: bool = true;
+/// An explicit signup creates an account even when a Login will not enrol an unknown number.
+/// Enrolment is the silent-login policy. The original host's split between the two is unknown.
+pub(crate) const SIGNUP_CREATES_WHEN_ENROLMENT_IS_CLOSED_ASSUMED: bool = true;
 /// joinNet kinds that take members on every land; the codec leaves this to the host (section 3.2.1).
 pub(crate) const GROUP_KINDS_ASSUMED: [ObjectKind; 3] = [
     ObjectKind::Group,

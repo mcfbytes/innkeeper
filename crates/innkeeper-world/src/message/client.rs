@@ -5,7 +5,7 @@ use crate::message::{
     parse_user_info, BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod,
     LockRequest, MailRequest, MailboxRequest, MallRequest, Multicast, ObjExists, ObjectKind,
     PlayStatus, PropertyRequest, ReadMoney, SaveMoney, SendMessage, ServicePropertyRequest, SetInt,
-    SetPersona, SetStr, Unexplained,
+    SetPersona, SetStr, Signup, Unexplained,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -48,6 +48,8 @@ pub enum ClientMessage {
     PlayStatus(PlayStatus),
     /// Shoppers Advantage (54).
     Mall(MallRequest),
+    /// Online signup (55/1). Sent before Login.
+    Signup(Signup),
     Unexplained(Unexplained),
 }
 
@@ -194,6 +196,7 @@ impl ClientMessage {
             }
             Command::PlayStatus => ClientMessage::PlayStatus(PlayStatus::parse(&mut reader)?),
             Command::Mall => ClientMessage::Mall(MallRequest::parse(&mut reader)?),
+            Command::Signup => ClientMessage::Signup(Signup::parse(&mut reader)?),
             Command::PlayerObjectNotice | Command::Register => {
                 ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
             }
@@ -251,6 +254,7 @@ impl ClientMessage {
             ClientMessage::ServiceProperties(request) => request.write(&mut writer),
             ClientMessage::PlayStatus(status) => status.write(&mut writer),
             ClientMessage::Mall(request) => request.write(&mut writer),
+            ClientMessage::Signup(signup) => signup.write(&mut writer),
             ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()

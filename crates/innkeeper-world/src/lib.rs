@@ -21,6 +21,7 @@ mod red_baron;
 pub mod router;
 mod rpg;
 pub mod saves;
+mod signup;
 mod store;
 mod world;
 
@@ -40,7 +41,7 @@ pub use message::{
     MailboxAnswer, MailboxRequest, MallHeader, MallReply, MallRequest, MessagePosition, MoneyReply,
     Multicast, Nak, Notice, ObjExists, ObjectKind, ObjectLocated, Occupancy, OutgoingLetter,
     PasswordSource, PlayStatus, ReadMoney, ReadStep, SaveMoney, SendMessage, SetInt, SetPersona,
-    SetStr,
+    SetStr, Signup,
 };
 pub use message::{
     InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,

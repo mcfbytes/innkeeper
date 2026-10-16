@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use tracing::warn;
 
+use crate::signup::is_placeholder;
 use crate::{
     AccountId, AccountRecord, EncodedPassword, Login, LoginAck, LoginStatus, Store, StoreError,
 };
@@ -157,6 +158,15 @@ fn admit_stored(
 ) -> Result<Account, Failure> {
     match store.account(login.account)? {
         Some(record) if record.password == login.password => {
+            Ok(Account::from_record(login, &record))
+        }
+        Some(record) if is_placeholder(&record.password) => {
+            store.update_password(login.account, login.password)?;
+            let record = AccountRecord {
+                password: login.password,
+                password_expired: false,
+                ..record
+            };
             Ok(Account::from_record(login, &record))
         }
         Some(_) => Err(Failure::Refused(Refusal::WrongPassword)),

@@ -1,0 +1,4 @@
+# Online signup (command 55/1), from messages.md section 3.3 and hub/script.012 MakeConnection.
+# The Ack is whichCmd 55, whichSub 1, and the new account number is the two words at bytes 6 and 8.
+> signup form | 37 01 34 12 01 6E 61 6D 65
+< signup ack | 00 00 00 00 37 01 A1 86 01 00

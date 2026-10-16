@@ -2,7 +2,7 @@ use tracing::{info, info_span, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::{
-    bbs, logon, mail, mall, money, presence, red_baron, router, rpg, Account, AccountId,
+    bbs, logon, mail, mall, money, presence, red_baron, router, rpg, signup, Account, AccountId,
     ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, Login,
     ObjectStore, Place, Unexplained, UnexplainedCommand, World,
 };
@@ -52,6 +52,7 @@ impl PlayerSession {
     ) -> Vec<Delivery> {
         let reply = |messages: Vec<HostMessage>| replies_to(connection, messages);
         match *message {
+            ClientMessage::Signup(ref form) => reply(signup::answer(world, form)),
             ClientMessage::Login(ref login) => {
                 let mut deliveries = objects.disconnect(connection);
                 deliveries.extend(reply(vec![self.log_in(world, login)]));

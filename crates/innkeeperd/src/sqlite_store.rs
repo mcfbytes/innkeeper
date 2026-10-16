@@ -149,6 +149,19 @@ impl Store for SqliteStore {
         }
     }
 
+    fn highest_account_id(&self) -> Result<Option<AccountId>, StoreError> {
+        let max: Option<i64> = self
+            .connection()
+            .query_row("SELECT MAX(id) FROM accounts", [], |row| row.get(0))
+            .map_err(backend)?;
+        match max {
+            None => Ok(None),
+            Some(id) => u32::try_from(id)
+                .map(|id| Some(AccountId(id)))
+                .map_err(|error| StoreError::backend(error)),
+        }
+    }
+
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError> {
         let updated = self
             .connection()
@@ -446,6 +459,21 @@ mod tests {
                 std::fs::remove_file(path).ok();
             }
         }
+    }
+
+    #[test]
+    fn the_highest_account_id_is_the_largest_row() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(store.highest_account_id().unwrap(), None);
+        let record = AccountRecord::new(EncodedPassword([1; 10]), "a");
+        store
+            .create_account(AccountId(100_010), record.clone())
+            .unwrap();
+        store.create_account(AccountId(100_050), record).unwrap();
+        assert_eq!(
+            store.highest_account_id().unwrap(),
+            Some(AccountId(100_050))
+        );
     }
 
     #[test]

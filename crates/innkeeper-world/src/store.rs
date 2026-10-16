@@ -89,6 +89,8 @@ impl StoreError {
 pub trait Store: fmt::Debug + Send + Sync {
     fn account(&self, id: AccountId) -> Result<Option<AccountRecord>, StoreError>;
     fn create_account(&self, id: AccountId, record: AccountRecord) -> Result<(), StoreError>;
+    /// The greatest account number stored, if the store holds any.
+    fn highest_account_id(&self) -> Result<Option<AccountId>, StoreError>;
     /// Replaces the password and clears the password-expired flag.
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError>;
 
@@ -185,6 +187,10 @@ impl Store for MemoryStore {
         }
         tables.accounts.insert(id, record);
         Ok(())
+    }
+
+    fn highest_account_id(&self) -> Result<Option<AccountId>, StoreError> {
+        Ok(self.tables().accounts.keys().copied().max())
     }
 
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError> {

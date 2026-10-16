@@ -318,9 +318,8 @@ impl HostMessage {
             | Command::Multicast
             | Command::ChangePassword
             | Command::Login
-            | Command::LoginWithProdigyId => {
-                return Err(MessageError::UnsupportedCommand(command.byte()))
-            }
+            | Command::LoginWithProdigyId
+            | Command::Signup => return Err(MessageError::UnsupportedCommand(command.byte())),
         };
         reader.finish()?;
         Ok(message)
