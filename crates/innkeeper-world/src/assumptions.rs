@@ -158,3 +158,8 @@ pub(crate) const OBJ_NEW_LIST_MAX_ASSUMED: u16 = 256;
 /// PaintBall's `handleMsg` has no command-52 arm (`SL/script.780`). A peer that disposed on 52 would
 /// settle it the other way.
 pub(crate) const OBJ_FREE_LIST_TELLS_PEERS_ASSUMED: bool = true;
+/// The `userFlags` a new account starts with: bit 0x200, INN Stamps, without which the Mail Room says
+/// "You don't have any INN Stamps. Without them you can only receive mail." (mail.md section 7). The
+/// original service sold stamps; this host gives every account them. An original account record would
+/// settle which other bits a plain member had.
+pub(crate) const NEW_ACCOUNT_USER_FLAGS_ASSUMED: u16 = 0x0200;

@@ -126,8 +126,8 @@ DOSBox-X with `innkeeperd --data-dir` (2026-10-05, the Feb-94 CD client, account
   empty." with the Read, Write, Address Book, Map and Options buttons.
 - The Mail Room first said "You don't have any INN Stamps. Without them you can only receive mail." That
   is bit `0x200` of the login Ack's `userFlags` (global 86): an account enrolled on first login has no flags,
-  so it cannot send until its record is given `0x200`. The harness test set it in the SQLite file. A default
-  for enrolled accounts belongs to the logon policy, not to this module.
+  so it cannot send until its record is given `0x200`. The harness test set it in the SQLite file. New accounts
+  now start with `0x200` (`NEW_ACCOUNT_USER_FLAGS_ASSUMED`, 2026-10-16).
 
 The key script `mailbox` (`tools/dosbox/key_scripts.py`) reaches "Mailbox 1". The compose, send and read
 dialogs were not driven: the Mail Room's buttons are reached by tabbing (after dismissing the empty-box

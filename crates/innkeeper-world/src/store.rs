@@ -39,12 +39,12 @@ pub struct AccountRecord {
 }
 
 impl AccountRecord {
-    /// A plain member: no flags, no rating, password current.
+    /// A plain member: INN Stamps only, no rating, password current.
     pub fn new(password: EncodedPassword, persona: impl Into<String>) -> Self {
         AccountRecord {
             password,
             persona: persona.into(),
-            user_flags: 0,
+            user_flags: crate::assumptions::NEW_ACCOUNT_USER_FLAGS_ASSUMED,
             rating: 0,
             status: LoginStatus::default(),
             password_expired: false,
@@ -675,7 +675,8 @@ mod tests {
     #[test]
     fn a_new_record_is_a_plain_member() {
         let record = AccountRecord::new(EncodedPassword([1; 10]), "elaine");
-        assert_eq!((record.user_flags, record.rating), (0, 0));
+        let stamps = crate::assumptions::NEW_ACCOUNT_USER_FLAGS_ASSUMED;
+        assert_eq!((record.user_flags, record.rating), (stamps, 0));
         assert!(!record.password_expired);
     }
 }

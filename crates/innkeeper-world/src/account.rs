@@ -202,7 +202,7 @@ mod tests {
         let expected = Account {
             id: AccountId(100_001),
             persona: "guybrush".into(),
-            user_flags: 0,
+            user_flags: crate::assumptions::NEW_ACCOUNT_USER_FLAGS_ASSUMED,
             rating: 0,
             status: LoginStatus::default(),
         };

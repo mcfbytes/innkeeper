@@ -138,14 +138,14 @@ pub(crate) mod tests {
     use crate::int14h_listener::tests::TransportClient;
 
     /// The stock client's first frame, from docs/protocol/captures.md, and the host's reply, whose rating
-    /// now grants the five stock lands.
+    /// now grants the five stock lands and whose userFlags carry INN Stamps.
     pub(crate) const CAPTURED_LOGIN_FRAME: [u8; 39] = [
         0x81, 0x58, 0xd8, 0x00, 0x21, 0x35, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x12, 0xa1, 0x86,
         0x01, 0x00, 0x01, 0x1d, 0x7a, 0x01, 0x66, 0x16, 0x66, 0x18, 0x73, 0x03, 0x00, 0x00, 0x67,
         0x75, 0x79, 0x62, 0x72, 0x75, 0x73, 0x68, 0x00, 0x82,
     ];
     pub(crate) const LOGIN_ACK_FRAME: [u8; 16] = [
-        0x81, 0x07, 0x1a, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00, 0x8f, 0x00,
+        0x81, 0x6f, 0xf7, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x02, 0x00, 0x8f, 0x00,
         0x82,
     ];
 
@@ -215,7 +215,7 @@ pub(crate) mod tests {
                 .iter()
                 .map(|f| std::fs::read_to_string(f.path()).unwrap())
                 .collect();
-            if captured.contains(" rx 81 07 1a 00 0a 00 ") {
+            if captured.contains(" rx 81 6f f7 00 0a 00 ") {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -224,7 +224,7 @@ pub(crate) mod tests {
         assert!(captured.contains("ev message len=33 35 00"), "{captured}");
         assert!(captured.contains("ev client Login("), "{captured}");
         assert!(captured.contains("ev host LoginAccepted"), "{captured}");
-        assert!(captured.contains(" rx 81 07 1a 00 0a 00 "), "{captured}");
+        assert!(captured.contains(" rx 81 6f f7 00 0a 00 "), "{captured}");
     }
 
     /// A client past the PAD call that speaks the link layer through a `Link` of its own.
@@ -318,7 +318,7 @@ pub(crate) mod tests {
     pub(crate) const LOGIN: &str =
         "35 00 00 00 01 02 03 12 a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 \
                          67 75 79 62 72 75 73 68 00";
-    pub(crate) const LOGIN_ACK: &str = "00 00 00 00 16 00 00 00 8f 00";
+    pub(crate) const LOGIN_ACK: &str = "00 00 00 00 16 00 02 00 8f 00";
     pub(crate) const JOIN_PLAYER: &str = "07 00 00 00 8c 09 01 01 ff ff 1e 00";
     pub(crate) const JOIN_WAITING_ROOM: &str = "07 00 00 00 c0 01 05 01 01 00 80 00";
     const GUARD_TIME: Duration = Duration::from_millis(50);

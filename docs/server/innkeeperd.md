@@ -234,8 +234,8 @@ Example, the end of a real session (`docs/protocol/captures.md`):
   account that is already online is not refused.
 - Replies still open in `messages.md` section 3.3: 34/4 (rates), hints (38), the finder (49) and LSCI's own
   bulletin-board subs 27/6, 27/8 and 27/9. See [coverage.md](coverage.md) section 3.2.
-- Mail beyond [mail.md](mail.md): letters arriving while the recipient is online are not pushed, and a
-  new account has no stamps flag, so it cannot send until its record has `0x200`.
+- Mail beyond [mail.md](mail.md): letters arriving while the recipient is online are not pushed. (New
+  accounts start with INN Stamps, `userFlags` `0x200`, so they can send.)
 - On the INT 14h transport, SwitchHost and Connect accept any address and keep the client on this host; a
   land switch between hosts is not modelled. No client speaks the transport yet (ScummVM's online executive
   is the first one planned).
