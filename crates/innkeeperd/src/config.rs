@@ -154,6 +154,15 @@ pub(crate) enum Command {
         #[arg(long)]
         data_dir: PathBuf,
     },
+    /// DEVELOPMENT ONLY: a mock OpenID Connect provider with an Allow button, on loopback.
+    DevOidc {
+        /// Loopback address to listen on.
+        #[arg(long, default_value = "127.0.0.1:2902")]
+        bind: SocketAddr,
+        /// The issuer URL it announces. Default http://BIND.
+        #[arg(long)]
+        issuer: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]
