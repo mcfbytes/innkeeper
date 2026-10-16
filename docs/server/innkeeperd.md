@@ -55,7 +55,7 @@ events come out, and timers are a `next_deadline()` that the caller sleeps on. `
 
 ```
 cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures] [--no-capture]
-                           [--public]
+                           [--public] [--sandbox | --no-sandbox] [--allow-root] [--sandbox-log]
                            [--data-dir DIR]
                            [--audit-public-key FILE --audit-key-id KID] [--audit-retention-days 90]
                            [--line auto|hayes|pad] [--connect-rate 2400]
@@ -78,8 +78,19 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
 - `--public` is for a host that should process as little personal data as possible: it refuses
   `--capture-dir`, writes no capture files, logs message kinds without fields, and replaces peer
   addresses with a per-process HMAC token. Persona names in other info lines become the account
-  number. See [privacy.md](privacy.md). Development tools that parse verbose logs keep working: the
-  default format is unchanged.
+  number. See [privacy.md](privacy.md). It also accepts players only over a loopback WebSocket:
+  an explicit `--bind` or `--int14h-bind` is an error, `--ws-bind` is required and must be
+  `127.0.0.0/8` or `::1`, and the INT 14h listener stays off. `--line` does not open a socket, so
+  it stays available. There is no `--private` flag; without `--public` the listeners are as above.
+  Startup warns once that sign-in is not implemented and WebSocket connections are not
+  authenticated. The check that will require a session token is `connection_gate::admit`, called
+  before the upgrade. Development tools that parse verbose logs keep working: the default format
+  is unchanged. The in-process jail that `--public` turns on is [hardening.md](hardening.md).
+- `--sandbox` applies Landlock, seccomp and `no_new_privs` after the sockets are bound and before
+  the accept loop. It is on by default with `--public`. `--no-sandbox` leaves the process
+  unrestricted. `--allow-root` is only for a local DOSBox setup and is refused with `--public`.
+  `--sandbox-log` audits unknown syscalls instead of killing the process. Details, the paths and
+  the kernel requirements are in [hardening.md](hardening.md).
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an

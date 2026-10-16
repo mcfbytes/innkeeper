@@ -48,6 +48,10 @@ pub(crate) async fn serve_websocket(
     settings: Arc<ConnectionSettings>,
 ) {
     let peer = settings.peer_log(addr);
+    if let Err(error) = crate::connection_gate::admit(&stream, addr) {
+        warn!(%error, %peer, "websocket refused");
+        return;
+    }
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }

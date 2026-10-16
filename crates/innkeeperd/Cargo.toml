@@ -28,6 +28,13 @@ rsa.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 
+# Linux-only confinement. Other targets warn and keep running (docs/server/hardening.md).
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock.workspace = true
+seccompiler.workspace = true
+prctl.workspace = true
+libc.workspace = true
+
 [dev-dependencies]
 innkeeper-world = { workspace = true, features = ["test-support"] }
 

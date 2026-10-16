@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 use clap::error::ErrorKind;
@@ -36,8 +36,24 @@ pub(crate) struct Config {
     #[arg(long)]
     pub(crate) no_capture: bool,
     /// Public host: no captures, no message fields, no peer addresses (docs/server/privacy.md).
+    /// Players arrive only on a loopback WebSocket. The in-process sandbox is on unless --no-sandbox.
     #[arg(long)]
     pub(crate) public: bool,
+    /// Apply Landlock and seccomp after startup (docs/server/hardening.md). On with --public.
+    #[arg(long)]
+    pub(crate) sandbox: bool,
+    /// Leave the process unrestricted. This is how a public-mode process opts out of the sandbox.
+    #[arg(long, conflicts_with_all = ["sandbox", "sandbox_log", "sandbox_probe"])]
+    pub(crate) no_sandbox: bool,
+    /// Run the sandbox as root. For a local DOSBox setup; refused together with --public.
+    #[arg(long)]
+    pub(crate) allow_root: bool,
+    /// Seccomp logs unknown syscalls instead of killing the process (docs/server/hardening.md).
+    #[arg(long)]
+    pub(crate) sandbox_log: bool,
+    /// Open PATH after the sandbox is installed, print the result, and exit.
+    #[arg(long, hide = true, value_name = "PATH")]
+    pub(crate) sandbox_probe: Option<PathBuf>,
     /// Directory holding the account database; without it every account number is admitted.
     #[arg(long)]
     pub(crate) data_dir: Option<PathBuf>,
@@ -220,7 +236,8 @@ pub(crate) enum LineArg {
 }
 
 impl Config {
-    /// Parse argv and refuse `--public` together with an explicit `--capture-dir`.
+    /// Parse argv. `--public` refuses raw TCP, a non-loopback WebSocket and `--allow-root`
+    /// (docs/server/innkeeperd.md).
     pub(crate) fn load() -> Self {
         Self::try_load_from(std::env::args_os()).unwrap_or_else(|error| error.exit())
     }
@@ -235,20 +252,79 @@ impl Config {
         config.validated(&matches)
     }
 
-    fn validated(self, matches: &ArgMatches) -> Result<Self, clap::Error> {
-        let capture_given = matches.value_source("capture_dir") == Some(ValueSource::CommandLine);
-        if self.public && capture_given {
-            let text =
-                "--public cannot be used with --capture-dir: public mode writes no capture files\n";
-            return Err(clap::Error::raw(ErrorKind::ArgumentConflict, text));
+    fn validated(mut self, matches: &ArgMatches) -> Result<Self, clap::Error> {
+        let on_cli = |name: &str| matches.value_source(name) == Some(ValueSource::CommandLine);
+        if self.public && on_cli("capture_dir") {
+            return Err(conflict(
+                "--public cannot be used with --capture-dir: public mode writes no capture files\n",
+            ));
         }
         let key = self.audit_public_key.is_some();
         let kid = self.audit_key_id.is_some();
         if key != kid {
-            let text = "--audit-public-key and --audit-key-id must be given together\n";
-            return Err(clap::Error::raw(ErrorKind::ArgumentConflict, text));
+            return Err(conflict(
+                "--audit-public-key and --audit-key-id must be given together\n",
+            ));
+        }
+        if self.public && self.allow_root {
+            return Err(conflict(concat!(
+                "--public cannot be used with --allow-root: ",
+                "public mode refuses to run as root\n"
+            )));
+        }
+        if self.public && on_cli("bind") {
+            return Err(conflict(concat!(
+                "--public cannot be used with --bind: public mode accepts players only ",
+                "over the WebSocket, so there is no raw TCP listener\n"
+            )));
+        }
+        if self.public && on_cli("int14h_bind") {
+            return Err(conflict(concat!(
+                "--public cannot be used with --int14h-bind: ",
+                "public mode does not serve the INT 14h transport\n"
+            )));
+        }
+        if self.public {
+            let Some(websocket) = self.ws_bind else {
+                return Err(conflict(concat!(
+                    "--public requires --ws-bind: ",
+                    "public mode accepts players only over the WebSocket\n"
+                )));
+            };
+            if !is_loopback(websocket) {
+                return Err(conflict(concat!(
+                    "--public requires --ws-bind on a loopback address (127.0.0.0/8 or ::1); ",
+                    "a TLS proxy on this host terminates TLS\n"
+                )));
+            }
+            self.no_int14h = true;
         }
         Ok(self)
+    }
+
+    /// Addresses the process actually binds. Public mode keeps only the WebSocket.
+    pub(crate) fn listen_plan(&self) -> ListenPlan {
+        if self.public {
+            ListenPlan {
+                legacy: None,
+                int14h: None,
+                websocket: self.ws_bind,
+            }
+        } else {
+            ListenPlan {
+                legacy: Some(self.bind),
+                int14h: self.int14h_bind(),
+                websocket: self.ws_bind,
+            }
+        }
+    }
+
+    /// `--public` sandboxes unless `--no-sandbox`. `--sandbox-log` and the probe imply it too.
+    pub(crate) fn sandbox_enabled(&self) -> bool {
+        if self.no_sandbox {
+            return false;
+        }
+        self.public || self.sandbox || self.sandbox_log || self.sandbox_probe.is_some()
     }
 
     pub(crate) fn retention(&self) -> RetentionPolicy {
@@ -285,6 +361,25 @@ impl Config {
 
     pub(crate) fn int14h_bind(&self) -> Option<SocketAddr> {
         (!self.no_int14h).then_some(self.int14h_bind)
+    }
+}
+
+/// What `serve` binds. The legacy and INT 14h sockets are absent in public mode.
+pub(crate) struct ListenPlan {
+    pub(crate) legacy: Option<SocketAddr>,
+    pub(crate) int14h: Option<SocketAddr>,
+    pub(crate) websocket: Option<SocketAddr>,
+}
+
+fn conflict(text: &str) -> clap::Error {
+    clap::Error::raw(ErrorKind::ArgumentConflict, text)
+}
+
+/// 127.0.0.0/8 or ::1. An IPv4-mapped address is not loopback here.
+fn is_loopback(addr: SocketAddr) -> bool {
+    match addr.ip() {
+        IpAddr::V4(ip) => ip.is_loopback(),
+        IpAddr::V6(ip) => ip.is_loopback(),
     }
 }
 
@@ -344,9 +439,109 @@ mod tests {
 
     #[test]
     fn public_mode_turns_capture_off() {
-        let config = Config::try_load_from(["innkeeperd", "--public"]).unwrap();
+        let config =
+            Config::try_load_from(["innkeeperd", "--public", "--ws-bind", "127.0.0.1:2316"])
+                .unwrap();
         assert!(config.public);
         assert_eq!(config.capture_dir(), None);
+    }
+
+    #[test]
+    fn public_mode_rejects_an_explicit_tcp_bind() {
+        let error = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--bind",
+            "127.0.0.1:2314",
+            "--ws-bind",
+            "127.0.0.1:9",
+        ]);
+        let text = error.unwrap_err().to_string();
+        assert!(text.contains("--bind"), "{text}");
+        assert!(text.contains("no raw TCP"), "{text}");
+    }
+
+    #[test]
+    fn public_mode_rejects_the_int14h_transport() {
+        let error = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--int14h-bind",
+            "127.0.0.1:9",
+            "--ws-bind",
+            "127.0.0.1:9",
+        ]);
+        let text = error.unwrap_err().to_string();
+        assert!(text.contains("--int14h-bind"), "{text}");
+        assert!(text.contains("INT 14h"), "{text}");
+    }
+
+    #[test]
+    fn public_mode_requires_a_loopback_websocket() {
+        let missing = Config::try_load_from(["innkeeperd", "--public"]);
+        let text = missing.unwrap_err().to_string();
+        assert!(text.contains("requires --ws-bind"), "{text}");
+        let remote = Config::try_load_from(["innkeeperd", "--public", "--ws-bind", "0.0.0.0:9"]);
+        let text = remote.unwrap_err().to_string();
+        assert!(text.contains("loopback"), "{text}");
+        let mapped = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--ws-bind",
+            "[::ffff:127.0.0.1]:9",
+        ]);
+        assert!(mapped.unwrap_err().to_string().contains("loopback"));
+        let local = Config::try_load_from(["innkeeperd", "--public", "--ws-bind", "[::1]:9"]);
+        assert!(local.is_ok());
+    }
+
+    #[test]
+    fn public_mode_opens_no_tcp_listener_and_the_default_still_does() {
+        let public = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--ws-bind",
+            "127.0.0.1:9",
+            "--line",
+            "pad",
+            "--no-int14h",
+        ])
+        .unwrap();
+        let plan = public.listen_plan();
+        assert_eq!(plan.legacy, None);
+        assert_eq!(plan.int14h, None);
+        assert_eq!(plan.websocket, Some("127.0.0.1:9".parse().unwrap()));
+        assert!(public.sandbox_enabled());
+
+        let defaults = Config::parse_from(["innkeeperd"]);
+        let plan = defaults.listen_plan();
+        assert_eq!(plan.legacy, Some("127.0.0.1:2314".parse().unwrap()));
+        assert_eq!(plan.int14h, Some("127.0.0.1:2315".parse().unwrap()));
+        assert_eq!(plan.websocket, None);
+        assert!(!defaults.sandbox_enabled());
+    }
+
+    #[test]
+    fn no_sandbox_turns_the_public_sandbox_off_and_allow_root_is_refused() {
+        let open = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--no-sandbox",
+            "--ws-bind",
+            "127.1.2.3:9",
+        ])
+        .unwrap();
+        assert!(!open.sandbox_enabled());
+        let rooted = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--allow-root",
+            "--ws-bind",
+            "127.0.0.1:9",
+        ]);
+        assert!(rooted.unwrap_err().to_string().contains("--allow-root"));
+        let flagged = Config::parse_from(["innkeeperd", "--sandbox"]);
+        assert!(flagged.sandbox_enabled());
     }
 
     #[test]

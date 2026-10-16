@@ -30,6 +30,10 @@ base64 = "0.22"
 aes-gcm = "0.10"
 rsa = { version = "0.9", features = ["pem", "sha2", "getrandom"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+landlock = "0.4"
+seccompiler = "0.5"
+prctl = "1"
+libc = "0.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

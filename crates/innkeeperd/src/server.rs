@@ -1,11 +1,12 @@
 use std::future::{self, Future};
 use std::io;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use innkeeper_world::{LogPolicy, RetentionPolicy, Store, StoreError, World};
+use std::net::TcpListener as StdListener;
 use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{info, warn};
@@ -40,6 +41,51 @@ pub(crate) enum ServerError {
     Lock { path: String, source: io::Error },
     #[error("the audit public key cannot be used: {0}")]
     AuditKey(String),
+    #[error("cannot use a listening socket: {0}")]
+    Adopt(io::Error),
+}
+
+/// Startup finished, sockets bound, sandbox not yet applied.
+pub(crate) struct Prepared {
+    settings: Arc<ConnectionSettings>,
+    legacy: Option<StdListener>,
+    transport: Option<StdListener>,
+    websocket: Option<StdListener>,
+    lock: Option<crate::subject::DataDirLock>,
+    store: Option<Arc<SqliteStore>>,
+    policy: RetentionPolicy,
+    data_dir: Option<PathBuf>,
+    capture_dir: Option<PathBuf>,
+}
+
+impl Prepared {
+    pub(crate) fn data_dir(&self) -> Option<&Path> {
+        self.data_dir.as_deref()
+    }
+
+    pub(crate) fn capture_dir(&self) -> Option<&Path> {
+        self.capture_dir.as_deref()
+    }
+
+    /// Ports already bound. Port 0 is not a Landlock rule (it means the ephemeral range).
+    pub(crate) fn bound_ports(&self) -> Vec<u16> {
+        let listeners = [
+            self.legacy.as_ref(),
+            self.transport.as_ref(),
+            self.websocket.as_ref(),
+        ];
+        let mut ports = Vec::new();
+        for listener in listeners.into_iter().flatten() {
+            let Ok(addr) = listener.local_addr() else {
+                continue;
+            };
+            let port = addr.port();
+            if port != 0 && !ports.contains(&port) {
+                ports.push(port);
+            }
+        }
+        ports
+    }
 }
 
 struct Opened {
@@ -67,14 +113,15 @@ fn open_world(data_dir: Option<&Path>) -> Result<Opened, ServerError> {
     })
 }
 
-pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
+/// Open the database, take the data-dir lock and bind listeners. The runtime starts later.
+pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     let mut opened = open_world(config.data_dir.as_deref())?;
     opened.world.log = if config.public {
         LogPolicy::Public
     } else {
         LogPolicy::Verbose
     };
-    let _lock = match config.data_dir.as_deref() {
+    let lock = match config.data_dir.as_deref() {
         Some(dir) => Some(crate::subject::DataDirLock::acquire(dir)?),
         None => None,
     };
@@ -83,7 +130,44 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
         run_purge(store, policy);
     }
     let audit = load_audit(&config, opened.store.as_ref())?;
-    if let Some(store) = opened.store.clone() {
+    if config.public {
+        warn!("{}", crate::connection_gate::SIGN_IN_NOT_READY);
+    }
+    let plan = config.listen_plan();
+    let legacy = listen_std_if(plan.legacy)?;
+    let transport = listen_std_if(plan.int14h)?;
+    let websocket = listen_std_if(plan.websocket)?;
+    let capture_dir = config.capture_dir();
+    let mut settings =
+        ConnectionSettings::new(config.session_config(), opened.world, capture_dir.clone());
+    settings.audit = audit;
+    Ok(Prepared {
+        settings: Arc::new(settings),
+        legacy,
+        transport,
+        websocket,
+        lock,
+        store: opened.store,
+        policy,
+        data_dir: config.data_dir,
+        capture_dir,
+    })
+}
+
+pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
+    let Prepared {
+        settings,
+        legacy,
+        transport,
+        websocket,
+        lock,
+        store,
+        policy,
+        data_dir: _,
+        capture_dir: _,
+    } = prepared;
+    let _lock = lock;
+    if let Some(store) = store {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(3600));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -94,14 +178,24 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
             }
         });
     }
-    let legacy = listen(config.bind).await?;
-    let transport = listen_if(config.int14h_bind()).await?;
-    let websocket = listen_if(config.ws_bind).await?;
-    let mut settings =
-        ConnectionSettings::new(config.session_config(), opened.world, config.capture_dir());
-    settings.audit = audit;
-    let settings = Arc::new(settings);
-    info!(bind = %config.bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
+    let legacy = adopt_if(legacy)?;
+    let transport = adopt_if(transport)?;
+    let websocket = adopt_if(websocket)?;
+    match legacy
+        .as_ref()
+        .and_then(|listener| listener.local_addr().ok())
+    {
+        Some(bind) => info!(bind = %bind, captures = ?settings.capture_dir, "{STARTUP_LINE}"),
+        None => info!(captures = ?settings.capture_dir, "{STARTUP_LINE}"),
+    }
+    let legacy = async {
+        match legacy {
+            Some(listener) => {
+                accept_forever(listener, Arc::clone(&settings), serve_connection).await
+            }
+            None => future::pending().await,
+        }
+    };
     let transport = accept_if(
         transport,
         &settings,
@@ -110,12 +204,29 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
     );
     let websocket = accept_if(websocket, &settings, serve_websocket, "WebSocket lines");
     tokio::select! {
-        () = accept_forever(legacy, Arc::clone(&settings), serve_connection) => {}
+        () = legacy => {}
         () = transport => {}
         () = websocket => {}
         _ = tokio::signal::ctrl_c() => info!("shutting down"),
     }
     Ok(())
+}
+
+fn listen_std(bind: SocketAddr) -> Result<StdListener, ServerError> {
+    StdListener::bind(bind).map_err(|source| ServerError::Bind { bind, source })
+}
+
+fn listen_std_if(bind: Option<SocketAddr>) -> Result<Option<StdListener>, ServerError> {
+    bind.map(listen_std).transpose()
+}
+
+fn adopt(listener: StdListener) -> Result<TcpListener, ServerError> {
+    listener.set_nonblocking(true).map_err(ServerError::Adopt)?;
+    TcpListener::from_std(listener).map_err(ServerError::Adopt)
+}
+
+fn adopt_if(listener: Option<StdListener>) -> Result<Option<TcpListener>, ServerError> {
+    listener.map(adopt).transpose()
 }
 
 fn run_purge(store: &SqliteStore, policy: RetentionPolicy) {
@@ -159,13 +270,6 @@ fn load_audit(
     Ok(Some(Arc::new(AuditSeal::new(Arc::clone(store), recipient))))
 }
 
-async fn listen_if(bind: Option<SocketAddr>) -> Result<Option<TcpListener>, ServerError> {
-    match bind {
-        Some(bind) => Ok(Some(listen(bind).await?)),
-        None => Ok(None),
-    }
-}
-
 /// Serves an optional listener; a listener that is switched off never finishes.
 async fn accept_if<F, S>(
     listener: Option<TcpListener>,
@@ -183,12 +287,6 @@ async fn accept_if<F, S>(
         }
         None => future::pending().await,
     }
-}
-
-async fn listen(bind: SocketAddr) -> Result<TcpListener, ServerError> {
-    TcpListener::bind(bind)
-        .await
-        .map_err(|source| ServerError::Bind { bind, source })
 }
 
 /// Hands every accepted socket to `serve` on a task of its own.

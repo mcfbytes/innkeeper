@@ -52,6 +52,11 @@ Opt-in. The default log and capture format stay exactly as they are.
 `LogPolicy` in `innkeeper-world` and `PeerTokens` in `innkeeperd` are the formatters; call sites do
 not branch on `--public` by hand.
 
+The same flag is also the only way in. A public server binds no raw TCP listener and no INT 14h
+listener; `--ws-bind` is required and must be a loopback address, because a TLS proxy on this host
+terminates TLS. Connections are not authenticated until sign-in exists, and startup says so.
+[hardening.md](hardening.md) is that ingress rule and the in-process sandbox `--public` turns on.
+
 ## 3. Export, delete and restore
 
 Offline, against `--data-dir`. Stop the server first: `serve` writes `DIR/innkeeper.lock` with its
@@ -112,7 +117,9 @@ is one past the highest id, counting soft-deleted rows.
   tier is unnecessary: that tier also charges for deletion before 180 days. A preservation request
   that needs one backup uses a blob legal hold (immutability) on that blob. Database backups never
   contain vault secrets.
-- Run the public host with `--public` and `--data-dir` on encrypted disk.
+- Run the public host with `--public` and `--data-dir` on encrypted disk. `--public` also jails
+  the process ([hardening.md](hardening.md)); `--no-sandbox` is the opt-out. The VM's systemd unit
+  is a separate layer and lives in the infra repo.
 
 ## 5. Sealed connection records
 
@@ -138,8 +145,11 @@ serious abuse investigation.
 
 **Envelope.** A fresh 256-bit data key encrypts the JSON with AES-256-GCM (`aes-gcm` 0.10) and a
 random 96-bit nonce. The data key is wrapped with RSA-OAEP-256 (SHA-256, MGF1-SHA-256) under the
-operator RSA public key (`rsa` 0.9). Both crates are MIT OR Apache-2.0. There is no separate
-third-party licence list in this repo; this paragraph is the record. The server only encrypts with
+operator RSA public key (`rsa` 0.9). Both crates are MIT OR Apache-2.0. The in-process sandbox
+([hardening.md](hardening.md)) adds, on Linux only, `landlock` 0.4 (MIT OR Apache-2.0),
+`seccompiler` 0.5 (Apache-2.0 OR BSD-3-Clause), `prctl` 1 (MIT) and `libc` 0.2 (MIT OR
+Apache-2.0). There is no separate third-party licence list in this repo; this paragraph is the
+record. The server only encrypts with
 `rsa`, so that crate's decryption-timing advisory does not apply to the running process. The offline
 `--private-key` path does decrypt and is for local development only.
 
