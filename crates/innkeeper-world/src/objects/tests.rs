@@ -25,6 +25,14 @@ fn granted(deliveries: &[Delivery]) -> Sid {
 }
 
 #[test]
+fn a_new_list_stops_when_every_sid_is_taken() {
+    let mut store = ObjectStore::new();
+    let join = request(0, ObjectKind::Object, 0xFFFF);
+    while store.create(A, join, Role::Object).is_some() {}
+    assert!(store.new_list(A, join, 2).is_empty());
+}
+
+#[test]
 fn sids_wrap_past_the_top_and_skip_live_objects() {
     let mut store = ObjectStore::new();
     let first = granted(&store.join(A, request(1, ObjectKind::Object, 0xFFFF)));

@@ -5,8 +5,8 @@ use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
     Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply,
-    MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjectLocated, PropertyValues,
-    SendMessage, SetInt, SetStr,
+    MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjNewListReply, ObjectLocated,
+    PropertyValues, SendMessage, SetInt, SetStr,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -57,6 +57,8 @@ pub enum HostMessage {
     Bbs(BbsReply),
     /// Shoppers Advantage (54).
     Mall(MallReply),
+    /// PaintBall `ObjNewList` (51): the caller's cookie and one SID per new object.
+    ObjNewList(ObjNewListReply),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -214,6 +216,7 @@ impl HostMessage {
             HostMessage::MemberProperties(table) => table.write(&mut writer),
             HostMessage::Bbs(reply) => reply.write(&mut writer),
             HostMessage::Mall(reply) => reply.write(&mut writer),
+            HostMessage::ObjNewList(reply) => reply.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -306,6 +309,7 @@ impl HostMessage {
             }
             Command::Bbs => HostMessage::Bbs(BbsReply::parse(&mut reader)?),
             Command::Mall => HostMessage::Mall(MallReply::parse(&mut reader)?),
+            Command::ObjNewList => HostMessage::ObjNewList(ObjNewListReply::parse(&mut reader)?),
             Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
             Command::Lock
             | Command::ServiceProperties
@@ -319,7 +323,8 @@ impl HostMessage {
             | Command::ChangePassword
             | Command::Login
             | Command::LoginWithProdigyId
-            | Command::Signup => return Err(MessageError::UnsupportedCommand(command.byte())),
+            | Command::Signup
+            | Command::ObjFreeList => return Err(MessageError::UnsupportedCommand(command.byte())),
         };
         reader.finish()?;
         Ok(message)

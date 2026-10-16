@@ -264,6 +264,24 @@ impl ObjectStore {
         deliveries
     }
 
+    /// One plain object per entry, held by `connection`. The caller answers; this sends no `ObjID`.
+    pub(crate) fn new_list(
+        &mut self,
+        connection: ConnectionId,
+        request: JoinNet,
+        count: u16,
+    ) -> Vec<Sid> {
+        let mut sids = Vec::with_capacity(usize::from(count));
+        for _ in 0..count {
+            let Some(sid) = self.create(connection, request, Role::Object) else {
+                warn!(made = sids.len(), "object list stopped: every SID is taken");
+                break;
+            };
+            sids.push(sid);
+        }
+        sids
+    }
+
     /// leaveNet: releases one of the connection's references; the last one lets go of the object.
     pub(crate) fn leave(&mut self, connection: ConnectionId, sid: Sid) -> Vec<Delivery> {
         let object = self.objects.get_mut(&sid);

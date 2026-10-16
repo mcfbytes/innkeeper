@@ -1,0 +1,9 @@
+# PaintBall object lists (51/0 and 52/0), from SL/script.780 placeMen and PaintBall::dispose.
+# A new list echoes the caller's handle at word 4 and one SID word per object from byte 8.
+# The word at byte 6 of that reply is unread. A free list is n SID words after `b 52, b 0, w handle, w n`.
+# The host does not send 52; a peer hears ObjFree (command 9).
+> place two objects | 33 00 00 00 0B 0A 01 01 FE FF 1E 00 02 00
+< two new sids | 33 00 00 00 0B 0A 00 00 00 01 01 01
+< unread word kept | 33 00 00 00 0B 0A CD AB 00 01
+> free two sids | 34 00 00 00 02 00 00 01 01 01
+> free one sid by handle | 34 00 34 12 01 00 00 01

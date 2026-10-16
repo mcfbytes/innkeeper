@@ -3,9 +3,9 @@ use std::fmt;
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
     parse_user_info, BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod,
-    LockRequest, MailRequest, MailboxRequest, MallRequest, Multicast, ObjExists, ObjectKind,
-    PlayStatus, PropertyRequest, ReadMoney, SaveMoney, SendMessage, ServicePropertyRequest, SetInt,
-    SetPersona, SetStr, Signup, Unexplained,
+    LockRequest, MailRequest, MailboxRequest, MallRequest, Multicast, ObjExists, ObjFreeList,
+    ObjNewList, ObjectKind, PlayStatus, PropertyRequest, ReadMoney, SaveMoney, SendMessage,
+    ServicePropertyRequest, SetInt, SetPersona, SetStr, Signup, Unexplained,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -50,6 +50,10 @@ pub enum ClientMessage {
     Mall(MallRequest),
     /// Online signup (55/1). Sent before Login.
     Signup(Signup),
+    /// PaintBall `placeMen`: create `count` objects (51/0).
+    ObjNewList(ObjNewList),
+    /// PaintBall dispose: free the listed SIDs (52/0).
+    ObjFreeList(ObjFreeList),
     Unexplained(Unexplained),
 }
 
@@ -197,6 +201,8 @@ impl ClientMessage {
             Command::PlayStatus => ClientMessage::PlayStatus(PlayStatus::parse(&mut reader)?),
             Command::Mall => ClientMessage::Mall(MallRequest::parse(&mut reader)?),
             Command::Signup => ClientMessage::Signup(Signup::parse(&mut reader)?),
+            Command::ObjNewList => ClientMessage::ObjNewList(ObjNewList::parse(&mut reader)?),
+            Command::ObjFreeList => ClientMessage::ObjFreeList(ObjFreeList::parse(&mut reader)?),
             Command::PlayerObjectNotice | Command::Register => {
                 ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
             }
@@ -255,6 +261,8 @@ impl ClientMessage {
             ClientMessage::PlayStatus(status) => status.write(&mut writer),
             ClientMessage::Mall(request) => request.write(&mut writer),
             ClientMessage::Signup(signup) => signup.write(&mut writer),
+            ClientMessage::ObjNewList(list) => list.write(&mut writer),
+            ClientMessage::ObjFreeList(list) => list.write(&mut writer),
             ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()

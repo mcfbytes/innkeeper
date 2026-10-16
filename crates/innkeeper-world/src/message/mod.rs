@@ -13,6 +13,7 @@ mod mall;
 mod multicast;
 mod notice;
 mod object_kind;
+mod object_list;
 mod play_status;
 mod properties;
 mod property_query;
@@ -46,6 +47,7 @@ pub use mall::{MallHeader, MallReply, MallRequest};
 pub use multicast::Multicast;
 pub use notice::Notice;
 pub use object_kind::ObjectKind;
+pub use object_list::{ObjFreeList, ObjNewList, ObjNewListReply};
 pub use play_status::PlayStatus;
 pub use properties::{IntProperty, SetInt, SetStr};
 pub use property_query::{

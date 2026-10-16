@@ -145,3 +145,16 @@ pub(crate) const MALL_NOTICE_FOLLOWS_JOIN_ASSUMED: bool = true;
 /// Property 0xF of Red Baron's service: how long a game lasts, in minutes. The client accepts 5 to 30
 /// and scales it to timer ticks (redbaron.md section 6); 10 is a host choice.
 pub(crate) const RED_BARON_GAME_MINUTES_ASSUMED: u16 = 10;
+/// Word at byte 2 of an `ObjNewList` reply. `class_67::init` replaces `to` with the word at byte 4,
+/// so this word is only the base header's `toSID` (`hub/type31.559`). A reader of byte 2 would settle it.
+pub(crate) const OBJ_NEW_LIST_PREFACE_WORD_ASSUMED: u16 = 0;
+/// Word at byte 6 of an `ObjNewList` reply. `class_67::init` stores it and PaintBall never reads it
+/// (`SL/script.780`). A use of that temporary would settle it.
+pub(crate) const OBJ_NEW_LIST_UNREAD_WORD_ASSUMED: u16 = 0;
+/// The most objects one `ObjNewList` creates. `placeMen` asks for one per inventory item
+/// (`SL/script.780`). A capture of a longer list, or the original host's limit, would settle a higher cap.
+pub(crate) const OBJ_NEW_LIST_MAX_ASSUMED: u16 = 256;
+/// `ObjFreeList` tells other connections the way leaveNet does: `ObjFree` (command 9), not command 52.
+/// PaintBall's `handleMsg` has no command-52 arm (`SL/script.780`). A peer that disposed on 52 would
+/// settle it the other way.
+pub(crate) const OBJ_FREE_LIST_TELLS_PEERS_ASSUMED: bool = true;
