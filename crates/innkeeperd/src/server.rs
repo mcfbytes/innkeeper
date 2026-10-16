@@ -50,7 +50,7 @@ pub(crate) enum ServerError {
     Adopt(io::Error),
     #[error("{0}")]
     Admin(String),
-    #[error("--azure-metrics: {0}")]
+    #[error("--app-insights-connection-string: {0}")]
     Metrics(String),
     #[error("{0}")]
     AdminList(#[from] crate::admin::allowlist::AllowlistError),
@@ -69,7 +69,7 @@ pub(crate) struct Prepared {
     policy: RetentionPolicy,
     data_dir: Option<PathBuf>,
     capture_dir: Option<PathBuf>,
-    /// The Azure custom-metrics pusher's settings (`--azure-metrics`).
+    /// The Application Insights pusher's settings (`--app-insights-connection-string`).
     metrics: Option<crate::metrics::insights::Settings>,
 }
 

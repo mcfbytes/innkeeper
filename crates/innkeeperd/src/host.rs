@@ -37,7 +37,7 @@ pub(crate) struct Host<'s> {
     signup_open: bool,
     binding: Option<Binding>,
     noted_account: Option<AccountId>,
-    /// The account this line has been counted as a player for (`--azure-metrics` and the portal).
+    /// The account this line has been counted as a player for (the metrics pusher and the portal).
     counted_account: Option<AccountId>,
 }
 

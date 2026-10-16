@@ -1,7 +1,8 @@
 //! Process-wide counters and gauges: a few numbers, no personal data.
 //!
-//! The Azure pusher (`--azure-metrics`) and the portal's Status panel read them. Every value is a
-//! plain count or a size; there are no labels, so nothing here can name a player (docs/server/privacy.md).
+//! The Application Insights pusher (`--app-insights-connection-string`) and the portal's Status panel
+//! read them. Every value is a plain count or a size; there are no labels, so nothing here can name a
+//! player (docs/server/privacy.md).
 
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
