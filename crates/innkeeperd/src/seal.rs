@@ -65,8 +65,12 @@ pub(crate) struct EnvelopeView {
 }
 
 pub(crate) fn load_public_key(path: &Path) -> Result<RsaPublicKey, SealError> {
-    let pem = std::fs::read_to_string(path)?;
-    let key = RsaPublicKey::from_public_key_pem(&pem)
+    parse_public_key(&std::fs::read_to_string(path)?)
+}
+
+/// An SPKI PEM, as the server vault's `audit-public-key` holds it.
+pub(crate) fn parse_public_key(pem: &str) -> Result<RsaPublicKey, SealError> {
+    let key = RsaPublicKey::from_public_key_pem(pem.trim())
         .map_err(|error| SealError::PublicKey(error.to_string()))?;
     let bits = key.size().saturating_mul(8);
     if bits < MIN_KEY_BITS {

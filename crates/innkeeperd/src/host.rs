@@ -3,16 +3,23 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use innkeeper_session::SessionError;
 use innkeeper_world::{
-    AccountId, ClientMessage, ConnectionId, Delivery, HostMessage, LogPolicy, MessageError,
-    ObjectStore, PlayerSession, World,
+    AccountId, ClientMessage, ConnectionId, Delivery, HostMessage, LogPolicy, LoginNakReason,
+    MessageError, Nak, ObjectStore, PlayerSession, World,
 };
 use int14h::Int14hError;
 use thiserror::Error;
 use tokio::sync::watch;
+use tracing::warn;
 use tsn_link::LinkError;
 
 use crate::connection::ConnectionSettings;
+use crate::connection_gate::Binding;
+use crate::signin::SignIn;
 use crate::switchboard::{Inbox, Switchboard};
+
+/// The reply `logon` gives a wrong password, so a refused sign-in looks like one to the client.
+const WRONG_PASSWORD_TRIES: u8 = 3;
+const WRONG_PASSWORD_TEXT: &str = "That password is not right.";
 
 /// The application end of one connection, whatever its transport: decodes client messages, returns
 /// the world's replies and what other connections caused, and releases the connection's objects.
@@ -26,6 +33,10 @@ pub(crate) struct Host<'s> {
     player: PlayerSession,
     logon: Option<LogonSignal>,
     audit: Option<crate::audit::AuditTicket>,
+    sign_in: Option<&'s SignIn>,
+    signup_open: bool,
+    binding: Option<Binding>,
+    noted_account: Option<AccountId>,
 }
 
 /// Tells the connection's other tasks which account its line session is signed on as.
@@ -69,7 +80,16 @@ impl<'s> Host<'s> {
             player: PlayerSession::with_log(settings.world.log),
             logon: None,
             audit: None,
+            sign_in: settings.sign_in.as_deref(),
+            signup_open: settings.signup_open,
+            binding: None,
+            noted_account: None,
         }
+    }
+
+    /// Limits this line's Logins to the accounts the signed-in identity owns.
+    pub(crate) fn bind(&mut self, binding: Option<Binding>) {
+        self.binding = binding;
     }
 
     /// Keeps the sealed connection record for this line, when a recipient is configured.
@@ -107,6 +127,12 @@ impl<'s> Host<'s> {
                 }
             }
         };
+        if let Some(outgoing) = self.refusal(&received) {
+            return Answer {
+                exchange: vec![Exchange::Received(received)],
+                outgoing,
+            };
+        }
         let mut objects = lock(self.objects);
         // Under the store lock the inbox holds everything caused before this message, in order.
         let mut outgoing = self.inbox.drain();
@@ -117,6 +143,7 @@ impl<'s> Host<'s> {
         drop(objects);
         self.publish_logon();
         self.note_audit();
+        self.note_sign_in();
         Answer {
             exchange: vec![Exchange::Received(received)],
             outgoing,
@@ -143,6 +170,41 @@ impl<'s> Host<'s> {
         }
     }
 
+    /// A Login a bound line may not make, or a signup enrolment does not allow, is answered here.
+    fn refusal(&self, received: &ClientMessage) -> Option<Vec<HostMessage>> {
+        match received {
+            ClientMessage::Login(login) => {
+                let (binding, sign_in) = (self.binding.as_ref()?, self.sign_in?);
+                if sign_in.may_log_in(binding, login.account) {
+                    return None;
+                }
+                warn!(
+                    account = login.account.0,
+                    "login refused: not an account of this sign-in"
+                );
+                Some(vec![wrong_password()])
+            }
+            ClientMessage::Signup(_) if !self.signup_open => {
+                warn!("signup refused: new accounts are made through sign-in");
+                Some(Vec::new())
+            }
+            _ => None,
+        }
+    }
+
+    fn note_sign_in(&mut self) {
+        let (Some(binding), Some(sign_in)) = (self.binding.as_ref(), self.sign_in) else {
+            return;
+        };
+        let account = self.player.account();
+        if account.is_some() && account != self.noted_account {
+            if let Some(id) = account {
+                sign_in.note_login(binding, id);
+            }
+            self.noted_account = account;
+        }
+    }
+
     fn note_audit(&mut self) {
         let Some(account) = self.player.account() else {
             return;
@@ -164,6 +226,15 @@ impl<'s> Host<'s> {
         }
         own
     }
+}
+
+fn wrong_password() -> HostMessage {
+    let reason = LoginNakReason::RetryPassword;
+    HostMessage::Nak(Nak::login(
+        reason,
+        WRONG_PASSWORD_TRIES,
+        WRONG_PASSWORD_TEXT,
+    ))
 }
 
 fn lock(objects: &Mutex<ObjectStore>) -> MutexGuard<'_, ObjectStore> {
@@ -251,5 +322,21 @@ mod tests {
         let verbose = step.to_string();
         assert!(verbose.starts_with("host LoginAccepted"));
         assert!(verbose.contains('{'));
+    }
+
+    #[test]
+    fn a_refused_sign_in_login_is_the_world_s_wrong_password_reply() {
+        let world = World {
+            accounts: innkeeper_world::AccountBook::listed([(
+                AccountId(100_001),
+                EncodedPassword([1; 10]),
+            )]),
+            ..World::stock()
+        };
+        let mut objects = ObjectStore::default();
+        let mut player = PlayerSession::new();
+        let replies = player.handle(&world, &mut objects, ConnectionId(1), &login());
+        let messages: Vec<HostMessage> = replies.into_iter().map(|d| d.message).collect();
+        assert_eq!(messages, vec![wrong_password()]);
     }
 }

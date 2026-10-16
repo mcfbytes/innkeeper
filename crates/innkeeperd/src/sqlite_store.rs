@@ -65,8 +65,8 @@ const SCHEMA: &str = "
         PRIMARY KEY (account, path, version)
     );
     CREATE UNIQUE INDEX IF NOT EXISTS saves_one_current ON saves(account, path) WHERE current = 1;
-    /* Sealed connection records (docs/server/privacy.md). identity_key is reserved for the
-       sign-in HMAC and is written NULL until that table exists. */
+    /* Sealed connection records (docs/server/privacy.md). identity_key is the signed-in
+       identity's HMAC, NULL for a connection without a session. */
     CREATE TABLE IF NOT EXISTS audit_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         started_at INTEGER NOT NULL,
@@ -81,6 +81,35 @@ const SCHEMA: &str = "
         account INTEGER PRIMARY KEY,
         hold_until INTEGER NOT NULL
     );
+    /* Sign-in (docs/server/privacy.md section 1). identity_key is HMAC-SHA256 of the provider's
+       issuer and subject; the raw pair exists only inside subject_sealed. */
+    CREATE TABLE IF NOT EXISTS identities (
+        identity_key BLOB PRIMARY KEY,
+        key_version TEXT NOT NULL,
+        subject_sealed BLOB,
+        provider TEXT NOT NULL,
+        adult_attested_at TEXT,
+        attested_age INTEGER,
+        terms_version INTEGER,
+        created_at INTEGER NOT NULL,
+        deleted_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS identity_accounts (
+        account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        identity_key BLOB NOT NULL REFERENCES identities(identity_key) ON UPDATE CASCADE,
+        created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS identity_accounts_by_identity ON identity_accounts(identity_key);
+    CREATE TABLE IF NOT EXISTS sessions (
+        token_hash BLOB PRIMARY KEY,
+        identity_key BLOB NOT NULL
+            REFERENCES identities(identity_key) ON UPDATE CASCADE ON DELETE CASCADE,
+        account_id INTEGER,
+        created_at INTEGER NOT NULL,
+        expiry INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS sessions_by_identity ON sessions(identity_key);
+    CREATE INDEX IF NOT EXISTS audit_by_identity ON audit_sessions(identity_key);
 ";
 
 /// `Store` over a SQLite file or an in-memory database; one connection behind a mutex.
@@ -122,9 +151,9 @@ fn backend(error: rusqlite::Error) -> StoreError {
     StoreError::backend(error)
 }
 
-/// The first schema that alters an existing table. Fresh files are created at this version;
-/// older files gain the new columns on open (docs/server/store.md).
-const SCHEMA_VERSION: i32 = 1;
+/// Version 1 added `deleted_at` and the audit tables, version 2 the sign-in tables. Fresh files are
+/// created at this version; older files gain what they lack on open (docs/server/store.md).
+const SCHEMA_VERSION: i32 = 2;
 
 fn migrate(connection: &Connection) -> Result<(), StoreError> {
     connection.execute_batch(SCHEMA).map_err(backend)?;
@@ -797,11 +826,48 @@ mod tests {
             .connection()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, SCHEMA_VERSION);
         let created: i64 = store
             .connection()
             .query_row("SELECT created_at FROM posts", [], |row| row.get(0))
             .unwrap();
         assert!(created > 0);
+    }
+
+    #[test]
+    fn a_version_1_database_gains_the_sign_in_tables() {
+        let file = TempDatabase::new();
+        let old = Connection::open(&file.0).unwrap();
+        old.execute_batch(
+            "CREATE TABLE accounts (
+                id INTEGER PRIMARY KEY, password BLOB NOT NULL, persona TEXT NOT NULL,
+                user_flags INTEGER NOT NULL, rating INTEGER NOT NULL, status INTEGER NOT NULL,
+                password_expired INTEGER NOT NULL, deleted_at INTEGER
+            );
+            CREATE TABLE audit_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, started_at INTEGER NOT NULL,
+                ended_at INTEGER, account_id INTEGER, identity_key BLOB, hold_until INTEGER,
+                sealed BLOB NOT NULL
+            );
+            PRAGMA user_version = 1;",
+        )
+        .unwrap();
+        drop(old);
+        let store = file.open();
+        let connection = store.connection();
+        for table in ["identities", "identity_accounts", "sessions"] {
+            let found: i64 = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(found, 1, "{table}");
+        }
+        let version: i32 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
     }
 }

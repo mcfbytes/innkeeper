@@ -15,6 +15,7 @@ use tracing::{debug, info, info_span, warn, Instrument};
 use tsn_link::{LinkEvent, Message};
 
 use crate::capture::{Capture, Direction};
+use crate::connection_gate::Binding;
 use crate::host::{Exchange, Host, LoggedExchange, LogonSignal, ReplyError};
 use crate::peer::{PeerLog, PeerTokens};
 use crate::switchboard::Switchboard;
@@ -34,6 +35,12 @@ pub(crate) struct ConnectionSettings {
     pub(crate) capture_dir: Option<PathBuf>,
     pub(crate) peers: PeerTokens,
     pub(crate) audit: Option<Arc<crate::audit::AuditSeal>>,
+    /// Sign-in, when `--auth-config` is given: the HTTP routes and the WebSocket binding.
+    pub(crate) sign_in: Option<Arc<crate::signin::SignIn>>,
+    /// Public mode: a WebSocket without a live session token is refused before the upgrade.
+    pub(crate) require_session: bool,
+    /// False unless enrolment is open: a signup (command 55) then creates nothing.
+    pub(crate) signup_open: bool,
     next_connection: AtomicU64,
 }
 
@@ -47,6 +54,9 @@ impl ConnectionSettings {
             capture_dir,
             peers: PeerTokens::new(),
             audit: None,
+            sign_in: None,
+            require_session: false,
+            signup_open: true,
             next_connection: AtomicU64::new(1),
             world,
         }
@@ -75,17 +85,19 @@ pub(crate) async fn serve_connection(
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
-    serve_line(stream, addr, settings, "tcp", None).await;
+    serve_line(stream, addr, settings, "tcp", None, None).await;
 }
 
 /// Runs a legacy line session over any byte stream: a TCP socket or a WebSocket's bytes.
 /// With a `logon` signal, it reports the account the Login opened, and `None` after the hang-up.
+/// A `binding` limits Logins to the accounts of the signed-in identity.
 pub(crate) async fn serve_line<S>(
     stream: S,
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
     transport: &'static str,
     logon: Option<LogonSignal>,
+    binding: Option<Binding>,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -94,7 +106,7 @@ pub(crate) async fn serve_line<S>(
     let span = info_span!("session", id = id.0, %peer);
     async move {
         info!("client connected");
-        match drive(stream, addr, id, &settings, transport, logon).await {
+        match drive(stream, addr, id, &settings, transport, (logon, binding)).await {
             Ok(()) => info!("client hung up"),
             Err(error) => warn!(%error, "connection failed"),
         }
@@ -109,7 +121,7 @@ async fn drive<S>(
     id: ConnectionId,
     settings: &ConnectionSettings,
     transport: &'static str,
-    logon: Option<LogonSignal>,
+    (logon, binding): (Option<LogonSignal>, Option<Binding>),
 ) -> std::io::Result<()>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -120,11 +132,12 @@ where
     if let Some(signal) = logon {
         host.announce_logon(signal);
     }
-    host.watch_audit(crate::audit::begin(
-        settings.audit.as_ref(),
-        peer,
-        transport,
-    ));
+    let mut ticket = crate::audit::begin(settings.audit.as_ref(), peer, transport);
+    if let (Some(ticket), Some(binding)) = (ticket.as_mut(), binding.as_ref()) {
+        ticket.note_identity(&binding.identity);
+    }
+    host.watch_audit(ticket);
+    host.bind(binding);
     let session = Session::new(settings.session);
     let result = pump(&mut stream, session, &mut host, &mut capture).await;
     host.hang_up();

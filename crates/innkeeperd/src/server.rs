@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use innkeeper_world::{LogPolicy, RetentionPolicy, Store, StoreError, World};
+use innkeeper_world::{
+    AccountBook, Enrolment, LogPolicy, RetentionPolicy, Store, StoreError, World,
+};
 use std::net::TcpListener as StdListener;
 use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
@@ -17,7 +19,8 @@ use crate::connection::{serve_connection, ConnectionSettings};
 use crate::dates;
 use crate::int14h_listener::serve_transport;
 use crate::retention;
-use crate::seal::{self, Recipient};
+use crate::seal::Recipient;
+use crate::signin::EnrolmentMode;
 use crate::sqlite_store::SqliteStore;
 use crate::websocket::serve_websocket;
 
@@ -39,8 +42,8 @@ pub(crate) enum ServerError {
     AlreadyRunning { pid: u32 },
     #[error("cannot write the data-dir lock {path}: {source}")]
     Lock { path: String, source: io::Error },
-    #[error("the audit public key cannot be used: {0}")]
-    AuditKey(String),
+    #[error("{0}")]
+    SignIn(#[from] crate::signin::startup::StartupError),
     #[error("cannot use a listening socket: {0}")]
     Adopt(io::Error),
 }
@@ -113,7 +116,17 @@ fn open_world(data_dir: Option<&Path>) -> Result<Opened, ServerError> {
     })
 }
 
-/// Open the database, take the data-dir lock and bind listeners. The runtime starts later.
+/// The stored book under `--enrolment`: only open enrolment creates an account at Login.
+pub(crate) fn account_book(store: &Arc<SqliteStore>, enrolment: EnrolmentMode) -> AccountBook {
+    let login = match enrolment.login_enrols() {
+        true => Enrolment::Open,
+        false => Enrolment::Closed,
+    };
+    AccountBook::stored(Arc::clone(store) as Arc<dyn Store>, login)
+}
+
+/// Open the database, take the data-dir lock, read the vault and bind listeners. The runtime
+/// starts later.
 pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     let mut opened = open_world(config.data_dir.as_deref())?;
     opened.world.log = if config.public {
@@ -121,6 +134,10 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     } else {
         LogPolicy::Verbose
     };
+    let enrolment = config.enrolment();
+    if let Some(store) = &opened.store {
+        opened.world.accounts = account_book(store, enrolment);
+    }
     let lock = match config.data_dir.as_deref() {
         Some(dir) => Some(crate::subject::DataDirLock::acquire(dir)?),
         None => None,
@@ -129,9 +146,14 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     if let Some(store) = &opened.store {
         run_purge(store, policy);
     }
-    let audit = load_audit(&config, opened.store.as_ref())?;
-    if config.public {
-        warn!("{}", crate::connection_gate::SIGN_IN_NOT_READY);
+    let startup = crate::signin::startup::prepare(&config, opened.store.as_ref())?;
+    let audit = load_audit(&config, startup.recipient, opened.store.as_ref());
+    let has_providers = startup
+        .sign_in
+        .as_ref()
+        .is_some_and(|sign_in| sign_in.has_providers());
+    if config.public && !has_providers {
+        warn!("{}", crate::connection_gate::NO_PROVIDERS);
     }
     let plan = config.listen_plan();
     let legacy = listen_std_if(plan.legacy)?;
@@ -141,6 +163,9 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     let mut settings =
         ConnectionSettings::new(config.session_config(), opened.world, capture_dir.clone());
     settings.audit = audit;
+    settings.sign_in = startup.sign_in;
+    settings.require_session = config.public;
+    settings.signup_open = enrolment.login_enrols();
     Ok(Prepared {
         settings: Arc::new(settings),
         legacy,
@@ -238,36 +263,23 @@ fn run_purge(store: &SqliteStore, policy: RetentionPolicy) {
 
 fn load_audit(
     config: &Config,
+    recipient: Option<Recipient>,
     store: Option<&Arc<SqliteStore>>,
-) -> Result<Option<Arc<AuditSeal>>, ServerError> {
-    let (Some(path), Some(kid)) = (&config.audit_public_key, &config.audit_key_id) else {
+) -> Option<Arc<AuditSeal>> {
+    let Some(recipient) = recipient else {
         if config.public {
             warn!(
-                "no sealed connection records are kept: --public was set without --audit-public-key"
+                "no sealed connection records are kept: --public was set without an audit public key"
             );
         }
-        return Ok(None);
+        return None;
     };
     let Some(store) = store else {
-        warn!("no sealed connection records are kept: --audit-public-key needs --data-dir");
-        return Ok(None);
+        warn!("no sealed connection records are kept: the audit public key needs --data-dir");
+        return None;
     };
-    let key =
-        seal::load_public_key(path).map_err(|error| ServerError::AuditKey(error.to_string()))?;
-    let bits = seal::key_bits(&key);
-    if bits < seal::RECOMMENDED_KEY_BITS {
-        warn!(bits, "the audit public key is shorter than 3072 bits");
-    }
-    warn!(
-        "DEVELOPMENT KEY: the audit public key was loaded from a file; \
-         production reads it from the server vault and the private key stays in the escrow vault"
-    );
-    let recipient = Recipient {
-        key,
-        kid: kid.clone(),
-    };
-    info!(kid = %kid, "sealed connection records are on");
-    Ok(Some(Arc::new(AuditSeal::new(Arc::clone(store), recipient))))
+    info!(kid = %recipient.kid, "sealed connection records are on");
+    Some(Arc::new(AuditSeal::new(Arc::clone(store), recipient)))
 }
 
 /// Serves an optional listener; a listener that is switched off never finishes.
@@ -363,6 +375,29 @@ pub(crate) mod tests {
         let kept = reopened.store.account(id).unwrap().unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(kept.persona, "kept");
+    }
+
+    #[test]
+    fn only_open_enrolment_creates_an_account_at_login() {
+        use innkeeper_world::{ClientVersion, LandType, Login, PasswordSource};
+        let login = Login {
+            land_type: LandType(1),
+            version: ClientVersion::new(2, 3, 18),
+            account: AccountId(100_009),
+            password_source: PasswordSource::StoredFile,
+            password: EncodedPassword([4; 10]),
+            name: "guybrush".into(),
+            prodigy_id: None,
+        };
+        for (mode, enrols) in [
+            (EnrolmentMode::Open, true),
+            (EnrolmentMode::WebOnly, false),
+            (EnrolmentMode::Closed, false),
+        ] {
+            let store = Arc::new(SqliteStore::open_in_memory().unwrap());
+            let admitted = account_book(&store, mode).admit(&login).is_ok();
+            assert_eq!(admitted, enrols, "{mode:?}");
+        }
     }
 
     #[test]

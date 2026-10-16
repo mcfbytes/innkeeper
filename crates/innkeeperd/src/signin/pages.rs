@@ -1,0 +1,186 @@
+//! How a login ends for the page: a popup that posts the result to its opener, or a redirect
+//! with the result in the fragment.
+
+use aes_gcm::aead::rand_core::RngCore;
+use aes_gcm::aead::OsRng;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use bytes::Bytes;
+use hyper::header::{HeaderValue, LOCATION};
+use hyper::StatusCode;
+use serde_json::{json, Value};
+
+use super::{Mode, PageReturn};
+use crate::http::{self, Reply};
+
+fn popup_page(nonce: &str, message: &str, target: &str) -> String {
+    format!(
+        r#"<!doctype html><meta charset="utf-8"><title>Signing in</title>
+<p id="m">One moment.</p>
+<script nonce="{nonce}">
+var msg = {message}, target = {target};
+if (window.opener) {{ window.opener.postMessage(msg, target); window.close(); }}
+document.getElementById('m').textContent = window.opener
+  ? 'You can close this window.' : 'This window has no game page to talk to. Close it and try again.';
+</script>
+"#
+    )
+}
+
+const EXPIRED: &str = r#"<!doctype html><meta charset="utf-8"><title>Sign-in expired</title>
+<p>This sign-in has expired or was already used. Close this window and try again.</p>
+"#;
+
+/// The token or an error code, delivered the way the page asked for it.
+pub(super) fn finish(page: &PageReturn, outcome: Result<&str, &str>) -> Reply {
+    match page.mode {
+        Mode::Redirect => {
+            let fragment = match outcome {
+                Ok(token) => format!("inn-session={token}"),
+                Err(code) => format!("inn-error={code}"),
+            };
+            let mut url = page.url.clone();
+            url.set_fragment(Some(&fragment));
+            redirect(url.as_str())
+        }
+        Mode::Popup => {
+            let message = match outcome {
+                Ok(token) => json!({"type": "inn-auth", "session": token}),
+                Err(code) => json!({"type": "inn-auth", "error": code}),
+            };
+            popup(&message, &page.origin)
+        }
+    }
+}
+
+/// The posted message goes only to the checked page origin, never `*`.
+fn popup(message: &Value, origin: &str) -> Reply {
+    let mut nonce = [0u8; 16];
+    OsRng.fill_bytes(&mut nonce);
+    let nonce = BASE64.encode(nonce);
+    let target = script_json(&Value::String(origin.to_owned()));
+    let body = popup_page(&nonce, &script_json(message), &target);
+    let mut reply = http::reply(
+        StatusCode::OK,
+        Some("text/html; charset=utf-8"),
+        Bytes::from(body),
+    );
+    let policy = format!(
+        "default-src 'none'; script-src 'nonce-{nonce}'; base-uri 'none'; form-action 'none'; \
+         frame-ancestors 'none'"
+    );
+    if let Ok(value) = HeaderValue::from_str(&policy) {
+        reply.headers_mut().insert("content-security-policy", value);
+    }
+    page_headers(reply)
+}
+
+pub(super) fn redirect(location: &str) -> Reply {
+    let mut reply = http::empty(StatusCode::FOUND);
+    if let Ok(value) = HeaderValue::from_str(location) {
+        reply.headers_mut().insert(LOCATION, value);
+    }
+    page_headers(reply)
+}
+
+pub(super) fn expired() -> Reply {
+    let reply = http::reply(
+        StatusCode::BAD_REQUEST,
+        Some("text/html; charset=utf-8"),
+        Bytes::from_static(EXPIRED.as_bytes()),
+    );
+    page_headers(reply)
+}
+
+/// The callback URL carries the code and state, so it is never sent on as a referrer.
+fn page_headers(mut reply: Reply) -> Reply {
+    let headers = reply.headers_mut();
+    headers.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    reply
+}
+
+/// JSON that is safe inside a `<script>` element.
+fn script_json(value: &Value) -> String {
+    value
+        .to_string()
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http_body_util::BodyExt;
+    use url::Url;
+
+    fn page(mode: Mode) -> PageReturn {
+        PageReturn {
+            url: Url::parse("https://play.example.org/inn.html?auth=x").unwrap(),
+            origin: "https://play.example.org".into(),
+            mode,
+            attest: None,
+        }
+    }
+
+    async fn body(reply: Reply) -> String {
+        let bytes = reply.into_body().collect().await.unwrap().to_bytes();
+        String::from_utf8(bytes.to_vec()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_popup_posts_to_the_page_origin_only() {
+        let reply = finish(&page(Mode::Popup), Ok("TOKEN"));
+        let policy = reply.headers()["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        assert!(policy.contains("script-src 'nonce-"), "{policy}");
+        let text = body(reply).await;
+        assert!(
+            text.contains(r#"var msg = {"session":"TOKEN","type":"inn-auth"}"#),
+            "{text}"
+        );
+        assert!(
+            text.contains(r#"target = "https://play.example.org";"#),
+            "{text}"
+        );
+        assert!(!text.contains("'*'"));
+        let denied = body(finish(&page(Mode::Popup), Err("access_denied"))).await;
+        assert!(
+            denied.contains(r#"{"error":"access_denied","type":"inn-auth"}"#),
+            "{denied}"
+        );
+    }
+
+    #[test]
+    fn a_redirect_carries_the_result_in_the_fragment() {
+        let reply = finish(&page(Mode::Redirect), Ok("TOKEN"));
+        assert_eq!(reply.status(), StatusCode::FOUND);
+        assert_eq!(
+            reply.headers()[LOCATION],
+            "https://play.example.org/inn.html?auth=x#inn-session=TOKEN"
+        );
+        let denied = finish(&page(Mode::Redirect), Err("access_denied"));
+        assert_eq!(
+            denied.headers()[LOCATION],
+            "https://play.example.org/inn.html?auth=x#inn-error=access_denied"
+        );
+        assert_eq!(denied.headers()["referrer-policy"], "no-referrer");
+    }
+
+    #[test]
+    fn script_json_cannot_close_the_script_element() {
+        let text = script_json(&json!({"x": "</script><b>&"}));
+        assert!(
+            !text.contains('<') && !text.contains('>') && !text.contains('&'),
+            "{text}"
+        );
+    }
+}

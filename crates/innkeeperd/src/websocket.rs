@@ -4,14 +4,19 @@
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures_util::{SinkExt, StreamExt};
+use hyper::body::Incoming;
+use hyper::header::{HeaderMap, HeaderValue, CONNECTION, SEC_WEBSOCKET_ACCEPT, UPGRADE};
+use hyper::{Request, StatusCode};
+use hyper_util::rt::TokioIo;
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream};
 use tokio::net::TcpStream;
 use tokio::sync::watch;
-use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
+use tokio_tungstenite::tungstenite::protocol::{Role, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{self, Message};
 use tokio_tungstenite::WebSocketStream;
 use tracing::{debug, info, warn};
@@ -19,10 +24,10 @@ use tracing::{debug, info, warn};
 use innkeeper_world::AccountId;
 
 use crate::connection::{serve_line, ConnectionSettings, READ_CHUNK};
+use crate::connection_gate::{self, Binding};
+use crate::http::{self, Reply};
 use crate::save_channel::SaveChannel;
 
-/// A browser that opens the socket but never finishes the upgrade is dropped after this.
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Serial bytes arrive a few at a time; a binary message larger than this is not a modem line.
 const MAX_SERIAL_MESSAGE: usize = 64 * 1024;
 /// A save file is at most 1 MiB, 4/3 of that as base64 in a JSON text message.
@@ -31,8 +36,6 @@ const LINE_BUFFER: usize = 4 * READ_CHUNK;
 
 #[derive(Debug, Error)]
 enum RelayError {
-    #[error("websocket handshake did not finish in {HANDSHAKE_TIMEOUT:?}")]
-    HandshakeTimedOut,
     #[error("websocket: {0}")]
     Socket(#[from] tungstenite::Error),
     #[error("a binary message of {0} bytes is not serial data")]
@@ -41,48 +44,116 @@ enum RelayError {
     Line(#[from] io::Error),
 }
 
-/// Upgrades one accepted socket and runs a line session on its bytes, logging instead of failing.
+/// Serves one accepted socket of the WebSocket listener, which also answers plain HTTP.
 pub(crate) async fn serve_websocket(
     stream: TcpStream,
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
+    http::serve(stream, addr, settings).await;
+}
+
+/// True for a request that asks to become a WebSocket, whatever its path.
+pub(crate) fn is_upgrade<B>(request: &Request<B>) -> bool {
+    has_token(request.headers(), UPGRADE, "websocket")
+}
+
+/// Checks the handshake and the session token, then answers 101 and runs the line once the
+/// connection is handed over. A refusal is an HTTP status, so no WebSocket is opened.
+pub(crate) fn accept(
+    request: Request<Incoming>,
+    addr: SocketAddr,
+    settings: Arc<ConnectionSettings>,
+) -> Reply {
     let peer = settings.peer_log(addr);
-    if let Err(error) = crate::connection_gate::admit(&stream, addr) {
-        warn!(%error, %peer, "websocket refused");
-        return;
-    }
-    if let Err(error) = stream.set_nodelay(true) {
-        warn!(%error, %peer, "cannot disable Nagle; replies may lag");
-    }
-    let socket = match upgrade(stream).await {
-        Ok(socket) => socket,
-        Err(error) => {
-            warn!(%error, %peer, "websocket refused");
-            return;
+    let Some(key) = handshake_key(&request) else {
+        warn!(%peer, "websocket refused: not a version 13 upgrade");
+        return http::error(
+            StatusCode::BAD_REQUEST,
+            "bad_upgrade",
+            "Not a WebSocket upgrade.",
+        );
+    };
+    let binding = match connection_gate::admit(request.uri(), &settings) {
+        Ok(binding) => binding,
+        Err(refusal) => {
+            warn!(%peer, %refusal, "websocket refused");
+            return http::error(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "The session is missing or has expired.",
+            );
         }
     };
-    info!(%peer, "websocket upgraded");
+    let accept_key = derive_accept_key(key.as_bytes());
+    tokio::spawn(async move {
+        match hyper::upgrade::on(request).await {
+            Ok(upgraded) => run(TokioIo::new(upgraded), addr, settings, binding).await,
+            Err(error) => warn!(%error, %peer, "websocket refused"),
+        }
+    });
+    let mut response = http::empty(StatusCode::SWITCHING_PROTOCOLS);
+    let headers = response.headers_mut();
+    headers.insert(UPGRADE, HeaderValue::from_static("websocket"));
+    headers.insert(CONNECTION, HeaderValue::from_static("Upgrade"));
+    if let Ok(value) = HeaderValue::from_str(&accept_key) {
+        headers.insert(SEC_WEBSOCKET_ACCEPT, value);
+    }
+    response
+}
+
+fn handshake_key<B>(request: &Request<B>) -> Option<String> {
+    let headers = request.headers();
+    let version = headers.get("sec-websocket-version")?.to_str().ok()?;
+    if request.method() != hyper::Method::GET
+        || version.trim() != "13"
+        || !has_token(headers, CONNECTION, "upgrade")
+    {
+        return None;
+    }
+    let key = headers.get("sec-websocket-key")?.to_str().ok()?.trim();
+    (!key.is_empty()).then(|| key.to_owned())
+}
+
+fn has_token(headers: &HeaderMap, name: hyper::header::HeaderName, token: &str) -> bool {
+    headers.get_all(name).iter().any(|value| {
+        let text = value.to_str().unwrap_or("");
+        text.split(',')
+            .any(|part| part.trim().eq_ignore_ascii_case(token))
+    })
+}
+
+/// Runs a line session on an upgraded connection's bytes, logging instead of failing.
+async fn run<S>(
+    io: S,
+    addr: SocketAddr,
+    settings: Arc<ConnectionSettings>,
+    binding: Option<Binding>,
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let peer = settings.peer_log(addr);
+    let config = WebSocketConfig::default()
+        .max_message_size(Some(MAX_MESSAGE_SIZE))
+        .max_frame_size(Some(MAX_MESSAGE_SIZE));
+    let socket = WebSocketStream::from_raw_socket(io, Role::Server, Some(config)).await;
+    info!(%peer, signed_in = binding.is_some(), "websocket upgraded");
     let (line, session_end) = tokio::io::duplex(LINE_BUFFER);
     let (logon, signed_on) = watch::channel(None);
     let saves = SaveChannel::new(Arc::clone(&settings.world.store));
     let (relayed, ()) = tokio::join!(
         relay(socket, line, saves, signed_on),
-        serve_line(session_end, addr, settings, "websocket", Some(logon))
+        serve_line(
+            session_end,
+            addr,
+            settings,
+            "websocket",
+            Some(logon),
+            binding
+        )
     );
     if let Err(error) = relayed {
         warn!(%error, %peer, "websocket relay stopped");
-    }
-}
-
-async fn upgrade(stream: TcpStream) -> Result<WebSocketStream<TcpStream>, RelayError> {
-    let config = WebSocketConfig::default()
-        .max_message_size(Some(MAX_MESSAGE_SIZE))
-        .max_frame_size(Some(MAX_MESSAGE_SIZE));
-    let handshake = tokio_tungstenite::accept_async_with_config(stream, Some(config));
-    match tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake).await {
-        Ok(upgraded) => Ok(upgraded?),
-        Err(_elapsed) => Err(RelayError::HandshakeTimedOut),
     }
 }
 
@@ -95,12 +166,15 @@ fn now_millis() -> u64 {
 
 /// Copies bytes both ways until either side ends; dropping `line` then ends the other side too.
 /// Text messages go to the save channel, which learns the account from `signed_on`.
-async fn relay(
-    socket: WebSocketStream<TcpStream>,
+async fn relay<S>(
+    socket: WebSocketStream<S>,
     line: DuplexStream,
     mut saves: SaveChannel,
     mut signed_on: watch::Receiver<Option<AccountId>>,
-) -> Result<(), RelayError> {
+) -> Result<(), RelayError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let mut watching = true;
     let (mut to_browser, mut from_browser) = socket.split();
     let (mut from_session, mut to_session) = tokio::io::split(line);
@@ -148,6 +222,7 @@ async fn relay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     use base64::engine::general_purpose::STANDARD as BASE64;
     use base64::Engine;
@@ -322,13 +397,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_plain_http_request_is_refused_without_a_session() {
+    async fn a_plain_http_request_is_not_upgraded() {
         let address = serve_on_loopback().await;
-        let mut stream = TcpStream::connect(address).await.unwrap();
-        stream.write_all(b"GET / HTTP/1.1\r\n\r\n").await.unwrap();
-        let mut reply = Vec::new();
-        let read = tokio::time::timeout(Duration::from_secs(5), stream.read_to_end(&mut reply));
-        read.await.expect("server closed in time").unwrap();
-        assert!(!reply.starts_with(b"HTTP/1.1 101"), "{reply:?}");
+        let head = "GET / HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n";
+        let reply = crate::http::tests::request(address, head).await;
+        assert!(reply.starts_with("HTTP/1.1 404"), "{reply}");
     }
 }

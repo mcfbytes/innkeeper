@@ -27,6 +27,18 @@ aes-gcm.workspace = true
 rsa.workspace = true
 hmac.workspace = true
 sha2.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+bytes.workspace = true
+reqwest.workspace = true
+openidconnect.workspace = true
+oauth2.workspace = true
+url.workspace = true
+serde.workspace = true
+toml.workspace = true
+zeroize.workspace = true
+sha1.workspace = true
 
 # Linux-only confinement. Other targets warn and keep running (docs/server/hardening.md).
 [target.'cfg(target_os = "linux")'.dependencies]
