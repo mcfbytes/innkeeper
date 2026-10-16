@@ -25,7 +25,7 @@ type Inboxes = HashMap<ConnectionId, Line>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Connected {
     pub(crate) connection: ConnectionId,
-    /// Unix seconds.
+    /// Unix milliseconds.
     pub(crate) since: i64,
     pub(crate) transport: &'static str,
 }

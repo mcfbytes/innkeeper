@@ -1,5 +1,5 @@
 //! `innkeeperd db reset` and `innkeeperd db check`: the account database file as a whole
-//! (docs/server/innkeeperd.md section 5, docs/server/store.md section 3).
+//! (docs/server/innkeeperd.md section 2, docs/server/store.md section 3).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

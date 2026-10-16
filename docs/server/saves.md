@@ -129,19 +129,23 @@ allows it).
 
 ## 7. Store and upgrade
 
-`Store` gains `saves`, `save_versions`, `save_read` and `save_write` ([store.md](store.md)). SQLite:
+`Store` gains `saves`, `save_versions`, `save_read` and `save_write` ([store.md](store.md)). SQLite, in the
+baseline schema (store.md section 3.3):
 
 ```
-CREATE TABLE IF NOT EXISTS saves (
-    account INTEGER NOT NULL, path TEXT NOT NULL, version INTEGER NOT NULL,
-    hash TEXT NOT NULL, data BLOB NOT NULL, updated_at INTEGER NOT NULL, current INTEGER NOT NULL,
-    PRIMARY KEY (account, path, version));
-CREATE UNIQUE INDEX IF NOT EXISTS saves_one_current ON saves(account, path) WHERE current = 1;
+CREATE TABLE saves (
+    account INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    path TEXT NOT NULL, version INTEGER NOT NULL CHECK (version >= 1),
+    hash TEXT NOT NULL CHECK (length(hash) = 64), data BLOB NOT NULL,
+    modified_at INTEGER NOT NULL CHECK (modified_at >= 0),
+    current INTEGER NOT NULL CHECK (current IN (0, 1)), deleted_at INTEGER,
+    PRIMARY KEY (account, path, version)) STRICT;
+CREATE UNIQUE INDEX saves_one_current ON saves(account, path) WHERE current = 1;
 ```
 
-The table is created on open, so an existing database upgrades in place on the next start with every
-row kept (`a_database_from_before_the_saves_table_gains_it`). `updated_at` is the content's modification
-time as the uploader said, not the time of the upload.
+A save needs a live account row: `save_write` for an unknown or deleted account is `UnknownAccount`.
+`modified_at` is the content's modification time in Unix milliseconds as the uploader said, not the
+time of the upload.
 
 ## 8. Tests
 

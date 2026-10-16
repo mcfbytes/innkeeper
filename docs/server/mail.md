@@ -88,6 +88,12 @@ envelope. Reading a letter returns the text bytes exactly as sent (tested with a
 the NUL); a listing row is cut from the same bytes and the letter's id. Deleting removes the letter and
 answers nothing.
 
+Beside the body the store records the sender as the account whose session sent the letter
+(`letters.from_account`, [store.md](store.md) section 3.3). The envelope's `from` box and the names in it
+are the client's bytes, shown as written: the export, the delete, the retention holds and the portal
+find a sender by that account, never by the envelope, so two accounts with one persona never share a
+letter.
+
 ## 5. Assumptions
 
 Each is a named constant in `innkeeper-world/src/assumptions.rs`, labelled INFERRED in
@@ -109,8 +115,9 @@ Each is a named constant in `innkeeper-world/src/assumptions.rs`, labelled INFER
 
 ## 6. The open book
 
-`World::stock()` has no stored accounts: the account book admits anyone but the store knows nobody, so
-`assign_mailbox` fails with `UnknownAccount`. 45/1 answers status 2, and every 37 request is refused with
+`World::stock()` has no stored accounts: the account book admits anyone. The logon gives such an account a
+store row (`logon::give_a_row`) so its bankroll, posts and saves have a parent, but a book that is not the
+store's runs no post office (`mail::own_mailbox`): it is told it has no box. 45/1 answers status 2, and every 37 request is refused with
 fault 21 ("the post office is closed"), except the system list (32) and a form (30), which need no mailbox. A host started
 without `--data-dir` therefore has no mail, and a logon still completes, because the client carries on
 without the mailbox.
