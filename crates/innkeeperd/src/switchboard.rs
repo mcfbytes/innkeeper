@@ -52,7 +52,7 @@ impl Switchboard {
         let line = Line {
             sender,
             kick: Arc::clone(&kick),
-            since: dates::unix_now(),
+            since: dates::now_ms(),
             transport: "",
         };
         self.lock().insert(connection, line);

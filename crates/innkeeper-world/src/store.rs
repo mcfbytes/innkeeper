@@ -8,6 +8,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use thiserror::Error;
 
+use crate::bbs::{post_kind, PostKind};
 use crate::saves::{hash_hex, SaveMeta, KEPT_VERSIONS};
 use crate::{AccountId, EncodedPassword, LoginStatus, Money};
 
@@ -52,20 +53,27 @@ impl AccountRecord {
     }
 }
 
-/// A letter as the client composed it; the store never looks inside.
+/// A letter as the client composed it; the store never looks inside the body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Letter {
     pub id: LetterId,
+    /// The account whose session wrote the letter, recorded by the host at delivery. The envelope's
+    /// own `from` mailbox is the client's word and attributes nothing.
+    pub from: AccountId,
     pub body: Vec<u8>,
 }
 
-/// A board post as the client composed it; the store never looks inside.
+/// A board post as the client composed it; the store never looks inside the body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Post {
     pub id: PostId,
     pub body: Vec<u8>,
-    /// The account that wrote it; none for a post kept before posts recorded one.
-    pub account: Option<AccountId>,
+    /// The account that wrote it. Attribution is by this alone: the `name|` at the head of a body is
+    /// the client's bytes, and names are not unique (docs/server/privacy.md section 1).
+    pub account: AccountId,
+    /// For a complaint, the account the complainer named, resolved while that player was online;
+    /// none when nobody was named or nobody matched.
+    pub about: Option<AccountId>,
 }
 
 #[derive(Debug, Error)]
@@ -86,12 +94,17 @@ impl StoreError {
     }
 }
 
-/// Durable host state. Reads of an unknown key return `None` or an empty list; only a write that
-/// needs a missing parent (an account, a mailbox) is an error.
+/// Durable host state. Reads of an unknown key return `None` or an empty list. Every row that
+/// belongs to an account needs that account to exist and be live when it is written, so a store
+/// never holds an orphan (docs/server/store.md section 2): a write without its parent is an error.
+/// An account number is never issued twice; a deleted account keeps its row.
 pub trait Store: fmt::Debug + Send + Sync {
+    /// A live account; none for an unknown, deleted or purged one.
     fn account(&self, id: AccountId) -> Result<Option<AccountRecord>, StoreError>;
+    /// `AccountExists` for any number ever created, a deleted or purged one included.
     fn create_account(&self, id: AccountId, record: AccountRecord) -> Result<(), StoreError>;
-    /// The greatest account number stored, if the store holds any.
+    /// The greatest account number ever created, deleted and purged rows included, so a number one
+    /// past it has never been issued.
     fn highest_account_id(&self) -> Result<Option<AccountId>, StoreError>;
     /// Replaces the password and clears the password-expired flag.
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError>;
@@ -101,29 +114,31 @@ pub trait Store: fmt::Debug + Send + Sync {
 
     /// The account's CasinoLand bankroll, or `None` when nothing has been stored for it yet.
     fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError>;
-    /// Keeps the bankroll. Unlike the mail families this needs no account row: the balance is a value
-    /// under an account number (`store.md` section 2), so an open book remembers one too.
+    /// Keeps the bankroll of a live account.
     fn set_money(&self, id: AccountId, amount: Money) -> Result<(), StoreError>;
 
     /// The account's mailbox number; the first call assigns one and later calls return it again.
     fn assign_mailbox(&self, id: AccountId) -> Result<MailboxNumber, StoreError>;
-    fn append_letter(&self, mailbox: MailboxNumber, body: &[u8]) -> Result<LetterId, StoreError>;
+    /// Delivers a letter written by `from` (a live account) into a live account's mailbox.
+    fn append_letter(
+        &self,
+        mailbox: MailboxNumber,
+        from: AccountId,
+        body: &[u8],
+    ) -> Result<LetterId, StoreError>;
     /// Oldest first; empty for a mailbox that does not exist.
     fn letters(&self, mailbox: MailboxNumber) -> Result<Vec<Letter>, StoreError>;
     /// True when the letter was in that mailbox and is now gone.
     fn delete_letter(&self, mailbox: MailboxNumber, letter: LetterId) -> Result<bool, StoreError>;
 
-    /// Adds a post that no account is recorded for (a system post, or a test's).
-    fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError> {
-        self.post_as(board, body, None)
-    }
-    /// Adds a post and records the account that wrote it. Attribution is by this account, never by
-    /// the name at the head of the body: names are not unique (docs/server/privacy.md section 1).
-    fn post_as(
+    /// Adds a post written by `author`, a live account. `about` is the account a complaint names
+    /// and must exist; any other kind of post names nobody (`bbs::post_kind`).
+    fn post(
         &self,
         board: BoardId,
+        author: AccountId,
+        about: Option<AccountId>,
         body: &[u8],
-        account: Option<AccountId>,
     ) -> Result<PostId, StoreError>;
     /// Oldest first; empty for a board nobody has posted to.
     fn posts(&self, board: BoardId) -> Result<Vec<Post>, StoreError>;
@@ -143,7 +158,7 @@ pub trait Store: fmt::Debug + Send + Sync {
     /// becomes the version a download returns and the old current stays as history; without, it is
     /// kept as history beside the current one (it still counts against `KEPT_VERSIONS`). A file with
     /// no versions yet always gets a current one. Paths are canonical (`saves::canonical_path`);
-    /// like a bankroll, a save needs no account row.
+    /// the account must be live. `modified` is Unix milliseconds.
     fn save_write(
         &self,
         id: AccountId,
@@ -170,7 +185,13 @@ pub trait Store: fmt::Debug + Send + Sync {
     }
 }
 
+/// The refusal for a post that names an account although it is not a complaint.
+pub fn not_a_complaint(board: BoardId) -> StoreError {
+    StoreError::Backend(format!("board {} takes no named account", board.0).into())
+}
+
 /// A store that forgets everything at exit: the default for tests and a host without a data dir.
+/// It keeps the same rules as the SQLite store: no row without its parent, no number reused.
 #[derive(Debug, Default)]
 pub struct MemoryStore {
     tables: Mutex<Tables>,
@@ -181,6 +202,7 @@ struct Tables {
     accounts: HashMap<AccountId, AccountRow>,
     money: HashMap<AccountId, Money>,
     mailbox_of: HashMap<AccountId, MailboxNumber>,
+    owner_of: HashMap<MailboxNumber, AccountId>,
     letters: BTreeMap<MailboxNumber, Vec<HeldLetter>>,
     boards: HashMap<BoardId, Vec<HeldPost>>,
     saves: BTreeMap<(AccountId, String), SavedFile>,
@@ -189,25 +211,40 @@ struct Tables {
     posts_written: u32,
 }
 
+impl Tables {
+    fn live(&self, id: AccountId) -> bool {
+        self.accounts
+            .get(&id)
+            .is_some_and(|row| row.deleted_at.is_none())
+    }
+
+    fn require_live(&self, id: AccountId) -> Result<(), StoreError> {
+        match self.live(id) {
+            true => Ok(()),
+            false => Err(StoreError::UnknownAccount(id)),
+        }
+    }
+}
+
 /// An account row. A retired row stays so its number is never issued again.
 #[derive(Clone, Debug)]
 struct AccountRow {
     record: AccountRecord,
-    deleted_at: Option<u64>,
+    deleted_at: Option<i64>,
 }
 
 /// A letter kept after the player deletes it, hidden from readers.
 #[derive(Clone, Debug)]
 struct HeldLetter {
     letter: Letter,
-    deleted_at: Option<u64>,
+    deleted_at: Option<i64>,
 }
 
 /// A board post kept after it is deleted, hidden from readers.
 #[derive(Clone, Debug)]
 struct HeldPost {
     post: Post,
-    deleted_at: Option<u64>,
+    deleted_at: Option<i64>,
 }
 
 /// The versions kept of one file, oldest first, and the last version number handed out.
@@ -285,31 +322,38 @@ impl Store for MemoryStore {
     }
 
     fn set_money(&self, id: AccountId, amount: Money) -> Result<(), StoreError> {
-        self.tables().money.insert(id, amount);
+        let mut tables = self.tables();
+        tables.require_live(id)?;
+        tables.money.insert(id, amount);
         Ok(())
     }
 
     fn assign_mailbox(&self, id: AccountId) -> Result<MailboxNumber, StoreError> {
         let mut tables = self.tables();
-        let live = tables
-            .accounts
-            .get(&id)
-            .is_some_and(|row| row.deleted_at.is_none());
-        if !live {
-            return Err(StoreError::UnknownAccount(id));
-        }
+        tables.require_live(id)?;
         if let Some(&number) = tables.mailbox_of.get(&id) {
             return Ok(number);
         }
         let number = MailboxNumber(successor(tables.mailboxes_assigned)?);
         tables.mailboxes_assigned = number.0;
         tables.mailbox_of.insert(id, number);
+        tables.owner_of.insert(number, id);
         tables.letters.insert(number, Vec::new());
         Ok(number)
     }
 
-    fn append_letter(&self, mailbox: MailboxNumber, body: &[u8]) -> Result<LetterId, StoreError> {
+    fn append_letter(
+        &self,
+        mailbox: MailboxNumber,
+        from: AccountId,
+        body: &[u8],
+    ) -> Result<LetterId, StoreError> {
         let mut tables = self.tables();
+        let owner = tables.owner_of.get(&mailbox).copied();
+        if !owner.is_some_and(|owner| tables.live(owner)) {
+            return Err(StoreError::UnknownMailbox(mailbox));
+        }
+        tables.require_live(from)?;
         let id = LetterId(successor(tables.letters_written)?);
         let letters = tables
             .letters
@@ -318,6 +362,7 @@ impl Store for MemoryStore {
         letters.push(HeldLetter {
             letter: Letter {
                 id,
+                from,
                 body: body.to_vec(),
             },
             deleted_at: None,
@@ -348,24 +393,35 @@ impl Store for MemoryStore {
         else {
             return Ok(false);
         };
-        held.deleted_at = Some(unix_now());
+        held.deleted_at = Some(unix_millis());
         Ok(true)
     }
 
-    fn post_as(
+    fn post(
         &self,
         board: BoardId,
+        author: AccountId,
+        about: Option<AccountId>,
         body: &[u8],
-        account: Option<AccountId>,
     ) -> Result<PostId, StoreError> {
         let mut tables = self.tables();
+        tables.require_live(author)?;
+        if let Some(about) = about {
+            if post_kind(board) != PostKind::Complaint {
+                return Err(not_a_complaint(board));
+            }
+            if !tables.accounts.contains_key(&about) {
+                return Err(StoreError::UnknownAccount(about));
+            }
+        }
         let id = PostId(successor(tables.posts_written)?);
         tables.posts_written = id.0;
         tables.boards.entry(board).or_default().push(HeldPost {
             post: Post {
                 id,
                 body: body.to_vec(),
-                account,
+                account: author,
+                about,
             },
             deleted_at: None,
         });
@@ -394,7 +450,7 @@ impl Store for MemoryStore {
         else {
             return Ok(false);
         };
-        held.deleted_at = Some(unix_now());
+        held.deleted_at = Some(unix_millis());
         Ok(true)
     }
 
@@ -405,7 +461,7 @@ impl Store for MemoryStore {
             .get_mut(&id)
             .ok_or(StoreError::UnknownAccount(id))?;
         if row.deleted_at.is_none() {
-            row.deleted_at = Some(unix_now());
+            row.deleted_at = Some(unix_millis());
         }
         Ok(())
     }
@@ -467,6 +523,7 @@ impl Store for MemoryStore {
         current: bool,
     ) -> Result<SaveMeta, StoreError> {
         let mut tables = self.tables();
+        tables.require_live(id)?;
         let file = tables.saves.entry((id, path.to_owned())).or_default();
         let current = current || file.versions.is_empty();
         file.last_version += 1;
@@ -501,11 +558,14 @@ impl Store for MemoryStore {
     }
 }
 
-fn unix_now() -> u64 {
+/// Unix milliseconds, the one time unit every store column uses.
+fn unix_millis() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 /// The number after `last`, counting from 1; a used-up 32-bit space is a backend fault.
@@ -522,8 +582,12 @@ pub mod conformance {
 
     const ALICE: AccountId = AccountId(100_001);
     const BOB: AccountId = AccountId(100_002);
+    const CARA: AccountId = AccountId(100_003);
     const MYCHARS: &str = "INN\\YSERBIUS\\MYCHARS.DAT";
     const AUTOMAPS: &str = "INN\\YSERBIUS\\AUTOMAPS.DAT";
+    /// A Yserbius tavern board and the hub's complaint board (land 0, location 0x63, section 3).
+    const TAVERN: BoardId = BoardId(1 << 24 | 0x59 << 8 | 1);
+    const COMPLAINTS: BoardId = BoardId(0x63 << 8 | 3);
 
     fn record(password: u8) -> AccountRecord {
         AccountRecord {
@@ -539,19 +603,32 @@ pub mod conformance {
         items.iter().map(|item| body(item).to_vec()).collect()
     }
 
+    /// Alice and Bob, both live, both called "guybrush".
+    fn two_accounts(store: &dyn Store) {
+        store.create_account(ALICE, record(1)).unwrap();
+        store.create_account(BOB, record(2)).unwrap();
+    }
+
     /// Runs every case, each on a store from `fresh`.
     pub fn run_all<S: Store>(fresh: impl Fn() -> S) {
-        let cases: [fn(&dyn Store); 13] = [
+        let cases: [fn(&dyn Store); 20] = [
             unknown_account_is_absent,
             persona_updates_replace_the_name_and_need_an_account,
             created_account_reads_back,
             duplicate_account_is_refused,
             bankroll_reads_absent_then_per_account,
+            a_bankroll_and_a_save_need_a_live_account,
             password_update_clears_expiry,
             mailbox_numbers_are_per_account,
             letters_keep_order_and_isolation,
+            letters_need_a_live_sender_and_a_live_box,
             letters_are_opaque_bytes,
             boards_keep_order_and_isolation,
+            a_post_records_its_author_and_needs_a_live_one,
+            only_a_complaint_names_an_account_and_it_must_exist,
+            same_named_accounts_never_share_posts_or_letters,
+            account_numbers_are_never_reused,
+            a_deleted_account_cannot_be_written_to,
             saves_read_absent_then_per_account_and_path,
             saves_keep_the_newest_versions_and_one_current,
             saves_are_opaque_bytes,
@@ -571,10 +648,10 @@ pub mod conformance {
                 .unwrap();
             let mailbox = store.assign_mailbox(ALICE).unwrap();
             store.set_money(ALICE, Money(247)).unwrap();
-            let letter = store.append_letter(mailbox, b"hello").unwrap();
-            store.append_letter(mailbox, b"again").unwrap();
+            let letter = store.append_letter(mailbox, ALICE, b"hello").unwrap();
+            store.append_letter(mailbox, ALICE, b"again").unwrap();
             store.delete_letter(mailbox, letter).unwrap();
-            store.post(BoardId(3), b"first").unwrap();
+            store.post(BoardId(3), ALICE, None, b"first").unwrap();
             store.save_write(ALICE, MYCHARS, b"one", 10, true).unwrap();
             store.save_write(ALICE, MYCHARS, b"two", 20, true).unwrap();
             store.save_write(ALICE, MYCHARS, b"old", 5, false).unwrap();
@@ -599,24 +676,21 @@ pub mod conformance {
         assert_eq!(store.money(ALICE).unwrap(), Some(Money(247)));
         assert_eq!(store.money(BOB).unwrap(), None);
         assert_eq!(store.assign_mailbox(ALICE).unwrap(), mailbox);
-        assert_eq!(
-            bodies(&store.letters(mailbox).unwrap(), |l| &l.body),
-            [b"again".to_vec()]
-        );
-        assert_eq!(
-            bodies(&store.posts(BoardId(3)).unwrap(), |p| &p.body),
-            [b"first".to_vec()]
-        );
+        let letters = store.letters(mailbox).unwrap();
+        assert_eq!(bodies(&letters, |l| &l.body), [b"again".to_vec()]);
+        assert_eq!(letters[0].from, ALICE);
+        let posts = store.posts(BoardId(3)).unwrap();
+        assert_eq!(bodies(&posts, |p| &p.body), [b"first".to_vec()]);
+        assert_eq!(posts[0].account, ALICE);
         store.create_account(BOB, record(3)).unwrap();
         assert_ne!(store.assign_mailbox(BOB).unwrap(), mailbox);
-        assert!(store.append_letter(mailbox, b"new").unwrap() > letter);
+        assert!(store.append_letter(mailbox, BOB, b"new").unwrap() > letter);
     }
 
     fn persona_updates_replace_the_name_and_need_an_account(store: &dyn Store) {
         let unknown = store.set_persona(ALICE, "Zelda").unwrap_err();
         assert!(matches!(unknown, StoreError::UnknownAccount(ALICE)));
-        store.create_account(ALICE, record(1)).unwrap();
-        store.create_account(BOB, record(2)).unwrap();
+        two_accounts(store);
         store.set_persona(ALICE, "Zelda").unwrap();
         assert_eq!(store.account(ALICE).unwrap().unwrap().persona, "Zelda");
         store.set_persona(ALICE, "Link").unwrap();
@@ -634,6 +708,7 @@ pub mod conformance {
                 .unwrap_err()
         ));
         assert!(missing(store.assign_mailbox(ALICE).unwrap_err()));
+        assert_eq!(store.highest_account_id().unwrap(), None);
     }
 
     fn created_account_reads_back(store: &dyn Store) {
@@ -650,7 +725,7 @@ pub mod conformance {
     }
 
     fn bankroll_reads_absent_then_per_account(store: &dyn Store) {
-        // A bankroll needs no account row, so a kind of account the host never created still has one.
+        two_accounts(store);
         assert_eq!(store.money(ALICE).unwrap(), None);
         store.set_money(ALICE, Money(247)).unwrap();
         assert_eq!(store.money(ALICE).unwrap(), Some(Money(247)));
@@ -663,6 +738,16 @@ pub mod conformance {
         // Both words, at the top of the 32-bit range.
         store.set_money(BOB, Money(0xFFFF_FFFF)).unwrap();
         assert_eq!(store.money(BOB).unwrap(), Some(Money(0xFFFF_FFFF)));
+    }
+
+    fn a_bankroll_and_a_save_need_a_live_account(store: &dyn Store) {
+        let orphan = |error: StoreError| matches!(error, StoreError::UnknownAccount(ALICE));
+        assert!(orphan(store.set_money(ALICE, Money(1)).unwrap_err()));
+        assert!(orphan(
+            store.save_write(ALICE, MYCHARS, b"x", 1, true).unwrap_err()
+        ));
+        assert_eq!(store.money(ALICE).unwrap(), None);
+        assert_eq!(store.saves(ALICE).unwrap(), []);
     }
 
     fn password_update_clears_expiry(store: &dyn Store) {
@@ -679,8 +764,7 @@ pub mod conformance {
     }
 
     fn mailbox_numbers_are_per_account(store: &dyn Store) {
-        store.create_account(ALICE, record(1)).unwrap();
-        store.create_account(BOB, record(1)).unwrap();
+        two_accounts(store);
         let alice = store.assign_mailbox(ALICE).unwrap();
         let bob = store.assign_mailbox(BOB).unwrap();
         assert_ne!(alice, bob);
@@ -691,18 +775,16 @@ pub mod conformance {
         let ghost = MailboxNumber(999);
         assert!(store.letters(ghost).unwrap().is_empty());
         assert!(!store.delete_letter(ghost, LetterId(1)).unwrap());
+        two_accounts(store);
         assert!(matches!(
-            store.append_letter(ghost, b"lost").unwrap_err(),
+            store.append_letter(ghost, ALICE, b"lost").unwrap_err(),
             StoreError::UnknownMailbox(_)
         ));
-
-        store.create_account(ALICE, record(1)).unwrap();
-        store.create_account(BOB, record(1)).unwrap();
         let alice = store.assign_mailbox(ALICE).unwrap();
         let bob = store.assign_mailbox(BOB).unwrap();
-        let first = store.append_letter(alice, b"one").unwrap();
-        let second = store.append_letter(alice, b"two").unwrap();
-        let other = store.append_letter(bob, b"theirs").unwrap();
+        let first = store.append_letter(alice, BOB, b"one").unwrap();
+        let second = store.append_letter(alice, BOB, b"two").unwrap();
+        let other = store.append_letter(bob, ALICE, b"theirs").unwrap();
         assert!(first != second && second != other);
         assert_eq!(
             bodies(&store.letters(alice).unwrap(), |l| &l.body),
@@ -716,22 +798,51 @@ pub mod conformance {
         assert_eq!(store.letters(bob).unwrap().len(), 1);
     }
 
+    fn letters_need_a_live_sender_and_a_live_box(store: &dyn Store) {
+        store.create_account(ALICE, record(1)).unwrap();
+        let alice = store.assign_mailbox(ALICE).unwrap();
+        // BOB has no row: a letter cannot claim an author the store does not hold.
+        assert!(matches!(
+            store.append_letter(alice, BOB, b"forged").unwrap_err(),
+            StoreError::UnknownAccount(BOB)
+        ));
+        store.create_account(BOB, record(2)).unwrap();
+        store.append_letter(alice, BOB, b"real").unwrap();
+        store.retire_account(BOB).unwrap();
+        assert!(matches!(
+            store.append_letter(alice, BOB, b"after").unwrap_err(),
+            StoreError::UnknownAccount(BOB)
+        ));
+        // A deleted account's box takes no new mail.
+        store.restore_account(BOB).unwrap();
+        store.retire_account(ALICE).unwrap();
+        assert!(matches!(
+            store.append_letter(alice, BOB, b"late").unwrap_err(),
+            StoreError::UnknownMailbox(_)
+        ));
+        store.restore_account(ALICE).unwrap();
+        let kept = store.letters(alice).unwrap();
+        assert_eq!(bodies(&kept, |l| &l.body), [b"real".to_vec()]);
+        assert_eq!(kept[0].from, BOB);
+    }
+
     fn letters_are_opaque_bytes(store: &dyn Store) {
         store.create_account(ALICE, record(1)).unwrap();
         let mailbox = store.assign_mailbox(ALICE).unwrap();
         let bodies_in: [&[u8]; 2] = [&[], &[0, 255, 0, 10, 13, 0x80]];
         for body in bodies_in {
-            store.append_letter(mailbox, body).unwrap();
+            store.append_letter(mailbox, ALICE, body).unwrap();
         }
         let kept = store.letters(mailbox).unwrap();
         assert_eq!(bodies(&kept, |l| &l.body), bodies_in.map(<[u8]>::to_vec));
     }
 
     fn boards_keep_order_and_isolation(store: &dyn Store) {
+        store.create_account(ALICE, record(1)).unwrap();
         assert!(store.posts(BoardId(1)).unwrap().is_empty());
-        let first = store.post(BoardId(1), b"a|first").unwrap();
-        let second = store.post(BoardId(1), &[0, 1, 2]).unwrap();
-        let other = store.post(BoardId(2), b"elsewhere").unwrap();
+        let first = store.post(BoardId(1), ALICE, None, b"a|first").unwrap();
+        let second = store.post(BoardId(1), ALICE, None, &[0, 1, 2]).unwrap();
+        let other = store.post(BoardId(2), ALICE, None, b"elsewhere").unwrap();
         assert!(first != second && second != other);
         let kept = store.posts(BoardId(1)).unwrap();
         assert_eq!(
@@ -741,11 +852,107 @@ pub mod conformance {
         assert_eq!(store.posts(BoardId(2)).unwrap().len(), 1);
     }
 
+    fn a_post_records_its_author_and_needs_a_live_one(store: &dyn Store) {
+        assert!(matches!(
+            store.post(TAVERN, ALICE, None, b"x|y").unwrap_err(),
+            StoreError::UnknownAccount(ALICE)
+        ));
+        store.create_account(ALICE, record(1)).unwrap();
+        let post = store.post(TAVERN, ALICE, None, b"x|y").unwrap();
+        let kept = store.posts(TAVERN).unwrap();
+        assert_eq!(
+            (kept[0].id, kept[0].account, kept[0].about),
+            (post, ALICE, None)
+        );
+        store.retire_account(ALICE).unwrap();
+        assert!(store.post(TAVERN, ALICE, None, b"x|z").is_err());
+    }
+
+    fn only_a_complaint_names_an_account_and_it_must_exist(store: &dyn Store) {
+        two_accounts(store);
+        assert!(matches!(
+            store
+                .post(TAVERN, ALICE, Some(BOB), b"guybrush|hi")
+                .unwrap_err(),
+            StoreError::Backend(_)
+        ));
+        assert!(matches!(
+            store
+                .post(COMPLAINTS, ALICE, Some(CARA), b"x|Complaint: y")
+                .unwrap_err(),
+            StoreError::UnknownAccount(CARA)
+        ));
+        store
+            .post(
+                COMPLAINTS,
+                ALICE,
+                Some(BOB),
+                b"guybrush|Complaint: about: guybrush",
+            )
+            .unwrap();
+        store
+            .post(COMPLAINTS, ALICE, None, b"guybrush|Complaint: nobody")
+            .unwrap();
+        let kept = store.posts(COMPLAINTS).unwrap();
+        let named: Vec<_> = kept.iter().map(|post| post.about).collect();
+        assert_eq!(named, [Some(BOB), None]);
+        // A complaint about a deleted account is still kept: the number names it.
+        store.retire_account(BOB).unwrap();
+        store
+            .post(COMPLAINTS, ALICE, Some(BOB), b"guybrush|Complaint: again")
+            .unwrap();
+    }
+
+    fn same_named_accounts_never_share_posts_or_letters(store: &dyn Store) {
+        two_accounts(store);
+        assert_eq!(
+            store.account(ALICE).unwrap().unwrap().persona,
+            store.account(BOB).unwrap().unwrap().persona
+        );
+        store.post(TAVERN, ALICE, None, b"guybrush|mine").unwrap();
+        store.post(TAVERN, BOB, None, b"guybrush|mine").unwrap();
+        let owners: Vec<_> = store
+            .posts(TAVERN)
+            .unwrap()
+            .iter()
+            .map(|post| post.account)
+            .collect();
+        assert_eq!(owners, [ALICE, BOB]);
+        let bob = store.assign_mailbox(BOB).unwrap();
+        store.append_letter(bob, ALICE, b"same name").unwrap();
+        assert_eq!(store.letters(bob).unwrap()[0].from, ALICE);
+    }
+
+    fn account_numbers_are_never_reused(store: &dyn Store) {
+        two_accounts(store);
+        store.retire_account(BOB).unwrap();
+        assert_eq!(store.account(BOB).unwrap(), None);
+        assert!(matches!(
+            store.create_account(BOB, record(3)).unwrap_err(),
+            StoreError::AccountExists(BOB)
+        ));
+        assert_eq!(store.highest_account_id().unwrap(), Some(BOB));
+    }
+
+    fn a_deleted_account_cannot_be_written_to(store: &dyn Store) {
+        store.create_account(ALICE, record(1)).unwrap();
+        store.retire_account(ALICE).unwrap();
+        let gone = |error: StoreError| matches!(error, StoreError::UnknownAccount(ALICE));
+        assert!(gone(store.set_money(ALICE, Money(1)).unwrap_err()));
+        assert!(gone(store.assign_mailbox(ALICE).unwrap_err()));
+        assert!(gone(store.set_persona(ALICE, "x").unwrap_err()));
+        assert!(gone(
+            store.save_write(ALICE, MYCHARS, b"x", 1, true).unwrap_err()
+        ));
+        store.restore_account(ALICE).unwrap();
+        store.set_money(ALICE, Money(1)).unwrap();
+    }
+
     fn saves_read_absent_then_per_account_and_path(store: &dyn Store) {
+        two_accounts(store);
         assert_eq!(store.saves(ALICE).unwrap(), []);
         assert_eq!(store.save_read(ALICE, MYCHARS, None).unwrap(), None);
         assert_eq!(store.save_versions(ALICE, MYCHARS).unwrap(), []);
-        // A save needs no account row, like a bankroll.
         let first = store
             .save_write(ALICE, MYCHARS, b"hello", 1_000, true)
             .unwrap();
@@ -769,6 +976,7 @@ pub mod conformance {
     }
 
     fn saves_keep_the_newest_versions_and_one_current(store: &dyn Store) {
+        store.create_account(ALICE, record(1)).unwrap();
         for (n, text) in [b"a", b"b", b"c", b"d"].into_iter().enumerate() {
             let version = store
                 .save_write(ALICE, MYCHARS, text, 10 + n as u64, true)
@@ -804,6 +1012,7 @@ pub mod conformance {
     }
 
     fn saves_are_opaque_bytes(store: &dyn Store) {
+        store.create_account(ALICE, record(1)).unwrap();
         let odd: Vec<u8> = (0..=255).chain([0, 0, 0xFF]).collect();
         store.save_write(ALICE, MYCHARS, &odd, 1, true).unwrap();
         store.save_write(ALICE, AUTOMAPS, b"", 1, true).unwrap();
@@ -840,11 +1049,11 @@ mod tests {
             .create_account(id, AccountRecord::new(EncodedPassword([1; 10]), "a"))
             .unwrap();
         let mailbox = store.assign_mailbox(id).unwrap();
-        let letter = store.append_letter(mailbox, b"hi").unwrap();
+        let letter = store.append_letter(mailbox, id, b"hi").unwrap();
         assert!(store.delete_letter(mailbox, letter).unwrap());
         assert!(store.letters(mailbox).unwrap().is_empty());
         assert!(!store.delete_letter(mailbox, letter).unwrap());
-        let post = store.post(BoardId(1), b"a|text").unwrap();
+        let post = store.post(BoardId(1), id, None, b"a|text").unwrap();
         assert!(store.delete_post(BoardId(1), post).unwrap());
         assert!(store.posts(BoardId(1)).unwrap().is_empty());
         store.retire_account(id).unwrap();

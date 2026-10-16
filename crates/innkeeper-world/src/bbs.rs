@@ -5,12 +5,12 @@ use tracing::{info, warn};
 
 use crate::assumptions::{
     COMPLAINTS_ARE_KEPT_ASSUMED, COMPLAINT_SECTION_ASSUMED, COMPLAINT_TEXT_LIMIT_ASSUMED,
-    ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED,
+    ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED, MEMBER_SERVICES_SECTION_ASSUMED,
 };
 use crate::message::Command;
 use crate::{
     Account, AccountId, BbsReply, BbsRequest, BoardId, BoardListing, BoardRef, HostMessage,
-    LandType, MessagePosition, Nak, Place, Post, ReadStep, Sid, StoreError, World,
+    LandType, MessagePosition, Nak, ObjectStore, Place, Post, ReadStep, Sid, StoreError, World,
 };
 
 /// Location of the operator-only Complaints board. Posts there are kept for a year
@@ -20,6 +20,63 @@ pub const COMPLAINT_BOARD_LOCATION: u16 = 0x63;
 /// True for a post on the Complaints board of any land.
 pub fn is_complaint_board(board: BoardId) -> bool {
     ((board.0 >> 8) & 0xFFFF) == u32::from(COMPLAINT_BOARD_LOCATION)
+}
+
+/// What a post on a board is, which decides its retention clock and whether it may name an account.
+/// The SQLite store derives the same value in `posts.kind` (docs/server/store.md section 3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PostKind {
+    /// A message on a board players read.
+    Post,
+    /// A moderator's conference or trivia topic text (location 0, sections 67 and 84).
+    Topic,
+    /// The Complaints board of any land: the hub's complaint form, or an RPG post to it.
+    Complaint,
+    /// Town Hall "Ask Member Services", kept on the complaint board's land 0 section 2.
+    MemberServices,
+}
+
+impl PostKind {
+    /// The `posts.kind` text.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PostKind::Post => "post",
+            PostKind::Topic => "topic",
+            PostKind::Complaint => "complaint",
+            PostKind::MemberServices => "member_services",
+        }
+    }
+}
+
+/// The kind of every post on `board`.
+pub fn post_kind(board: BoardId) -> PostKind {
+    let member_services = board_id(
+        LandType(0),
+        BoardRef {
+            location: COMPLAINT_BOARD_LOCATION,
+            section: MEMBER_SERVICES_SECTION_ASSUMED,
+        },
+    );
+    if board == member_services {
+        return PostKind::MemberServices;
+    }
+    if is_complaint_board(board) {
+        return PostKind::Complaint;
+    }
+    let topic = TOPIC_SECTIONS.iter().any(|&section| {
+        board
+            == board_id(
+                LandType(0),
+                BoardRef {
+                    location: 0,
+                    section,
+                },
+            )
+    });
+    match topic {
+        true => PostKind::Topic,
+        false => PostKind::Post,
+    }
 }
 
 /// User-flag bits that make the client read a message's text 4 bytes later (`userFlags` & 2 or 4).
@@ -67,12 +124,13 @@ const SECTIONS: [Section; 3] = [
 /// The replies one command 27 request is owed: none for a post, else exactly one.
 pub(crate) fn answer(
     world: &World,
+    objects: &ObjectStore,
     account: &Account,
     place: Option<Place>,
     request: &BbsRequest,
 ) -> Vec<HostMessage> {
     if let BbsRequest::Complaint { about, text, .. } = request {
-        complaint(world, account, about.is_some(), &text.0);
+        complaint(world, objects, account, about.is_some(), &text.0);
         return Vec::new();
     }
     let Some(place) = place else {
@@ -84,7 +142,6 @@ pub(crate) fn answer(
         land: place.land_type,
         privileged: account.user_flags & PRIVILEGED_USER_FLAGS != 0,
         moderator: account.user_flags & MODERATOR_USER_FLAGS != 0,
-        persona: &account.persona,
         account: account.id,
     };
     match boards.handle(request) {
@@ -102,7 +159,6 @@ struct Boards<'w> {
     land: LandType,
     privileged: bool,
     moderator: bool,
-    persona: &'w str,
     account: AccountId,
 }
 
@@ -208,7 +264,7 @@ impl Boards<'_> {
         let id = self
             .world
             .store
-            .post_as(self.board_id(board), body, Some(self.account))?;
+            .post(self.board_id(board), self.account, None, body)?;
         info!(?board, post = id.0, "board post stored");
         Ok(())
     }
@@ -227,7 +283,7 @@ impl Boards<'_> {
         for old in self.world.store.posts(id)? {
             self.world.store.delete_post(id, old.id)?;
         }
-        let post = self.world.store.post_as(id, body, Some(self.account))?;
+        let post = self.world.store.post(id, self.account, None, body)?;
         info!(
             ?board,
             post = post.0,
@@ -237,13 +293,10 @@ impl Boards<'_> {
         Ok(())
     }
 
-    /// Whether this reader wrote the post: the recorded account decides, and only a post with
-    /// none (kept before posts recorded one) falls back to the name at its head.
+    /// Whether this reader wrote the post: the recorded account alone decides. The name at the
+    /// head of the body is the client's bytes and two accounts may share it.
     fn wrote(&self, post: &Post) -> bool {
-        match post.account {
-            Some(account) => account == self.account,
-            None => is_author(&post.body, self.persona),
-        }
+        post.account == self.account
     }
 
     /// Message `message` of a board goes when its author or a privileged reader asks.
@@ -292,18 +345,19 @@ impl Boards<'_> {
     }
 }
 
-/// True when a post's `author|text` names `persona` as its author (case-insensitive).
-fn is_author(body: &[u8], persona: &str) -> bool {
-    let persona = persona.trim();
-    let author = body.split(|&byte| byte == b'|').next().unwrap_or_default();
-    !persona.is_empty() && author.trim_ascii().eq_ignore_ascii_case(persona.as_bytes())
-}
-
 /// A complaint from the hub or the Sketch Pad. The client says "Your complaint has been forwarded"
 /// the moment it sends and waits for nothing, so nothing is answered. The text is kept as
 /// `persona|Complaint: text` on the complaint board, where the account's export and delete find it
 /// by the recorded account, and only the account, the length and whether someone was named are logged.
-fn complaint(world: &World, account: &Account, names_someone: bool, text: &[u8]) {
+/// The player named after `about:` is resolved to an account now, while they are online
+/// (`offender`), and stored beside the text; the name itself attributes nothing later.
+fn complaint(
+    world: &World,
+    objects: &ObjectStore,
+    account: &Account,
+    names_someone: bool,
+    text: &[u8],
+) {
     if !COMPLAINTS_ARE_KEPT_ASSUMED {
         return;
     }
@@ -322,12 +376,14 @@ fn complaint(world: &World, account: &Account, names_someone: bool, text: &[u8])
             section: COMPLAINT_SECTION_ASSUMED,
         },
     );
-    match world.store.post_as(board, &body, Some(account.id)) {
+    let about = offender(objects, account.id, text);
+    match world.store.post(board, account.id, about, &body) {
         Ok(post) => info!(
             account = account.id.0,
             post = post.0,
             length = text.len(),
             names_someone,
+            about = about.map(|about| about.0),
             "complaint kept"
         ),
         Err(error) => warn!(
@@ -337,6 +393,41 @@ fn complaint(world: &World, account: &Account, names_someone: bool, text: &[u8])
             "complaint could not be kept"
         ),
     }
+}
+
+/// The account of the player the complaint text names after `about:`, when exactly one other
+/// account online plays under that name. The client builds the text (hub-services.md section 2);
+/// the 27/9 SID beside it is connection-local, so the name and the phone book are what identify the
+/// player, and only at this moment. Nobody, two accounts or the complainer's own: none.
+pub(crate) fn offender(
+    objects: &ObjectStore,
+    complainer: AccountId,
+    text: &[u8],
+) -> Option<AccountId> {
+    let name = named_offender(text)?;
+    let mut matches = objects
+        .online_players()
+        .filter(|(_, player)| player.persona.trim().eq_ignore_ascii_case(name))
+        .map(|(_, player)| player.account)
+        .filter(|&account| account != complainer);
+    let first = matches.next()?;
+    match matches.all(|other| other == first) {
+        true => Some(first),
+        false => None,
+    }
+}
+
+/// The name after the first `about: ` up to a comma or semicolon: 1 to 16 printable characters.
+pub fn named_offender(text: &[u8]) -> Option<&str> {
+    let text = std::str::from_utf8(text.split(|&byte| byte == 0).next()?).ok()?;
+    let after = text.split("about: ").nth(1)?;
+    let name = after.split([',', ';']).next()?.trim();
+    let valid = !name.is_empty()
+        && name.len() <= 16
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() || byte == b' ');
+    valid.then_some(name)
 }
 
 pub(crate) fn board_id(land: LandType, board: BoardRef) -> BoardId {
@@ -400,6 +491,49 @@ mod tests {
         assert_eq!(step_to(ReadStep::Next, 1, 3), 2);
         assert_eq!(step_to(ReadStep::This, 7, 3), 3);
         assert_eq!(step_to(ReadStep::First, 1, 0), 0);
+    }
+
+    #[test]
+    fn post_kinds_follow_the_board() {
+        let complaint = BoardRef {
+            location: COMPLAINT_BOARD_LOCATION,
+            section: COMPLAINT_SECTION_ASSUMED,
+        };
+        let member = BoardRef {
+            location: COMPLAINT_BOARD_LOCATION,
+            section: MEMBER_SERVICES_SECTION_ASSUMED,
+        };
+        let tavern = BoardRef {
+            location: 0x59,
+            section: 1,
+        };
+        let topic = BoardRef {
+            location: 0,
+            section: 67,
+        };
+        assert_eq!(
+            post_kind(board_id(LandType(0), complaint)),
+            PostKind::Complaint
+        );
+        assert_eq!(
+            post_kind(board_id(LandType(1), member)),
+            PostKind::Complaint
+        );
+        assert_eq!(
+            post_kind(board_id(LandType(0), member)),
+            PostKind::MemberServices
+        );
+        assert_eq!(post_kind(board_id(LandType(1), tavern)), PostKind::Post);
+        assert_eq!(post_kind(board_id(LandType(0), topic)), PostKind::Topic);
+        assert_eq!(post_kind(board_id(LandType(1), topic)), PostKind::Post);
+    }
+
+    #[test]
+    fn the_offender_is_the_name_after_about() {
+        let text = b"From: Anna in: Tavern; about: Bruno, who said \"x\" Comments: rude\0junk";
+        assert_eq!(named_offender(text), Some("Bruno"));
+        assert_eq!(named_offender(b"nobody is named"), None);
+        assert_eq!(named_offender(b"about: , x"), None);
     }
 
     #[test]

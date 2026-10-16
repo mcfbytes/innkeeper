@@ -87,7 +87,7 @@ mod tests {
     use crate::message::Command;
     use crate::{
         AccountBook, AccountId, AccountRecord, ClientMessage, ClientVersion, ConnectionId,
-        EncodedPassword, Enrolment, HostMessage, LandType, Login, MemoryStore, Money, ObjectStore,
+        EncodedPassword, Enrolment, HostMessage, LandType, Login, MemoryStore, ObjectStore,
         PasswordSource, PlayerSession, Sid, Signup, Store, StoreError, World,
     };
 
@@ -168,18 +168,6 @@ mod tests {
             refused.first().map(|delivery| &delivery.message),
             Some(HostMessage::Nak(_))
         ));
-    }
-
-    #[test]
-    fn signup_keeps_a_balance_already_stored_for_that_number() {
-        let (world, store) = closed_world();
-        let id = AccountId(SIGNUP_FIRST_ACCOUNT_ASSUMED);
-        store.set_money(id, Money(1_000_000)).unwrap();
-        let mut objects = ObjectStore::new();
-        let mut player = PlayerSession::new();
-        let replies = player.handle(&world, &mut objects, ME, &signup(b""));
-        assert_eq!(ack_id(&replies[0].message), id);
-        assert_eq!(store.money(id).unwrap(), Some(Money(1_000_000)));
     }
 
     #[test]

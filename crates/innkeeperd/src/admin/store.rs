@@ -3,10 +3,10 @@
 //! holds go through the `Store` trait and the existing retention functions where they exist; the
 //! SQL here is for what the trait has no words for (docs/server/store.md).
 
-use innkeeper_world::{Envelope, HostTime, StoreError, COMPLAINT_BOARD_LOCATION};
-use rusqlite::{params, OptionalExtension};
+use innkeeper_world::{named_offender, Envelope, HostTime, StoreError};
+use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::signin::keys::IdentityKey;
+use crate::signin::keys::{self, IdentityKey};
 use crate::sqlite_store::SqliteStore;
 use crate::subject::{c_string, post_author, trim_nul};
 
@@ -21,7 +21,19 @@ pub(crate) struct Who {
     pub(crate) key: IdentityKey,
 }
 
-// ---- staff ----
+// ---- operators and staff ----
+
+/// Every portal identity has an `operators` row, the parent its staff row, sessions, audit
+/// entries and complaint marks name. The first sign-in, `admin allow` or `admin revoke` adds it.
+fn ensure_operator(conn: &Connection, key: &IdentityKey, now: i64) -> Result<(), StoreError> {
+    conn.execute(
+        "INSERT INTO operators (identity_key, first_seen_at) VALUES (?1, ?2)
+         ON CONFLICT (identity_key) DO NOTHING",
+        params![key.as_slice(), now],
+    )
+    .map_err(backend)?;
+    Ok(())
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StaffRow {
@@ -66,15 +78,15 @@ pub(crate) fn staff_allow(
     note: Option<&str>,
     now: i64,
 ) -> Result<(), StoreError> {
-    store
-        .connection()
-        .execute(
-            "INSERT INTO staff (identity_key, note, added_at) VALUES (?1, ?2, ?3)
+    let conn = store.connection();
+    ensure_operator(&conn, key, now)?;
+    conn.execute(
+        "INSERT INTO staff (identity_key, note, added_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(identity_key) DO UPDATE SET revoked_at = NULL,
                  note = coalesce(excluded.note, staff.note)",
-            params![key.as_slice(), note, now],
-        )
-        .map_err(backend)?;
+        params![key.as_slice(), note, now],
+    )
+    .map_err(backend)?;
     Ok(())
 }
 
@@ -85,14 +97,14 @@ pub(crate) fn staff_revoke(
     key: &IdentityKey,
     now: i64,
 ) -> Result<(), StoreError> {
-    store
-        .connection()
-        .execute(
-            "INSERT INTO staff (identity_key, note, added_at, revoked_at) VALUES (?1, NULL, ?2, ?2)
+    let conn = store.connection();
+    ensure_operator(&conn, key, now)?;
+    conn.execute(
+        "INSERT INTO staff (identity_key, note, added_at, revoked_at) VALUES (?1, NULL, ?2, ?2)
              ON CONFLICT(identity_key) DO UPDATE SET revoked_at = excluded.revoked_at",
-            params![key.as_slice(), now],
-        )
-        .map_err(backend)?;
+        params![key.as_slice(), now],
+    )
+    .map_err(backend)?;
     Ok(())
 }
 
@@ -133,19 +145,19 @@ pub(crate) fn create_session(
     now: i64,
     expiry: i64,
 ) -> Result<(), StoreError> {
-    store
-        .connection()
-        .execute(
-            "INSERT INTO admin_sessions (token_hash, identity_key, created_at, last_seen, expiry)
-             VALUES (?1, ?2, ?3, ?3, ?4)",
-            params![token_hash.as_slice(), key.as_slice(), now, expiry],
-        )
-        .map_err(backend)?;
+    let conn = store.connection();
+    ensure_operator(&conn, key, now)?;
+    conn.execute(
+        "INSERT INTO admin_sessions (token_hash, identity_key, created_at, last_seen_at, expires_at)
+         VALUES (?1, ?2, ?3, ?3, ?4)",
+        params![token_hash.as_slice(), key.as_slice(), now, expiry],
+    )
+    .map_err(backend)?;
     Ok(())
 }
 
-/// The identity behind a live cookie: not expired, seen within `idle` seconds. A hit renews
-/// `last_seen`.
+/// The identity behind a live cookie: not expired, seen within `idle` milliseconds. A hit renews
+/// `last_seen_at`.
 pub(crate) fn live_session(
     store: &SqliteStore,
     token_hash: &[u8; 32],
@@ -156,7 +168,7 @@ pub(crate) fn live_session(
     let key: Option<Vec<u8>> = conn
         .query_row(
             "SELECT identity_key FROM admin_sessions
-             WHERE token_hash = ?1 AND expiry > ?2 AND last_seen > ?3",
+             WHERE token_hash = ?1 AND expires_at > ?2 AND last_seen_at > ?3",
             params![token_hash.as_slice(), now, now.saturating_sub(idle)],
             |row| row.get(0),
         )
@@ -166,7 +178,7 @@ pub(crate) fn live_session(
         return Ok(None);
     };
     conn.execute(
-        "UPDATE admin_sessions SET last_seen = ?2 WHERE token_hash = ?1",
+        "UPDATE admin_sessions SET last_seen_at = ?2 WHERE token_hash = ?1",
         params![token_hash.as_slice(), now],
     )
     .map_err(backend)?;
@@ -198,7 +210,8 @@ pub(crate) struct AuditEntry {
 }
 
 /// Records one change or one letter read. `account` is the account the entry concerns, so a hold on
-/// it keeps the entry past its window.
+/// it keeps the entry past its window; a number the store never issued is kept in `target` only.
+/// The handle is not stored: it is the first bytes of the key (`keys::handle`).
 pub(crate) fn record(
     store: &SqliteStore,
     who: &Who,
@@ -208,22 +221,14 @@ pub(crate) fn record(
     account: Option<u32>,
     now: i64,
 ) -> Result<(), StoreError> {
-    store
-        .connection()
-        .execute(
-            "INSERT INTO admin_audit (at, handle, identity_key, action, target, reason, account)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                now,
-                who.handle,
-                who.key.as_slice(),
-                action,
-                target,
-                reason,
-                account
-            ],
-        )
-        .map_err(backend)?;
+    let conn = store.connection();
+    ensure_operator(&conn, &who.key, now)?;
+    conn.execute(
+        "INSERT INTO admin_audit (recorded_at, identity_key, action, target, reason, account)
+         VALUES (?1, ?2, ?3, ?4, ?5, (SELECT id FROM accounts WHERE id = ?6))",
+        params![now, who.key.as_slice(), action, target, reason, account],
+    )
+    .map_err(backend)?;
     Ok(())
 }
 
@@ -235,25 +240,30 @@ pub(crate) fn recent_audit(
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT id, at, handle, identity_key, action, target, reason FROM admin_audit
+            "SELECT id, recorded_at, identity_key, action, target, reason FROM admin_audit
              WHERE id < ?1 ORDER BY id DESC LIMIT ?2",
         )
         .map_err(backend)?;
     let rows = statement
         .query_map(params![before.unwrap_or(i64::MAX), limit], |row| {
-            let key: Vec<u8> = row.get(3)?;
+            let key: Vec<u8> = row.get(2)?;
             Ok(AuditEntry {
                 id: row.get(0)?,
                 at: row.get(1)?,
-                handle: row.get(2)?,
+                handle: handle_of(&key),
                 key_hex: key.iter().map(|byte| format!("{byte:02x}")).collect(),
-                action: row.get(4)?,
-                target: row.get(5)?,
-                reason: row.get(6)?,
+                action: row.get(3)?,
+                target: row.get(4)?,
+                reason: row.get(5)?,
             })
         })
         .map_err(backend)?;
     rows.collect::<Result<_, _>>().map_err(backend)
+}
+
+/// The handle the portal shows for a stored key.
+fn handle_of(key: &[u8]) -> String {
+    IdentityKey::try_from(key).map_or_else(|_| "unknown".to_owned(), |key| keys::handle(&key))
 }
 
 // ---- the dashboard ----
@@ -267,8 +277,9 @@ pub(crate) struct Counts {
     pub(crate) holds: i64,
 }
 
-fn complaint_filter() -> String {
-    format!("((posts.board >> 8) & 65535) = {COMPLAINT_BOARD_LOCATION}")
+/// Complaints and Member Services messages: `posts.kind` (docs/server/store.md section 3).
+fn complaint_filter() -> &'static str {
+    "posts.kind IN ('complaint', 'member_services')"
 }
 
 pub(crate) fn counts(store: &SqliteStore, now: i64) -> Result<Counts, StoreError> {
@@ -290,11 +301,11 @@ pub(crate) fn counts(store: &SqliteStore, now: i64) -> Result<Counts, StoreError
         complaints_waiting: one(
             &format!(
                 "SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND ({complaints})
-                 AND id NOT IN (SELECT post_id FROM complaint_handled)"
+                 AND handled_at IS NULL"
             ),
             &[],
         )?,
-        holds: one("SELECT COUNT(*) FROM holds WHERE hold_until > ?1", &[&now])?,
+        holds: one("SELECT COUNT(*) FROM holds WHERE expires_at > ?1", &[&now])?,
     })
 }
 
@@ -303,11 +314,18 @@ pub(crate) fn counts(store: &SqliteStore, now: i64) -> Result<Counts, StoreError
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AccountSummary {
     pub(crate) id: u32,
+    /// Empty for an account with no persona yet and for a tombstone.
     pub(crate) persona: String,
     pub(crate) deleted_at: Option<i64>,
     pub(crate) suspended_at: Option<i64>,
     pub(crate) user_flags: u16,
+    /// Set on a tombstone: the purge has erased everything but the number.
+    pub(crate) purged_at: Option<i64>,
 }
+
+/// The columns `summary` reads, in its order. A tombstone reads as an empty persona and no flags.
+const SUMMARY_COLUMNS: &str =
+    "SELECT id, ifnull(persona, ''), deleted_at, suspended_at, ifnull(user_flags, 0), purged_at";
 
 fn summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccountSummary> {
     Ok(AccountSummary {
@@ -316,6 +334,7 @@ fn summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<AccountSummary> {
         deleted_at: row.get(2)?,
         suspended_at: row.get(3)?,
         user_flags: row.get(4)?,
+        purged_at: row.get(5)?,
     })
 }
 
@@ -327,7 +346,7 @@ pub(crate) fn search_accounts(
 ) -> Result<Vec<AccountSummary>, StoreError> {
     let query = query.trim();
     let conn = store.connection();
-    let columns = "SELECT id, persona, deleted_at, suspended_at, user_flags FROM accounts";
+    let columns = format!("{SUMMARY_COLUMNS} FROM accounts");
     let mut statement;
     let rows = if query.is_empty() {
         statement = conn
@@ -353,35 +372,6 @@ fn escape_like(text: &str) -> String {
     text.replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_")
-}
-
-/// The account behind a post or complaint: the one recorded on it, or, for a post from before
-/// posts recorded one, the first account whose persona matches the author name (see privacy.md).
-pub(crate) fn account_of_post(
-    store: &SqliteStore,
-    account: Option<u32>,
-    author: &str,
-) -> Option<u32> {
-    account.or_else(|| {
-        (!author.is_empty())
-            .then(|| account_by_persona(store, author).ok().flatten())
-            .flatten()
-    })
-}
-
-pub(crate) fn account_by_persona(
-    store: &SqliteStore,
-    persona: &str,
-) -> Result<Option<u32>, StoreError> {
-    store
-        .connection()
-        .query_row(
-            "SELECT id FROM accounts WHERE persona = ?1 COLLATE NOCASE ORDER BY deleted_at IS NOT NULL, id",
-            [persona],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(backend)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -419,14 +409,24 @@ pub(crate) fn account_detail(
     let conn = store.connection();
     let found = conn
         .query_row(
-            "SELECT id, persona, deleted_at, suspended_at, user_flags, rating, status, password_expired
-             FROM accounts WHERE id = ?1",
+            &format!(
+                "{SUMMARY_COLUMNS}, ifnull(rating, 0), ifnull(status, 0),
+                 ifnull(password_expired, 0), created_at FROM accounts WHERE id = ?1"
+            ),
             [id],
-            |row| Ok((summary(row)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+            |row| {
+                Ok((
+                    summary(row)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get::<_, i64>(9)?,
+                ))
+            },
         )
         .optional()
         .map_err(backend)?;
-    let Some((summary, rating, status, password_expired)) = found else {
+    let Some((summary, rating, status, password_expired, created_at)) = found else {
         return Ok(None);
     };
     let scalar = |sql: &str| -> Result<Option<i64>, StoreError> {
@@ -443,9 +443,9 @@ pub(crate) fn account_detail(
         )
         .optional()
         .map_err(backend)?;
-    let created_at = scalar("SELECT created_at FROM identity_accounts WHERE account_id = ?1")?;
-    let last_logon = scalar("SELECT MAX(started_at) FROM audit_sessions WHERE account_id = ?1")?;
-    let hold_until = scalar("SELECT hold_until FROM holds WHERE account = ?1")?;
+    let created_at = Some(created_at);
+    let last_logon = scalar("SELECT MAX(started_at) FROM audit_sessions WHERE account = ?1")?;
+    let hold_until = scalar("SELECT expires_at FROM holds WHERE account = ?1")?;
     let save_files =
         scalar("SELECT COUNT(DISTINCT path) FROM saves WHERE account = ?1 AND deleted_at IS NULL")?
             .unwrap_or(0);
@@ -453,7 +453,7 @@ pub(crate) fn account_detail(
         let mut statement = conn
             .prepare(
                 "SELECT identities.identity_key, identities.provider FROM identity_accounts
-                 JOIN identities USING (identity_key) WHERE identity_accounts.account_id = ?1",
+                 JOIN identities USING (identity_key) WHERE identity_accounts.account = ?1",
             )
             .map_err(backend)?;
         let rows = statement
@@ -474,8 +474,8 @@ pub(crate) fn account_detail(
     let sessions = {
         let mut statement = conn
             .prepare(
-                "SELECT created_at, expiry, account_id FROM sessions
-                 WHERE identity_key IN (SELECT identity_key FROM identity_accounts WHERE account_id = ?1)
+                "SELECT created_at, expires_at, account FROM sessions
+                 WHERE identity_key IN (SELECT identity_key FROM identity_accounts WHERE account = ?1)
                  ORDER BY created_at DESC LIMIT 20",
             )
             .map_err(backend)?;
@@ -548,9 +548,9 @@ pub(crate) fn revoke_web_sessions(
     store
         .connection()
         .execute(
-            "UPDATE sessions SET expiry = ?2
-             WHERE expiry > ?2
-             AND identity_key IN (SELECT identity_key FROM identity_accounts WHERE account_id = ?1)",
+            "UPDATE sessions SET expires_at = ?2
+             WHERE expires_at > ?2
+             AND identity_key IN (SELECT identity_key FROM identity_accounts WHERE account = ?1)",
             params![id, now],
         )
         .map_err(backend)
@@ -565,9 +565,12 @@ pub(crate) struct Complaint {
     pub(crate) author: String,
     pub(crate) text: String,
     pub(crate) created_at: i64,
+    /// When it was marked handled, and the handle of the operator who did.
     pub(crate) handled: Option<(i64, String)>,
-    /// The account that wrote it; none for a complaint from before posts recorded one.
-    pub(crate) account: Option<u32>,
+    /// The account that wrote it.
+    pub(crate) account: u32,
+    /// The account the complaint names, resolved when it was filed; none when nobody online matched.
+    pub(crate) about: Option<u32>,
 }
 
 impl Complaint {
@@ -579,25 +582,23 @@ impl Complaint {
         }
     }
 
-    /// The persona named after `about:` in the client's complaint text, when there is one.
+    /// The name the client's complaint text gives after `about:`, as typed. It is shown, never
+    /// looked up: `about` is the account it named.
     pub(crate) fn offender(&self) -> Option<String> {
-        let after = self.text.split("about: ").nth(1)?;
-        let name = after.split([',', ';']).next()?.trim();
-        let valid = !name.is_empty()
-            && name.len() <= 10
-            && name.bytes().all(|byte| byte.is_ascii_alphanumeric());
-        valid.then(|| name.to_owned())
+        named_offender(self.text.as_bytes()).map(str::to_owned)
     }
 }
 
-fn complaint_from(
-    id: u32,
-    board: u32,
-    body: &[u8],
-    created_at: Option<i64>,
-    handled: (Option<i64>, Option<String>),
-    account: Option<u32>,
-) -> Complaint {
+fn complaint_from(row: &rusqlite::Row<'_>) -> rusqlite::Result<Complaint> {
+    let id: u32 = row.get(0)?;
+    let board: u32 = row.get(1)?;
+    let body: Vec<u8> = row.get(2)?;
+    let created_at: i64 = row.get(3)?;
+    let handled_at: Option<i64> = row.get(4)?;
+    let handled_by: Option<Vec<u8>> = row.get(5)?;
+    let account: u32 = row.get(6)?;
+    let about: Option<u32> = row.get(7)?;
+    let body = body.as_slice();
     let text = String::from_utf8_lossy(trim_nul(body)).into_owned();
     let (author, rest) = match text.split_once('|') {
         Some((author, rest)) => (author.trim().to_owned(), rest.trim().to_owned()),
@@ -607,20 +608,20 @@ fn complaint_from(
         .strip_prefix("Complaint:")
         .or_else(|| rest.strip_prefix("Member Services:"))
         .map_or(rest.clone(), |body| body.trim().to_owned());
-    Complaint {
+    Ok(Complaint {
         post_id: id,
         section: board & 0xFF,
         author,
         text: rest,
-        created_at: created_at.unwrap_or(0),
-        handled: handled.0.zip(handled.1),
+        created_at,
+        handled: handled_at.zip(handled_by.as_deref().map(handle_of)),
         account,
-    }
+        about,
+    })
 }
 
 const COMPLAINT_COLUMNS: &str = "SELECT posts.id, posts.board, posts.body, posts.created_at,
-    complaint_handled.handled_at, complaint_handled.handle, posts.account
-    FROM posts LEFT JOIN complaint_handled ON complaint_handled.post_id = posts.id";
+    posts.handled_at, posts.handled_by, posts.account, posts.about_account FROM posts";
 
 pub(crate) fn complaints(store: &SqliteStore, limit: u32) -> Result<Vec<Complaint>, StoreError> {
     let conn = store.connection();
@@ -632,17 +633,7 @@ pub(crate) fn complaints(store: &SqliteStore, limit: u32) -> Result<Vec<Complain
         ))
         .map_err(backend)?;
     let rows = statement
-        .query_map([limit], |row| {
-            let body: Vec<u8> = row.get(2)?;
-            Ok(complaint_from(
-                row.get(0)?,
-                row.get(1)?,
-                &body,
-                row.get(3)?,
-                (row.get(4)?, row.get(5)?),
-                row.get(6)?,
-            ))
-        })
+        .query_map([limit], complaint_from)
         .map_err(backend)?;
     rows.collect::<Result<_, _>>().map_err(backend)
 }
@@ -658,43 +649,35 @@ pub(crate) fn complaint(
             complaint_filter()
         ),
         [post_id],
-        |row| {
-            let body: Vec<u8> = row.get(2)?;
-            Ok(complaint_from(
-                row.get(0)?,
-                row.get(1)?,
-                &body,
-                row.get(3)?,
-                (row.get(4)?, row.get(5)?),
-                row.get(6)?,
-            ))
-        },
+        complaint_from,
     )
     .optional()
     .map_err(backend)
 }
 
+/// Marks a complaint handled by `who`, or waiting again. The mark is two columns beside the text;
+/// the text itself is never edited.
 pub(crate) fn set_handled(
     store: &SqliteStore,
     post_id: u32,
     handled: bool,
-    handle: &str,
+    who: &IdentityKey,
     now: i64,
 ) -> Result<(), StoreError> {
     let conn = store.connection();
-    if handled {
-        conn.execute(
-            "INSERT OR REPLACE INTO complaint_handled (post_id, handled_at, handle) VALUES (?1, ?2, ?3)",
-            params![post_id, now, handle],
-        )
-        .map_err(backend)?;
-    } else {
-        conn.execute(
-            "DELETE FROM complaint_handled WHERE post_id = ?1",
-            [post_id],
-        )
-        .map_err(backend)?;
-    }
+    ensure_operator(&conn, who, now)?;
+    let (at, by) = match handled {
+        true => (Some(now), Some(who.as_slice())),
+        false => (None, None),
+    };
+    conn.execute(
+        &format!(
+            "UPDATE posts SET handled_at = ?2, handled_by = ?3 WHERE id = ?1 AND {}",
+            complaint_filter()
+        ),
+        params![post_id, at, by],
+    )
+    .map_err(backend)?;
     Ok(())
 }
 
@@ -726,7 +709,7 @@ pub(crate) fn boards(store: &SqliteStore) -> Result<Vec<BoardRow>, StoreError> {
     let conn = store.connection();
     let mut statement = conn
         .prepare(&format!(
-            "SELECT board, COUNT(*), MAX(ifnull(created_at, 0)) FROM posts
+            "SELECT board, COUNT(*), MAX(created_at) FROM posts
              WHERE deleted_at IS NULL AND NOT ({}) GROUP BY board ORDER BY board",
             complaint_filter()
         ))
@@ -749,7 +732,7 @@ pub(crate) struct PostView {
     pub(crate) author: Option<String>,
     pub(crate) text: String,
     pub(crate) created_at: i64,
-    pub(crate) account: Option<u32>,
+    pub(crate) account: u32,
 }
 
 pub(crate) fn board_posts(
@@ -760,7 +743,7 @@ pub(crate) fn board_posts(
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT id, body, ifnull(created_at, 0), account FROM posts
+            "SELECT id, body, created_at, account FROM posts
              WHERE board = ?1 AND deleted_at IS NULL ORDER BY id DESC LIMIT ?2",
         )
         .map_err(backend)?;
@@ -773,7 +756,7 @@ pub(crate) fn board_posts(
     rows.collect::<Result<_, _>>().map_err(backend)
 }
 
-fn post_view(id: u32, body: &[u8], created_at: i64, account: Option<u32>) -> PostView {
+fn post_view(id: u32, body: &[u8], created_at: i64, account: u32) -> PostView {
     let author = post_author(body).map(str::to_owned);
     let text = String::from_utf8_lossy(trim_nul(body)).into_owned();
     let text = match text.split_once('|') {
@@ -797,7 +780,7 @@ pub(crate) fn post_board(
     store
         .connection()
         .query_row(
-            "SELECT board, body, ifnull(created_at, 0), account FROM posts WHERE id = ?1 AND deleted_at IS NULL",
+            "SELECT board, body, created_at, account FROM posts WHERE id = ?1 AND deleted_at IS NULL",
             [post],
             |row| {
                 let body: Vec<u8> = row.get(1)?;
@@ -822,9 +805,10 @@ pub(crate) fn mailboxes(store: &SqliteStore) -> Result<Vec<MailboxRow>, StoreErr
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT mailboxes.number, mailboxes.account, accounts.persona, COUNT(letters.id)
+            "SELECT mailboxes.number, mailboxes.account, ifnull(accounts.persona, ''),
+             COUNT(letters.id)
              FROM mailboxes JOIN accounts ON accounts.id = mailboxes.account
-             LEFT JOIN letters ON letters.mailbox = mailboxes.number AND letters.deleted_at IS NULL
+             LEFT JOIN letters ON letters.to_mailbox = mailboxes.number AND letters.deleted_at IS NULL
              WHERE mailboxes.deleted_at IS NULL
              GROUP BY mailboxes.number ORDER BY mailboxes.number",
         )
@@ -849,7 +833,7 @@ pub(crate) fn mailbox_owner(
     store
         .connection()
         .query_row(
-            "SELECT mailboxes.account, accounts.persona FROM mailboxes
+            "SELECT mailboxes.account, ifnull(accounts.persona, '') FROM mailboxes
              JOIN accounts ON accounts.id = mailboxes.account WHERE mailboxes.number = ?1",
             [mailbox],
             |row| Ok((row.get(0)?, row.get(1)?)),
@@ -925,7 +909,7 @@ pub(crate) fn letters_in(
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT id, body FROM letters WHERE mailbox = ?1 AND deleted_at IS NULL
+            "SELECT id, body FROM letters WHERE to_mailbox = ?1 AND deleted_at IS NULL
              ORDER BY id DESC LIMIT ?2",
         )
         .map_err(backend)?;
@@ -947,7 +931,7 @@ pub(crate) fn letter_meta_of(
     store
         .connection()
         .query_row(
-            "SELECT body FROM letters WHERE id = ?1 AND mailbox = ?2 AND deleted_at IS NULL",
+            "SELECT body FROM letters WHERE id = ?1 AND to_mailbox = ?2 AND deleted_at IS NULL",
             params![id, mailbox],
             |row| {
                 let body: Vec<u8> = row.get(0)?;
@@ -967,7 +951,7 @@ pub(crate) fn read_letter(
     let body: Option<Vec<u8>> = store
         .connection()
         .query_row(
-            "SELECT body FROM letters WHERE id = ?1 AND mailbox = ?2 AND deleted_at IS NULL",
+            "SELECT body FROM letters WHERE id = ?1 AND to_mailbox = ?2 AND deleted_at IS NULL",
             params![id, mailbox],
             |row| row.get(0),
         )
@@ -1001,8 +985,8 @@ pub(crate) fn holds(store: &SqliteStore) -> Result<Vec<HoldRow>, StoreError> {
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT holds.account, accounts.persona, holds.hold_until FROM holds
-             LEFT JOIN accounts ON accounts.id = holds.account ORDER BY holds.hold_until DESC",
+            "SELECT holds.account, accounts.persona, holds.expires_at FROM holds
+             JOIN accounts ON accounts.id = holds.account ORDER BY holds.expires_at DESC",
         )
         .map_err(backend)?;
     let rows = statement
@@ -1033,12 +1017,11 @@ pub(crate) fn coverage(store: &SqliteStore, account: u32) -> Result<Coverage, St
             .map_err(backend)
     };
     Ok(Coverage {
-        sealed_records: one("SELECT COUNT(*) FROM audit_sessions WHERE account_id = ?1")?,
-        letters: one(
-            "SELECT COUNT(*) FROM letters WHERE mailbox = (SELECT number FROM mailboxes WHERE account = ?1)",
-        )?,
+        sealed_records: one("SELECT COUNT(*) FROM audit_sessions WHERE account = ?1")?,
+        letters: one("SELECT COUNT(*) FROM letters WHERE from_account = ?1
+             OR to_mailbox IN (SELECT number FROM mailboxes WHERE account = ?1)")?,
         save_versions: one("SELECT COUNT(*) FROM saves WHERE account = ?1")?,
-        sessions: one("SELECT COUNT(*) FROM sessions WHERE account_id = ?1")?,
+        sessions: one("SELECT COUNT(*) FROM sessions WHERE account = ?1")?,
     })
 }
 
@@ -1056,7 +1039,7 @@ pub(crate) fn save_owners(store: &SqliteStore) -> Result<Vec<SaveOwner>, StoreEr
     let mut statement = conn
         .prepare(
             "SELECT saves.account, accounts.persona, COUNT(DISTINCT saves.path) FROM saves
-             LEFT JOIN accounts ON accounts.id = saves.account
+             JOIN accounts ON accounts.id = saves.account
              WHERE saves.deleted_at IS NULL GROUP BY saves.account ORDER BY saves.account",
         )
         .map_err(backend)?;
@@ -1085,12 +1068,12 @@ mod tests {
             text: text.into(),
             created_at: 0,
             handled: None,
-            account: None,
+            account: 1,
+            about: None,
         };
         let named = make("From: Anna in: Tavern; about: Bruno, who said \"x\" Comments: rude");
         assert_eq!(named.offender().as_deref(), Some("Bruno"));
         assert_eq!(make("nobody is named").offender(), None);
-        assert_eq!(make("about: <script>, x").offender(), None);
     }
 
     #[test]

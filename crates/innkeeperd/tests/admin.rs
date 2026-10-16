@@ -112,8 +112,12 @@ impl Session<'_> {
     }
 }
 
+/// A second connection to the server's database, foreign keys on like every connection the
+/// server makes.
 fn sqlite(dir: &Path) -> rusqlite::Connection {
-    rusqlite::Connection::open(dir.join("data/innkeeper.db")).unwrap()
+    let db = rusqlite::Connection::open(dir.join("data/innkeeper.db")).unwrap();
+    db.pragma_update(None, "foreign_keys", true).unwrap();
+    db
 }
 
 fn cli(dir: &Path, args: &[&str]) -> String {
@@ -190,13 +194,17 @@ async fn staff_sign_in_through_the_allowlist_and_run_the_office() {
     {
         let db = sqlite(&dir);
         db.execute(
-            "INSERT INTO accounts (id, password, persona, user_flags, rating, status, password_expired)
-             VALUES (100777, x'01010101010101010101', 'Bruno', 512, 0, 0, 0)",
+            "INSERT INTO accounts
+             (id, password, persona, user_flags, rating, status, password_expired, created_at)
+             VALUES (100777, x'01010101010101010101', 'Bruno', 512, 0, 0, 0, 1)",
             [],
         )
         .unwrap();
-        db.execute("INSERT INTO mailboxes (account) VALUES (100777)", [])
-            .unwrap();
+        db.execute(
+            "INSERT INTO mailboxes (account, created_at) VALUES (100777, 1)",
+            [],
+        )
+        .unwrap();
         let mailbox: u32 = db
             .query_row(
                 "SELECT number FROM mailboxes WHERE account = 100777",
@@ -205,23 +213,26 @@ async fn staff_sign_in_through_the_allowlist_and_run_the_office() {
             )
             .unwrap();
         db.execute(
-            "INSERT INTO letters (mailbox, body) VALUES (?1, ?2)",
+            "INSERT INTO letters (to_mailbox, from_account, body, created_at) VALUES (?1, ?2, ?3, 1)",
             rusqlite::params![
                 mailbox,
+                id,
                 letter_body(7, "Elaine", "Bruno", "pier", "meet me at the pier")
             ],
         )
         .unwrap();
-        let post = |board: u32, text: &str| {
+        let post = |board: u32, about: Option<u32>, text: &str| {
             db.execute(
-                "INSERT INTO posts (board, body) VALUES (?1, ?2)",
-                rusqlite::params![board, text.as_bytes()],
+                "INSERT INTO posts (board, account, about_account, body, created_at)
+                 VALUES (?1, ?2, ?3, ?4, 1)",
+                rusqlite::params![board, id, about, text.as_bytes()],
             )
             .unwrap();
         };
-        post(16_794_113, "Elaine|buy my stuff");
+        post(16_794_113, None, "Elaine|buy my stuff");
         post(
             25_347,
+            Some(100_777),
             "Elaine|Complaint: From: Elaine in: Tavern; about: Bruno, who said \"x\" Comments: rude",
         );
     }
@@ -383,9 +394,9 @@ async fn staff_sign_in_through_the_allowlist_and_run_the_office() {
         .await;
     assert_eq!(status, 200);
     assert!(letter.contains("meet me at the pier"), "{letter}");
-    let (reason, action, handle): (String, String, String) = sqlite(&dir)
+    let (reason, action, key): (String, String, Vec<u8>) = sqlite(&dir)
         .query_row(
-            "SELECT reason, action, handle FROM admin_audit WHERE action = 'letter.read'",
+            "SELECT reason, action, identity_key FROM admin_audit WHERE action = 'letter.read'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
@@ -394,7 +405,8 @@ async fn staff_sign_in_through_the_allowlist_and_run_the_office() {
         (reason.as_str(), action.as_str()),
         ("Member Services case 4411", "letter.read")
     );
-    assert!(handle.starts_with("Caller "));
+    let key_hex: String = key.iter().map(|byte| format!("{byte:02x}")).collect();
+    assert_eq!(key_hex, hex, "the operator's identity key");
 
     // 8. Revoke by emptying the file: the very next request is refused.
     std::fs::write(&list, "# the operator has left the building\n").unwrap();

@@ -25,7 +25,7 @@ use crate::server::DATABASE_FILE;
 use crate::sqlite_store::SqliteStore;
 use crate::subject;
 
-const DAY: i64 = 86_400;
+use crate::dates::DAY;
 
 /// The operator public key and the store a connection's sealed row is written to.
 pub(crate) struct AuditSeal {
@@ -97,7 +97,7 @@ fn open_session(
     peer: SocketAddr,
     transport: &'static str,
 ) -> Result<AuditTicket, AuditError> {
-    let started_at = dates::unix_now();
+    let started_at = dates::now_ms();
     let mut ticket = AuditTicket {
         seal: Arc::clone(seal),
         id: 0,
@@ -112,9 +112,7 @@ fn open_session(
     let sealed = ticket.seal_record()?;
     let conn = seal.store.connection();
     conn.execute(
-        "INSERT INTO audit_sessions
-         (started_at, ended_at, account_id, identity_key, hold_until, sealed)
-         VALUES (?1, NULL, NULL, NULL, NULL, ?2)",
+        "INSERT INTO audit_sessions (started_at, sealed) VALUES (?1, ?2)",
         params![started_at, sealed],
     )
     .map_err(StoreError::backend)?;
@@ -160,10 +158,9 @@ impl AuditTicket {
                 return Err(error);
             }
         };
-        let hold = hold_for(&self.seal.store, account, dates::unix_now())?;
         let result = self.seal.store.connection().execute(
-            "UPDATE audit_sessions SET account_id = ?2, hold_until = ?3, sealed = ?4 WHERE id = ?1",
-            params![self.id, i64::from(account), hold, sealed],
+            "UPDATE audit_sessions SET account = ?2, sealed = ?3 WHERE id = ?1",
+            params![self.id, i64::from(account), sealed],
         );
         if let Err(error) = result {
             self.account_id = previous;
@@ -177,7 +174,7 @@ impl AuditTicket {
             return Ok(());
         }
         let previous = self.ended_at;
-        self.ended_at = Some(dates::unix_now());
+        self.ended_at = Some(dates::now_ms());
         let sealed = match self.seal_record() {
             Ok(sealed) => sealed,
             Err(error) => {
@@ -186,7 +183,7 @@ impl AuditTicket {
             }
         };
         let result = self.seal.store.connection().execute(
-            "UPDATE audit_sessions SET ended_at = ?2, account_id = ?3, sealed = ?4 WHERE id = ?1",
+            "UPDATE audit_sessions SET ended_at = ?2, account = ?3, sealed = ?4 WHERE id = ?1",
             params![
                 self.id,
                 self.ended_at,
@@ -216,18 +213,6 @@ impl AuditTicket {
     }
 }
 
-fn hold_for(store: &SqliteStore, account: u32, now: i64) -> Result<Option<i64>, StoreError> {
-    store
-        .connection()
-        .query_row(
-            "SELECT hold_until FROM holds WHERE account = ?1 AND hold_until > ?2",
-            params![account, now],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(StoreError::backend)
-}
-
 #[derive(Debug, Error)]
 pub(crate) enum AuditError {
     #[error("innkeeperd is running (pid {pid}); stop the server first")]
@@ -244,6 +229,8 @@ pub(crate) enum AuditError {
     Json(#[from] serde_json::Error),
     #[error("a row in the export is not a sealed record")]
     Row,
+    #[error("account {0} was never issued, so there is nothing to hold")]
+    NoSuchAccount(u32),
     #[error("no data key matches a sealed record")]
     DataKey,
 }
@@ -355,9 +342,12 @@ fn open_cmd(
 
 fn hold(account: u32, until: &str, data_dir: &Path) -> Result<(), AuditError> {
     refuse_if_running(data_dir)?;
-    let until = dates::hold_until(until, dates::unix_now())?;
+    let until = dates::hold_until(until, dates::now_ms())?;
     let store = open_store(data_dir)?;
-    let stored = retention::place_hold(&store, account, until)?;
+    let stored = match retention::place_hold(&store, account, until) {
+        Err(StoreError::UnknownAccount(_)) => return Err(AuditError::NoSuchAccount(account)),
+        other => other?,
+    };
     let through = dates::format_date(stored.saturating_sub(DAY));
     println!("account {account} held through {through}");
     Ok(())
@@ -427,8 +417,8 @@ pub(crate) fn export_rows(
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT id, started_at, ended_at, account_id, sealed FROM audit_sessions
-             WHERE account_id = ?1
+            "SELECT id, started_at, ended_at, account, sealed FROM audit_sessions
+             WHERE account = ?1
              AND (?2 IS NULL OR started_at >= ?2)
              AND (?3 IS NULL OR started_at < ?3)
              ORDER BY started_at, id",
@@ -471,7 +461,7 @@ fn identity_rows(conn: &rusqlite::Connection, account: u32) -> Result<Vec<Value>
         .query_row(
             "SELECT identities.subject_sealed, identities.provider, identities.created_at
              FROM identity_accounts JOIN identities USING (identity_key)
-             WHERE identity_accounts.account_id = ?1 AND identities.subject_sealed IS NOT NULL",
+             WHERE identity_accounts.account = ?1 AND identities.subject_sealed IS NOT NULL",
             [account],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
@@ -591,6 +581,12 @@ mod tests {
         Arc::new(AuditSeal::new(store, recipient))
     }
 
+    fn add_account(store: &SqliteStore, id: u32) {
+        use innkeeper_world::{AccountId, AccountRecord, EncodedPassword, Store};
+        let record = AccountRecord::new(EncodedPassword([1; 10]), "a");
+        store.create_account(AccountId(id), record).unwrap();
+    }
+
     fn plain_of(store: &SqliteStore, id: i64) -> Value {
         let sealed: Vec<u8> = store
             .connection()
@@ -627,19 +623,20 @@ mod tests {
             .unwrap();
         assert!(identity.is_none());
 
-        retention::place_hold(&store, 100_001, dates::unix_now() + 10 * DAY).unwrap();
+        add_account(&store, 100_001);
+        retention::place_hold(&store, 100_001, dates::now_ms() + 10 * DAY).unwrap();
         ticket.note_account(100_001);
         let plain = plain_of(&store, id);
         assert_eq!(plain["account_id"], 100_001);
-        let hold: Option<i64> = store
+        let account: Option<i64> = store
             .connection()
             .query_row(
-                "SELECT hold_until FROM audit_sessions WHERE id = ?1",
+                "SELECT account FROM audit_sessions WHERE id = ?1",
                 [id],
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(hold.is_some());
+        assert_eq!(account, Some(100_001));
 
         ticket.close_now();
         let plain = plain_of(&store, id);
@@ -685,6 +682,7 @@ mod tests {
         let store = Arc::new(SqliteStore::open_in_memory().unwrap());
         let sealing = seal_for(Arc::clone(&store));
         let peer: SocketAddr = "203.0.113.9:1".parse().unwrap();
+        add_account(&store, 7);
         let mut early = begin(Some(&sealing), peer, "tcp").unwrap();
         early.note_account(7);
         early.close_now();

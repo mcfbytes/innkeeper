@@ -54,7 +54,7 @@ impl Admin {
             target,
             reason,
             account,
-            dates::unix_now(),
+            dates::now_ms(),
         )
     }
 
@@ -146,7 +146,7 @@ impl Admin {
         if suspend && !req.confirmed() {
             return Err(Refused::Flash(needs_confirmation()));
         }
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let changed = store::set_suspended(&self.store, id, suspend, now)?;
         if !changed {
             return Err(Refused::Flash(Flash::bad(
@@ -295,7 +295,7 @@ impl Admin {
         if !req.confirmed() {
             return Err(Refused::Flash(needs_confirmation()));
         }
-        let ended = store::revoke_web_sessions(&self.store, id, dates::unix_now())?;
+        let ended = store::revoke_web_sessions(&self.store, id, dates::now_ms())?;
         let kicked = self.kick_account(id);
         self.log_change(
             req,
@@ -355,8 +355,7 @@ impl Admin {
 
     fn act_restore(&self, req: &Req, id: u32, reason: Option<&str>) -> Outcome {
         let policy = self.retention;
-        let restored =
-            crate::retention::restore_account(&self.store, id, policy, dates::unix_now())?;
+        let restored = crate::retention::restore_account(&self.store, id, policy, dates::now_ms())?;
         match restored {
             Restored::Ok => {
                 self.log_change(
@@ -400,12 +399,11 @@ impl Admin {
             Err(error) => return self.failed(req, &error),
         };
         let handled = req.param("handled") == "1";
-        let now = dates::unix_now();
-        if let Err(error) = store::set_handled(&self.store, post_id, handled, &req.who.handle, now)
-        {
+        let now = dates::now_ms();
+        if let Err(error) = store::set_handled(&self.store, post_id, handled, &req.who.key, now) {
             return self.failed(req, &error);
         }
-        let account = store::account_of_post(&self.store, complaint.account, &complaint.author);
+        let account = Some(complaint.account);
         let action = if handled {
             "complaint.handled"
         } else {
@@ -454,11 +452,7 @@ impl Admin {
         if !removed {
             return self.not_found(req);
         }
-        let account = store::account_of_post(
-            &self.store,
-            found.account,
-            found.author.as_deref().unwrap_or_default(),
-        );
+        let account = Some(found.account);
         let target = format!("post {post} on {}", store::board_label(board));
         let reason = clean_reason(req.param("reason"));
         if let Err(error) = self.log_change(req, "post.remove", &target, reason.as_deref(), account)
@@ -570,7 +564,7 @@ impl Admin {
                 )),
             );
         };
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let until = match dates::hold_until(req.param("until").trim(), now) {
             Ok(until) => until,
             Err(error) => {
@@ -585,9 +579,18 @@ impl Admin {
         };
         let stored = match crate::retention::place_hold(&self.store, account, until) {
             Ok(stored) => stored,
+            Err(innkeeper_world::StoreError::UnknownAccount(_)) => {
+                return self.holds_with(
+                    req,
+                    Some(&Flash::bad(
+                        format!("Account {account} was never issued, so there is nothing to hold."),
+                        "The ledger has no such line.",
+                    )),
+                );
+            }
             Err(error) => return self.failed(req, &error),
         };
-        let through = dates::format_date(stored - 86_400);
+        let through = dates::format_date(stored - dates::DAY);
         let target = format!("account {account} through {through}");
         if let Err(error) =
             self.log_change(req, "hold.place", &target, Some(&reason), Some(account))

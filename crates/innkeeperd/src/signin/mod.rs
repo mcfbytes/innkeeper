@@ -128,7 +128,7 @@ impl SignIn {
             rp: setup.rp,
             origins: setup.origins,
             enrolment: setup.enrolment,
-            session_lifetime: i64::try_from(setup.session_lifetime.as_secs()).unwrap_or(i64::MAX),
+            session_lifetime: i64::try_from(setup.session_lifetime.as_millis()).unwrap_or(i64::MAX),
             accounts_per_day: setup.accounts_per_day,
             minimum_age: setup.minimum_age,
             terms_version: setup.terms_version,
@@ -154,7 +154,7 @@ impl SignIn {
     /// The identity behind a WebSocket's `?session=` token, or `None` when the token is dead.
     pub(crate) fn bind(&self, token: &str) -> Result<Option<Binding>, StoreError> {
         let token_hash = keys::token_hash(token);
-        let identity = store::session_identity(&self.store, &token_hash, dates::unix_now())?;
+        let identity = store::session_identity(&self.store, &token_hash, dates::now_ms())?;
         Ok(identity.map(|identity| Binding {
             identity,
             token_hash,
@@ -163,7 +163,7 @@ impl SignIn {
 
     /// A Login on a bound line opens only an account the identity owns, while the token lives.
     pub(crate) fn may_log_in(&self, binding: &Binding, account: AccountId) -> bool {
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let check = || -> Result<bool, StoreError> {
             let live = store::session_identity(&self.store, &binding.token_hash, now)?;
             if live != Some(binding.identity) {

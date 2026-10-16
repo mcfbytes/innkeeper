@@ -47,8 +47,8 @@ use html::{esc, Ctx, Flash, Nav};
 use store::Who;
 
 /// A portal session lasts this long in all, and ends sooner when idle.
-const SESSION_LIFETIME: i64 = 8 * 3600;
-const SESSION_IDLE: i64 = 30 * 60;
+const SESSION_LIFETIME: i64 = 8 * dates::HOUR;
+const SESSION_IDLE: i64 = 30 * dates::MINUTE;
 /// A login that has not come back from its provider within this is forgotten.
 const PENDING_TTL: Duration = Duration::from_secs(600);
 const MAX_PENDING: usize = 256;
@@ -147,6 +147,7 @@ impl Admin {
         }
     }
 
+    /// `max_age` is in seconds, as `Max-Age` is.
     fn cookie(&self, value: &str, max_age: i64) -> HeaderValue {
         let attributes = match self.secure {
             true => "Path=/; Secure; HttpOnly; SameSite=Strict",
@@ -309,7 +310,7 @@ impl Admin {
     }
 
     fn healthz(&self) -> Reply {
-        let alive = store::counts(&self.store, dates::unix_now()).is_ok();
+        let alive = store::counts(&self.store, dates::now_ms()).is_ok();
         match alive {
             true => http::text(StatusCode::OK, "ok"),
             false => http::text(StatusCode::SERVICE_UNAVAILABLE, "store unavailable"),
@@ -374,7 +375,7 @@ impl Admin {
         token: &str,
     ) -> Result<Option<(String, Who, bool)>, innkeeper_world::StoreError> {
         let hash = keys::token_hash(token);
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let Some(key) = store::live_session(&self.store, &hash, now, SESSION_IDLE)? else {
             return Ok(None);
         };
@@ -602,7 +603,7 @@ impl Admin {
     /// move to `/admin/` a same-site navigation, so the `SameSite=Strict` cookie goes with it.
     fn enter(&self, key: &IdentityKey) -> Reply {
         let token = keys::new_token();
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let stored = store::create_session(
             &self.store,
             &keys::token_hash(&token),
@@ -625,9 +626,10 @@ impl Admin {
             StatusCode::OK,
             html::bare_page(self.dev_open(), "Welcome", &body),
         );
-        reply
-            .headers_mut()
-            .append(SET_COOKIE, self.cookie(&token, SESSION_LIFETIME));
+        reply.headers_mut().append(
+            SET_COOKIE,
+            self.cookie(&token, SESSION_LIFETIME / dates::SECOND),
+        );
         reply
     }
 

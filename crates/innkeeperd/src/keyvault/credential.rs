@@ -188,7 +188,7 @@ impl Credential {
                     thumbprint,
                     client_id,
                     url.as_str(),
-                    crate::dates::unix_now(),
+                    crate::dates::unix_seconds(),
                 );
                 let form = [
                     ("grant_type", "client_credentials"),

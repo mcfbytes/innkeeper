@@ -110,7 +110,7 @@ fn a_member_services_question_is_kept_as_a_complaint_and_a_billing_form_is_not()
     );
     let board = innkeeper_world::BoardId(u32::from(COMPLAINT_BOARD_LOCATION) << 8 | 2);
     let kept = store.posts(board).unwrap();
-    assert_eq!(kept[0].account, Some(innkeeper_world::AccountId(100_001)));
+    assert_eq!(kept[0].account, innkeeper_world::AccountId(100_001));
     // Nothing of the billing form reached any board.
     let board = innkeeper_world::BoardId(u32::from(COMPLAINT_BOARD_LOCATION) << 8 | 1);
     assert!(store.posts(board).unwrap().is_empty());

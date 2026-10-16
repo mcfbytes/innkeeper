@@ -145,7 +145,7 @@ fn member_services(
         },
     );
     let body = post_body(account, &letter.envelope.text);
-    match world.store.post_as(board, &body, Some(account.id)) {
+    match world.store.post(board, account.id, None, &body) {
         Ok(post) => {
             info!(
                 account = account.id.0,

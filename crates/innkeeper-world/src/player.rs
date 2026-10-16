@@ -124,7 +124,13 @@ impl PlayerSession {
                 self.when_logged_in(|player| reply(mail::answer(world, &player.account, request)))
             }
             ClientMessage::Bbs(ref request) => self.when_logged_in(|player| {
-                reply(bbs::answer(world, &player.account, player.place, request))
+                reply(bbs::answer(
+                    world,
+                    objects,
+                    &player.account,
+                    player.place,
+                    request,
+                ))
             }),
             ClientMessage::SetInt(ref set) => {
                 self.when_logged_in(|_| router::set_int(objects, connection, set))

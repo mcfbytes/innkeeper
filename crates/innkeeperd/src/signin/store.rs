@@ -16,8 +16,8 @@ const FIRST_WEB_ACCOUNT: u32 = 100_001;
 pub(crate) struct Attested {
     pub(crate) age: u32,
     pub(crate) terms: u32,
-    /// `YYYY-MM-DD`, a date only.
-    pub(crate) on: String,
+    /// When the answer was given, in Unix milliseconds.
+    pub(crate) at: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -115,14 +115,11 @@ fn rekey(
     new: &IdentityKey,
     version: &str,
 ) -> Result<(), StoreError> {
+    // Every row that names the identity follows through ON UPDATE CASCADE: its account links,
+    // its sessions and its sealed connection records.
     conn.execute(
         "UPDATE identities SET identity_key = ?2, key_version = ?3 WHERE identity_key = ?1",
         params![old.as_slice(), new.as_slice(), version],
-    )
-    .map_err(backend)?;
-    conn.execute(
-        "UPDATE audit_sessions SET identity_key = ?2 WHERE identity_key = ?1",
-        params![old.as_slice(), new.as_slice()],
     )
     .map_err(backend)?;
     Ok(())
@@ -141,9 +138,9 @@ pub(crate) fn identity(
             |row| {
                 let age: Option<u32> = row.get(1)?;
                 let terms: Option<u32> = row.get(2)?;
-                let on: Option<String> = row.get(3)?;
-                let attested = match (age, terms, on) {
-                    (Some(age), Some(terms), Some(on)) => Some(Attested { age, terms, on }),
+                let at: Option<i64> = row.get(3)?;
+                let attested = match (age, terms, at) {
+                    (Some(age), Some(terms), Some(at)) => Some(Attested { age, terms, at }),
                     _ => None,
                 };
                 Ok(IdentityRow {
@@ -167,7 +164,7 @@ pub(crate) fn record_attestation(
         .execute(
             "UPDATE identities SET attested_age = ?2, terms_version = ?3, adult_attested_at = ?4
              WHERE identity_key = ?1",
-            params![key.as_slice(), attested.age, attested.terms, attested.on],
+            params![key.as_slice(), attested.age, attested.terms, attested.at],
         )
         .map_err(backend)?;
     Ok(())
@@ -183,7 +180,7 @@ pub(crate) fn create_session(
     store
         .connection()
         .execute(
-            "INSERT INTO sessions (token_hash, identity_key, created_at, expiry)
+            "INSERT INTO sessions (token_hash, identity_key, created_at, expires_at)
              VALUES (?1, ?2, ?3, ?4)",
             params![token_hash.as_slice(), key.as_slice(), now, expiry],
         )
@@ -200,7 +197,7 @@ pub(crate) fn session_identity(
     let key: Option<Vec<u8>> = store
         .connection()
         .query_row(
-            "SELECT identity_key FROM sessions WHERE token_hash = ?1 AND expiry > ?2",
+            "SELECT identity_key FROM sessions WHERE token_hash = ?1 AND expires_at > ?2",
             params![token_hash.as_slice(), now],
             |row| row.get(0),
         )
@@ -218,7 +215,7 @@ pub(crate) fn revoke_session(
     store
         .connection()
         .execute(
-            "UPDATE sessions SET expiry = min(expiry, ?2) WHERE token_hash = ?1",
+            "UPDATE sessions SET expires_at = min(expires_at, ?2) WHERE token_hash = ?1",
             params![token_hash.as_slice(), now],
         )
         .map_err(backend)?;
@@ -233,7 +230,7 @@ pub(crate) fn bind_session_account(
     store
         .connection()
         .execute(
-            "UPDATE sessions SET account_id = ?2 WHERE token_hash = ?1",
+            "UPDATE sessions SET account = ?2 WHERE token_hash = ?1",
             params![token_hash.as_slice(), account.0],
         )
         .map_err(backend)?;
@@ -249,7 +246,7 @@ pub(crate) fn owned_accounts(
     let mut statement = conn
         .prepare_cached(
             "SELECT accounts.id, accounts.persona FROM identity_accounts
-             JOIN accounts ON accounts.id = identity_accounts.account_id
+             JOIN accounts ON accounts.id = identity_accounts.account
              WHERE identity_accounts.identity_key = ?1 AND accounts.deleted_at IS NULL
              ORDER BY accounts.id",
         )
@@ -269,8 +266,8 @@ pub(crate) fn owns(
         .connection()
         .query_row(
             "SELECT 1 FROM identity_accounts
-             JOIN accounts ON accounts.id = identity_accounts.account_id
-             WHERE identity_accounts.identity_key = ?1 AND identity_accounts.account_id = ?2
+             JOIN accounts ON accounts.id = identity_accounts.account
+             WHERE identity_accounts.identity_key = ?1 AND identity_accounts.account = ?2
              AND accounts.deleted_at IS NULL",
             params![key.as_slice(), account.0],
             |row| row.get(0),
@@ -301,9 +298,11 @@ pub(crate) enum Created {
     PersonaTaken,
 }
 
-/// A new account owned by `key`, numbered like signup: one past the highest, from 100001.
-/// A given persona is compared without case against every row, a retired one included; an empty
-/// one (named later by the client's 40/4) is not compared.
+/// A new account owned by `key`, numbered like signup: one past the highest row ever created, from
+/// 100001. Tombstones count, so a purged number is never issued again. A given persona is compared
+/// without case against every account that still has one (a retired one included, a tombstone has
+/// none): the web refuses a name in use. That is a naming rule, not attribution, which is by number
+/// only. An empty persona (named later by the client's 40/4) is not compared.
 pub(crate) fn create_owned_account(
     store: &SqliteStore,
     key: &IdentityKey,
@@ -335,8 +334,9 @@ pub(crate) fn create_owned_account(
     let id = u32::try_from(next)
         .map_err(|_| StoreError::Backend("the account-number space is used up".into()))?;
     tx.execute(
-        "INSERT INTO accounts (id, password, persona, user_flags, rating, status, password_expired)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO accounts
+         (id, password, persona, user_flags, rating, status, password_expired, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             id,
             record.password.0,
@@ -345,11 +345,12 @@ pub(crate) fn create_owned_account(
             record.rating,
             record.status.0,
             record.password_expired,
+            now,
         ],
     )
     .map_err(backend)?;
     tx.execute(
-        "INSERT INTO identity_accounts (account_id, identity_key, created_at) VALUES (?1, ?2, ?3)",
+        "INSERT INTO identity_accounts (account, identity_key, created_at) VALUES (?1, ?2, ?3)",
         params![id, key.as_slice(), now],
     )
     .map_err(backend)?;
@@ -369,13 +370,14 @@ pub(crate) fn export_identity(
             "SELECT identities.identity_key, provider, key_version, adult_attested_at, attested_age,
                     terms_version, identities.created_at, deleted_at, subject_sealed IS NOT NULL
              FROM identity_accounts JOIN identities USING (identity_key)
-             WHERE identity_accounts.account_id = ?1",
+             WHERE identity_accounts.account = ?1",
             [account.0],
             |row| {
                 let key: Vec<u8> = row.get(0)?;
                 let attested = match (row.get::<_, Option<u32>>(4)?, row.get::<_, Option<u32>>(5)?) {
                     (Some(age), Some(terms)) => {
-                        json!({"age": age, "terms": terms, "on": row.get::<_, Option<String>>(3)?})
+                        let at = row.get::<_, Option<i64>>(3)?;
+                        json!({"age": age, "terms": terms, "at": at, "on": at.map(crate::dates::format_date)})
                     }
                     _ => Value::Null,
                 };
@@ -409,9 +411,7 @@ pub(crate) fn export_identity(
 
 fn identity_account_ids(conn: &Connection, key: &[u8]) -> Result<Vec<u32>, StoreError> {
     let mut statement = conn
-        .prepare(
-            "SELECT account_id FROM identity_accounts WHERE identity_key = ?1 ORDER BY account_id",
-        )
+        .prepare("SELECT account FROM identity_accounts WHERE identity_key = ?1 ORDER BY account")
         .map_err(backend)?;
     let ids = statement
         .query_map([key], |row| row.get(0))
@@ -425,7 +425,7 @@ fn identity_account_ids(conn: &Connection, key: &[u8]) -> Result<Vec<u32>, Store
 fn identity_sessions(conn: &Connection, key: &[u8]) -> Result<Vec<Value>, StoreError> {
     let mut statement = conn
         .prepare(
-            "SELECT account_id, created_at, expiry FROM sessions WHERE identity_key = ?1
+            "SELECT account, created_at, expires_at FROM sessions WHERE identity_key = ?1
              ORDER BY created_at",
         )
         .map_err(backend)?;
