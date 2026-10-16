@@ -164,7 +164,10 @@ fn admit_stored(
     }
     let record = AccountRecord::new(login.password, login.name.as_str());
     match store.create_account(login.account, record.clone()) {
-        Ok(()) => Ok(Account::from_record(login, &record)),
+        Ok(()) => {
+            crate::money::grant_starting_balance(store, login.account)?;
+            Ok(Account::from_record(login, &record))
+        }
         // A retired row still occupies the number. account() hides it, so a second
         // read that is still empty is a deleted account, not a fresh enrolment.
         Err(StoreError::AccountExists(_)) => match store.account(login.account)? {
@@ -198,7 +201,8 @@ fn admit_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClientVersion, LandType, MemoryStore, PasswordSource, StoreError};
+    use crate::assumptions::MONEY_STARTING_BALANCE;
+    use crate::{ClientVersion, LandType, MemoryStore, Money, PasswordSource, Store, StoreError};
 
     fn login(account: u32, password: u8) -> Login {
         Login {
@@ -246,12 +250,20 @@ mod tests {
 
     #[test]
     fn a_stored_account_brings_its_flags_and_rating_and_checks_its_password() {
-        let (book, _) = stored_book(Enrolment::Closed);
+        let (book, store) = stored_book(Enrolment::Closed);
         let account = book.admit(&login(100_001, 7)).unwrap();
         assert_eq!((account.user_flags, account.rating), (0x0086, 4));
         assert_eq!(account.persona, "guybrush");
         assert_eq!(book.admit(&login(100_001, 8)), Err(Refusal::WrongPassword));
         assert_eq!(book.admit(&login(100_002, 7)), Err(Refusal::UnknownAccount));
+        store
+            .set_money(AccountId(100_001), Money(1_000_000))
+            .unwrap();
+        assert!(book.admit(&login(100_001, 7)).is_ok());
+        assert_eq!(
+            store.money(AccountId(100_001)).unwrap(),
+            Some(Money(1_000_000))
+        );
     }
 
     #[test]
@@ -276,7 +288,19 @@ mod tests {
         let record = store.account(AccountId(100_002)).unwrap().unwrap();
         assert_eq!(record.password, EncodedPassword([9; 10]));
         assert_eq!(record.persona, "guybrush");
+        assert_eq!(
+            store.money(AccountId(100_002)).unwrap(),
+            Some(MONEY_STARTING_BALANCE)
+        );
         assert_eq!(book.admit(&login(100_002, 8)), Err(Refusal::WrongPassword));
+        store
+            .set_money(AccountId(100_003), Money(1_000_000))
+            .unwrap();
+        assert!(book.admit(&login(100_003, 4)).is_ok());
+        assert_eq!(
+            store.money(AccountId(100_003)).unwrap(),
+            Some(Money(1_000_000))
+        );
     }
 
     #[test]

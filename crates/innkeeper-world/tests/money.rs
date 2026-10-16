@@ -19,7 +19,7 @@ fn a_first_read_reports_the_starting_bankroll_and_a_save_is_kept() {
         A > login | {{login}}
         A < login ack | {{login ack}}
         A > read the bankroll of an account the host has never seen | {READ}
-        A < the starting 1,000,000 | {READ} 40 42 0f 00
+        A < the starting 500 | {READ} f4 01 00 00
         A > save 247 | 28 02 {SID} 01 00 01 00 f7 00 00 00
         A < the save is acknowledged | 00 00 {SID} 28 02
         A > read it back | {READ}
@@ -27,6 +27,44 @@ fn a_first_read_reports_the_starting_bankroll_and_a_save_is_kept() {
         "
     ));
     assert_eq!(table.world.store.money(ACCOUNT).unwrap(), Some(Money(247)));
+}
+
+#[test]
+fn a_save_above_or_below_the_start_is_what_the_next_read_returns() {
+    let mut table = Table::new();
+    table.run(&format!(
+        "
+        A > login | {{login}}
+        A < login ack | {{login ack}}
+        A > save 499 | 28 02 {SID} 01 00 01 00 f3 01 00 00
+        A < the save is acknowledged | 00 00 {SID} 28 02
+        A > read it back | {READ}
+        A < 499 | {READ} f3 01 00 00
+        A > save 750 | 28 02 {SID} 01 00 01 00 ee 02 00 00
+        A < the save is acknowledged | 00 00 {SID} 28 02
+        A > read the higher balance | {READ}
+        A < 750 | {READ} ee 02 00 00
+        "
+    ));
+    assert_eq!(table.world.store.money(ACCOUNT).unwrap(), Some(Money(750)));
+}
+
+#[test]
+fn a_stored_balance_is_not_replaced_by_the_starting_amount() {
+    let mut table = Table::new();
+    table
+        .world
+        .store
+        .set_money(ACCOUNT, Money(1_000_000))
+        .unwrap();
+    table.run(&format!(
+        "
+        A > login | {{login}}
+        A < login ack | {{login ack}}
+        A > read the bankroll | {READ}
+        A < the stored million | {READ} 40 42 0f 00
+        "
+    ));
 }
 
 #[test]

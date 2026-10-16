@@ -24,10 +24,12 @@ password-expired flag. A `Letter` and a `Post` are the client's own bytes plus a
 the store never looks inside, so the mail and board layouts belong to the modules that parse them.
 
 A `Money` is the client's 32-bit CasinoLand bankroll as a value of its own rather than a field of
-`AccountRecord`, because the two have different lifetimes: the record is created at the first Login,
-the balance only when the client first saves one, and a read has to tell "never stored" from "stored
-0". `money` returning `None` is the first case; `None` is what makes a new account a new player with
-the starting bankroll (see below), while `Some(Money(0))` is a player who lost everything.
+`AccountRecord`, because a read has to tell "never stored" from "stored 0". `money` returning `None`
+is the first case. A 40/3 read then reports the starting 500 (`MONEY_STARTING_BALANCE`), while
+`Some(Money(0))` is a player who lost everything. Signup and open enrolment store that 500 when they
+create an account that has no balance yet. `set_money` stores the amount it is given and supplies no
+default of its own, so a later save above or below 500 replaces the grant and a stored balance is
+never rewritten to 500.
 
 ## 2. Rules every implementation follows
 
@@ -99,8 +101,9 @@ The account book and `World` take a store (`World::stored`), and `innkeeperd --d
 `SqliteStore`.
 
 The bankroll serves CasinoLand's command 40 ([messages.md](../protocol/messages.md) section 3.3.1):
-`innkeeperd` answers a 40/3 read from `money`, reporting 1,000,000 for an account the store has no
-balance for, and writes a 40/2 save with `set_money` before it acks it.
+`innkeeperd` answers a 40/3 read from `money`, reporting 500 for an account the store has no
+balance for, and writes a 40/2 save with `set_money` before it acks it. The saved amount is kept
+as the client sent it.
 
 Mail is the first user of the mailbox family ([mail.md](mail.md)):
 

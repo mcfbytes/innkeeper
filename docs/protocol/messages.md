@@ -285,8 +285,9 @@ creates `new MoneyLongInt(15, 0x4240)` for a player whose `global82` is 3 and a 
 computed in `LL/script.101` from the login Ack's `userFlags`: bit 4 gives 3, bit 128 gives 2, bit 2 gives
 1, anything else 0. Bit 4 is the value the directory calls "Unrestricted CasinoLand" in section 6, but
 that is the land row's flag byte and this is the account's, so the two are separate fields. The client's
-own seed therefore matters only when no reply arrives; `innkeeperd` answers a read for an account it has
-no balance for with the same 1,000,000 (`MONEY_STARTING_BALANCE_ASSUMED`).
+own seed therefore matters only when no reply arrives. `innkeeperd` answers a read for an account it has
+no balance for with 500 (`MONEY_STARTING_BALANCE`), an operator choice: a new player starts with that
+and earns more at the CasinoLand blood bank. A balance already stored is returned as stored.
 
 The layouts are CONFIRMED (both send sites, the reply class and the read request seen live). That the
 original host answered at all is INFERRED: no capture of a reply exists, and the two requests reached a
@@ -567,9 +568,10 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
   list (`EMMsg` 32).
 - `GameRights` (23), `HostFile` (39) and `GameVersion` (29) have classes but no handler in any land.
 - How the original host answered a money read or save, and what it gave an account it had nothing for.
-  `innkeeperd` reports the 1,000,000 the client seeds itself with, keeps what a save carries, and acks a
-  save with `whichSub` 2 (`MONEY_STARTING_BALANCE_ASSUMED`). Bytes 2 and 3 of the read reply are unread
-  by the client's class for it; they hold the requester's SID, the value the request itself carried.
+  `innkeeperd` reports 500 (`MONEY_STARTING_BALANCE`) for an account with no stored balance, keeps what a
+  save carries (above or below that, including a stored 1,000,000), and acks a save with `whichSub` 2.
+  Bytes 2 and 3 of the read reply are unread by the client's class for it; they hold the requester's
+  SID, the value the request itself carried.
 - How the host derives the password check value from what the client sends, and what byte 11 of the
   Login password field holds.
 - The DOS games' shared-block offsets (section 5.3) disagree with the LSCI layout.
