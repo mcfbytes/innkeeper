@@ -50,6 +50,8 @@ pub(crate) enum ServerError {
     Adopt(io::Error),
     #[error("{0}")]
     Admin(String),
+    #[error("--azure-metrics: {0}")]
+    Metrics(String),
     #[error("{0}")]
     AdminList(#[from] crate::admin::allowlist::AllowlistError),
 }
@@ -67,6 +69,8 @@ pub(crate) struct Prepared {
     policy: RetentionPolicy,
     data_dir: Option<PathBuf>,
     capture_dir: Option<PathBuf>,
+    /// The Azure custom-metrics pusher's settings (`--azure-metrics`).
+    metrics: Option<crate::metrics::insights::Settings>,
 }
 
 impl Prepared {
@@ -173,6 +177,8 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     if config.public && !has_providers {
         warn!("{}", crate::connection_gate::NO_PROVIDERS);
     }
+    let metrics =
+        crate::metrics::insights::Settings::from_config(&config).map_err(ServerError::Metrics)?;
     let plan = config.listen_plan();
     let legacy = listen_std_if(plan.legacy)?;
     let transport = listen_std_if(plan.int14h)?;
@@ -204,6 +210,7 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
         policy,
         data_dir: config.data_dir,
         capture_dir,
+        metrics,
     })
 }
 
@@ -261,9 +268,16 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
         policy,
         data_dir: _,
         capture_dir: _,
+        metrics,
     } = prepared;
     let _lock = lock;
-    if let Some(store) = store {
+    if let Some(push) = metrics {
+        tokio::spawn(crate::metrics::insights::run(push, Arc::clone(&settings)));
+    }
+    if let Some(interval) = crate::notify::watchdog_interval() {
+        tokio::spawn(crate::notify::watchdog(interval, store.clone()));
+    }
+    if let Some(store) = store.clone() {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(3600));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -317,7 +331,10 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
         () = legacy => {}
         () = transport => {}
         () = websocket => {}
-        _ = tokio::signal::ctrl_c() => info!("shutting down"),
+        _ = tokio::signal::ctrl_c() => {
+            crate::notify::stopping();
+            info!("shutting down");
+        }
     }
     Ok(())
 }
@@ -342,7 +359,10 @@ fn adopt_if(listener: Option<StdListener>) -> Result<Option<TcpListener>, Server
 fn run_purge(store: &SqliteStore, policy: RetentionPolicy) {
     match retention::purge_expired(store, policy, dates::now_ms()) {
         Ok(counts) => retention::log_counts(&counts),
-        Err(error) => warn!(%error, "retention purge failed"),
+        Err(error) => {
+            crate::metrics::counters().store_error();
+            warn!(%error, "retention purge failed");
+        }
     }
 }
 

@@ -106,6 +106,7 @@ impl SignIn {
             Ok(identity) => identity,
             Err(error) => {
                 warn!(%error, "the sign-in store failed");
+                crate::metrics::counters().store_error();
                 None
             }
         }
@@ -204,6 +205,7 @@ impl SignIn {
             Ok(token) => super::pages::finish(&login.page, Ok(&token)),
             Err(error) => {
                 warn!(%error, "the sign-in store failed");
+                crate::metrics::counters().store_error();
                 super::pages::finish(&login.page, Err("server_error"))
             }
         }
@@ -244,6 +246,7 @@ impl SignIn {
             now,
             expiry,
         )?;
+        crate::metrics::counters().signin();
         info!(provider = %verified.provider, new_identity = signed.created, "signed in");
         Ok(token)
     }
@@ -380,6 +383,7 @@ impl SignIn {
         let record = AccountRecord::new(unknown, persona.unwrap_or_default());
         match store::create_owned_account(&self.store, key, &record, dates::now_ms()) {
             Ok(Created::Account(id)) => {
+                crate::metrics::counters().account_created();
                 info!(account = id.0, "account created through sign-in");
                 http::json_reply(
                     StatusCode::CREATED,
@@ -612,6 +616,7 @@ fn not_found() -> Reply {
 
 fn server_error(error: &innkeeper_world::StoreError) -> Reply {
     warn!(%error, "the sign-in store failed");
+    crate::metrics::counters().store_error();
     http::error(
         StatusCode::INTERNAL_SERVER_ERROR,
         "server_error",

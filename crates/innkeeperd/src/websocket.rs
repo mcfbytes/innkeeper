@@ -78,6 +78,7 @@ pub(crate) fn accept(
         Ok(binding) => binding,
         Err(refusal) => {
             warn!(%peer, %refusal, "websocket refused");
+            crate::metrics::counters().ws_refused();
             return http::error(
                 StatusCode::UNAUTHORIZED,
                 "unauthorized",

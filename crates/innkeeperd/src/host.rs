@@ -37,6 +37,8 @@ pub(crate) struct Host<'s> {
     signup_open: bool,
     binding: Option<Binding>,
     noted_account: Option<AccountId>,
+    /// The account this line has been counted as a player for (`--azure-metrics` and the portal).
+    counted_account: Option<AccountId>,
 }
 
 /// Tells the connection's other tasks which account its line session is signed on as.
@@ -84,6 +86,7 @@ impl<'s> Host<'s> {
             signup_open: settings.signup_open,
             binding: None,
             noted_account: None,
+            counted_account: None,
         }
     }
 
@@ -118,6 +121,7 @@ impl<'s> Host<'s> {
     }
 
     pub(crate) fn answer(&mut self, body: &[u8]) -> Answer {
+        crate::metrics::counters().message_in();
         let received = match ClientMessage::parse(body) {
             Ok(received) => received,
             Err(error) => {
@@ -144,6 +148,7 @@ impl<'s> Host<'s> {
         self.publish_logon();
         self.note_audit();
         self.note_sign_in();
+        self.count_login();
         Answer {
             exchange: vec![Exchange::Received(received)],
             outgoing,
@@ -177,6 +182,19 @@ impl<'s> Host<'s> {
         }
         if let Some(ticket) = &mut self.audit {
             ticket.close_now();
+        }
+        if self.counted_account.take().is_some() {
+            crate::metrics::counters().player_left();
+        }
+    }
+
+    /// Counts a Login that opened an account, and keeps the players gauge for as long as the line lasts.
+    fn count_login(&mut self) {
+        let account = self.player.account();
+        if account.is_some() && account != self.counted_account {
+            let first = self.counted_account.is_none();
+            crate::metrics::counters().login(first);
+            self.counted_account = account;
         }
     }
 

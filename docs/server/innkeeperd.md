@@ -619,3 +619,49 @@ Destructive actions ask for confirmation: a dialog, or a visible "I mean it" tic
 - Every stored string is HTML-escaped (tests use hostile strings). Assets are embedded in the binary.
 - Letter and post bodies and raw subjects never reach the log.
 - The callback is `/admin/auth/callback`, a separate audience from the players'.
+
+## 10. Metrics and the systemd watchdog
+
+### 10.1 Flags
+
+| Flag | Meaning |
+|---|---|
+| `--app-insights-connection-string STRING` | `InstrumentationKey=GUID;IngestionEndpoint=https://REGION.in.applicationinsights.azure.com/`, as the portal shows it. Turns the pusher on. The endpoint must be an `applicationinsights.azure.com` HTTPS host. The key is not a secret; with local auth disabled on the component it only routes. |
+| `--test-ingestion-endpoint URL`, `--test-imds-endpoint URL`, `--test-authority-endpoint URL`, `--test-metrics-interval DURATION` | Hidden, for tests: mock endpoints and a short interval. |
+
+The pusher asks the VM's managed identity (or the service principal in `AZURE_*`, as the vault client
+does) for a token with audience `https://monitor.azure.com/` and POSTs MetricData envelopes to
+`/v2.1/track` with `Authorization: Bearer`. The identity needs `Monitoring Metrics Publisher` on the
+Application Insights component.
+
+### 10.2 What is sent
+
+Samples are taken every ten seconds and sent every 60. Gauges go as min, max, sum and count of the
+samples; counters go as their growth since the last good push (one sample), and a counter that did
+not move sends nothing.
+
+| Metric | Kind | Meaning |
+|---|---|---|
+| `heartbeat` | gauge | always 1 |
+| `connections` | gauge | open lines, any transport |
+| `players` | gauge | lines logged in as an account |
+| `rss_bytes` | gauge | resident memory |
+| `logins` | counter | Logins that opened an account |
+| `signins` | counter | web sign-ins that opened a session |
+| `accounts_created` | counter | accounts opened through sign-in |
+| `ws_refused` | counter | WebSocket upgrades refused with 401 |
+| `store_errors` | counter | database failures seen by the sign-in, portal, session, save, retention and watchdog paths |
+| `messages_in` | counter | client messages received |
+
+`store_errors` counts the places innkeeperd itself handles a failed store call. A failure the game
+world absorbs inside `innkeeper-world` (a letter that cannot be written, say) is logged there and is
+not counted.
+
+The task never blocks a game connection. A failed push backs off 1, 2, 4, ... up to 10 minutes,
+logs a WARN at most once per 10 minutes, and says so when pushing resumes. Counter growth is kept
+for the next push; gauge samples older than a push are dropped.
+
+### 10.3 systemd
+
+Under `Type=notify` the daemon sends `READY=1`, `WATCHDOG=1` and `STOPPING=1` (docs/server/hardening.md
+section 5.1). Run by hand, without `NOTIFY_SOCKET`, it sends nothing.

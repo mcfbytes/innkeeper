@@ -398,6 +398,16 @@ the new `kid`; old versions stay enabled until the records that name them age ou
 
 **Vault protection.** Soft delete and purge protection are on for both vaults.
 
+## 7a. Metrics
+
+`--app-insights-connection-string` sends a handful of numbers to Application Insights once a minute:
+heartbeat, open lines, players logged in, and counts of logins, sign-ins, accounts opened, refused
+WebSockets, store errors and client messages, plus the process's resident memory. They are counts
+and sizes only. There are no dimensions or properties, so no account number, persona, address,
+provider, session or message text goes with them, and nothing in them can single out a player. The
+envelopes carry the role name `innkeeperd` and the instrumentation key, which is no secret (the VM's
+managed identity is the credential). The portal's Status panel shows the same counters from memory.
+
 ## 8. Operator portal
 
 The portal ([innkeeperd.md](innkeeperd.md) section 9) records each action in `admin_audit`: time, the

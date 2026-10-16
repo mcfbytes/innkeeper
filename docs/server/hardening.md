@@ -141,6 +141,15 @@ After the jail, only while a player signs in:
 - a plain-OAuth provider's token and profile endpoints;
 - the name servers in `/etc/resolv.conf`, for those names.
 
+With `--app-insights-connection-string`, after the jail, once a minute:
+
+- the managed identity endpoint (IMDS, or Entra ID for a service principal) for a token whose
+  audience is `https://monitor.azure.com/`, cached until five minutes before it expires;
+- the connection string's ingestion endpoint, `https://REGION.in.applicationinsights.azure.com`,
+  `POST /v2.1/track` (docs/server/innkeeperd.md section 10). The DNS and TLS path is the one the
+  sign-in calls use. The tests run it under seccomp kill mode against a local mock; the TLS handshake
+  to the real endpoint is untested until a deploy.
+
 No client follows redirects, and each request has a 15-second timeout. Nothing else connects out.
 Landlock does not restrict `connect`, so the outer unit's network rules are where the destinations
 can be pinned.
@@ -186,6 +195,23 @@ section 4 use `socket`, `connect`, `sendto` and `recvfrom` that the list already
 vault is read before the filter exists. `crates/innkeeperd/tests/signin.rs` runs the whole sign-in
 contract against a sandboxed `--public` server in kill mode, and a public provider was reached
 through DNS and TLS from a jailed process without a `SIGSYS`.
+
+### 5.1 systemd notify and watchdog
+
+With `Type=notify` and `WatchdogSec=`, systemd sets `NOTIFY_SOCKET` and `WATCHDOG_USEC`. The daemon
+sends `READY=1` after the jail is on, `WATCHDOG=1` every half period, and `STOPPING=1` on Ctrl-C (SIGINT; SIGTERM ends the
+process as before). It uses a unix datagram socket from the standard library. That needs `socket`,
+`sendto` and `sendmsg`, which the allowlist already has, so no syscall was added. Landlock (ABI 5 is
+what the ruleset handles) does not restrict `connect` or `sendto` to a unix socket, path or abstract:
+only the ABI 6 scopes and ABI 9 rules do, and the ruleset asks for neither. `tests/metrics.rs` runs
+the jailed daemon in seccomp kill mode against a path socket and checks `READY=1` and `WATCHDOG=1`.
+The abstract form (`@name`) is covered by a unit test outside the jail.
+
+The watchdog task proves two things: the runtime is turning (the task itself runs) and the database
+answers (a read of one account on a blocking thread, within half a period). A wedged database or a
+stalled runtime stops the pings and systemd restarts the unit. It does not prove the accept loops are
+alive: probing them would mean opening a connection and so a sealed record. Without the two variables
+the whole thing is a no-op.
 
 ## 6. Debugging
 

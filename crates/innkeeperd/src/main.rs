@@ -14,6 +14,8 @@ mod host;
 mod http;
 mod int14h_listener;
 mod keyvault;
+mod metrics;
+mod notify;
 mod peer;
 mod retention;
 mod sandbox;
@@ -80,6 +82,8 @@ fn main() -> ExitCode {
     if let Some(path) = probe {
         return sandbox::run_probe(&path);
     }
+    // Sockets are bound and the sandbox is on: systemd may treat the start as done.
+    notify::ready();
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

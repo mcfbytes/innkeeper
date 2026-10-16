@@ -257,6 +257,7 @@ fn optional_number(request: &Map<String, Value>, key: &str) -> Result<Option<u64
 
 fn store_refusal(error: innkeeper_world::StoreError) -> Refusal {
     warn!(%error, "save store failed");
+    crate::metrics::counters().store_error();
     refuse("server_error", "the store failed")
 }
 

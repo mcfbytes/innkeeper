@@ -151,12 +151,25 @@ impl Credential {
         http: &reqwest::Client,
         endpoints: &Endpoints,
     ) -> Result<reqwest::RequestBuilder, String> {
+        self.token_request_for(http, &endpoints.imds, &endpoints.authority, VAULT_RESOURCE)
+    }
+
+    /// The token request for `resource`, an audience such as `https://monitoring.azure.com/`.
+    /// A service principal asks for the scope `{resource}/.default`.
+    pub(crate) fn token_request_for(
+        &self,
+        http: &reqwest::Client,
+        imds: &Url,
+        authority: &Url,
+        resource: &str,
+    ) -> Result<reqwest::RequestBuilder, String> {
+        let scope = format!("{resource}/.default");
         Ok(match self {
             Credential::Managed { client_id } => {
-                let mut url = join(&endpoints.imds, "metadata/identity/oauth2/token")?;
+                let mut url = join(imds, "metadata/identity/oauth2/token")?;
                 url.query_pairs_mut()
                     .append_pair("api-version", IMDS_API_VERSION)
-                    .append_pair("resource", VAULT_RESOURCE);
+                    .append_pair("resource", resource);
                 if let Some(id) = client_id {
                     url.query_pairs_mut().append_pair("client_id", id);
                 }
@@ -167,12 +180,12 @@ impl Credential {
                 client_id,
                 secret,
             } => {
-                let url = token_url(endpoints, tenant)?;
+                let url = token_url(authority, tenant)?;
                 let form = [
                     ("grant_type", "client_credentials"),
                     ("client_id", client_id.as_str()),
                     ("client_secret", secret.as_str()),
-                    ("scope", "https://vault.azure.net/.default"),
+                    ("scope", scope.as_str()),
                 ];
                 http.post(url).form(&form)
             }
@@ -182,7 +195,7 @@ impl Credential {
                 key,
                 thumbprint,
             } => {
-                let url = token_url(endpoints, tenant)?;
+                let url = token_url(authority, tenant)?;
                 let assertion = client_assertion(
                     key,
                     thumbprint,
@@ -198,7 +211,7 @@ impl Credential {
                         "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
                     ),
                     ("client_assertion", assertion.as_str()),
-                    ("scope", "https://vault.azure.net/.default"),
+                    ("scope", scope.as_str()),
                 ];
                 http.post(url).form(&form)
             }
@@ -206,8 +219,8 @@ impl Credential {
     }
 }
 
-fn token_url(endpoints: &Endpoints, tenant: &str) -> Result<Url, String> {
-    join(&endpoints.authority, &format!("{tenant}/oauth2/v2.0/token"))
+fn token_url(authority: &Url, tenant: &str) -> Result<Url, String> {
+    join(authority, &format!("{tenant}/oauth2/v2.0/token"))
 }
 
 /// The signed JWT Entra ID takes in place of a client secret: RS256 with the certificate's

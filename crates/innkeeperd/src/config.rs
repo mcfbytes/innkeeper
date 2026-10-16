@@ -128,12 +128,29 @@ pub(crate) struct Config {
     /// Test only: where Key Vault requests go instead of --key-vault.
     #[arg(long, hide = true, requires = "key_vault")]
     pub(crate) test_vault_endpoint: Option<String>,
-    /// Test only: where managed-identity token requests go instead of IMDS.
-    #[arg(long, hide = true, requires = "key_vault")]
+    /// Test only: where managed-identity token requests (and the instance metadata) go instead of IMDS.
+    #[arg(long, hide = true)]
     pub(crate) test_imds_endpoint: Option<String>,
     /// Test only: where service-principal token requests go instead of Entra ID.
-    #[arg(long, hide = true, requires = "key_vault")]
+    #[arg(long, hide = true)]
     pub(crate) test_authority_endpoint: Option<String>,
+    /// Push a few counters and gauges to Application Insights every minute, as the VM's managed
+    /// identity (docs/server/innkeeperd.md section 10). The string is
+    /// `InstrumentationKey=GUID;IngestionEndpoint=https://REGION.in.applicationinsights.azure.com/`,
+    /// which is no secret: the identity's token is the credential. No personal data goes in.
+    #[arg(long, value_name = "STRING")]
+    pub(crate) app_insights_connection_string: Option<String>,
+    /// Test only: where the metrics go instead of the connection string's IngestionEndpoint.
+    #[arg(long, hide = true, requires = "app_insights_connection_string")]
+    pub(crate) test_ingestion_endpoint: Option<String>,
+    /// Test only: the push interval instead of 60 seconds.
+    #[arg(
+        long,
+        hide = true,
+        requires = "app_insights_connection_string",
+        value_name = "DURATION"
+    )]
+    pub(crate) test_metrics_interval: Option<humantime::Duration>,
     /// What the client's serial port reaches: a modem emulator, a raw line, or auto-detect.
     #[arg(long, value_enum, default_value_t = LineArg::Auto)]
     pub(crate) line: LineArg,

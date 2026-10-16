@@ -81,6 +81,11 @@ impl Switchboard {
         true
     }
 
+    /// How many connections are live.
+    pub(crate) fn count(&self) -> usize {
+        self.lock().len()
+    }
+
     /// Every live connection, oldest first.
     pub(crate) fn connections(&self) -> Vec<Connected> {
         let mut all: Vec<Connected> = self
