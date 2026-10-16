@@ -134,6 +134,15 @@ impl StoredLetter {
     }
 }
 
+impl Envelope {
+    /// A stored letter body is six time bytes then this envelope (`mail.md` section 4).
+    pub fn from_stored_body(body: &[u8]) -> Option<(HostTime, Envelope)> {
+        StoredLetter::from_body(body)
+            .ok()
+            .map(|stored| (stored.received, stored.envelope))
+    }
+}
+
 /// A letter on its way: the box it goes to, the object that gets the answer and the envelope.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutgoingLetter {

@@ -1,4 +1,4 @@
-//! How much of a session the host may write down. Public mode is `--public` on innkeeperd.
+//! How much of a session the host may write down. Public mode is docs/server/privacy.md.
 
 use std::fmt;
 
@@ -7,7 +7,7 @@ use std::fmt;
 pub enum LogPolicy {
     #[default]
     Verbose,
-    /// No message fields, names or addresses: a public host (`innkeeperd --public`).
+    /// No message fields, names or addresses: a public host (docs/server/privacy.md).
     Public,
 }
 

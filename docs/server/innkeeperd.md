@@ -77,13 +77,15 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
 - `--public` is for a host that should process as little personal data as possible: it refuses
   `--capture-dir`, writes no capture files, logs message kinds without fields, and replaces peer
   addresses with a per-process HMAC token. Persona names in other info lines become the account
-  number. Development tools that parse verbose logs keep working: the default format is unchanged.
+  number. See [privacy.md](privacy.md). Development tools that parse verbose logs keep working: the
+  default format is unchanged.
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an
   unknown account from the password its first Login presents (INFERRED, `STORED_BOOK_ENROLS_ASSUMED`).
   Without it every account number and password is admitted and nothing is kept, which is what the DOSBox
-  scripts use.
+  scripts use. Offline, `innkeeperd account export` and `account delete` read and erase that file
+  ([privacy.md](privacy.md)).
 - `--line` says what the client's serial port reaches (section 4). `--connect-rate` is the rate in the
   emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes);
   the transport's GetLineRate answers the same rate.

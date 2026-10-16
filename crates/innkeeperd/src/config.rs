@@ -34,7 +34,7 @@ pub(crate) struct Config {
     /// Write no capture files.
     #[arg(long)]
     pub(crate) no_capture: bool,
-    /// Public host: no captures, no message fields, no peer addresses.
+    /// Public host: no captures, no message fields, no peer addresses (docs/server/privacy.md).
     #[arg(long)]
     pub(crate) public: bool,
     /// Directory holding the account database; without it every account number is admitted.
@@ -46,6 +46,44 @@ pub(crate) struct Config {
     /// Rate announced in the modem's CONNECT line on raw lines.
     #[arg(long, default_value_t = 2400)]
     pub(crate) connect_rate: u32,
+    #[command(subcommand)]
+    pub(crate) command: Option<Command>,
+}
+
+/// Offline tools; with no subcommand the daemon serves.
+#[derive(Clone, Debug, clap::Subcommand)]
+pub(crate) enum Command {
+    /// Export or delete one stored account (docs/server/privacy.md).
+    Account {
+        #[command(subcommand)]
+        action: AccountAction,
+    },
+}
+
+#[derive(Clone, Debug, clap::Subcommand)]
+pub(crate) enum AccountAction {
+    /// Print everything stored for the account as JSON on stdout.
+    Export {
+        /// The account number.
+        id: u32,
+        /// Directory holding innkeeper.db.
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Include save file bytes as base64.
+        #[arg(long)]
+        with_saves: bool,
+    },
+    /// Delete the account and everything that belongs to it.
+    Delete {
+        /// The account number.
+        id: u32,
+        /// Directory holding innkeeper.db.
+        #[arg(long)]
+        data_dir: PathBuf,
+        /// Actually delete. Without this flag, print the plan and exit 1.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
@@ -175,5 +213,51 @@ mod tests {
         assert!(text.contains("--public"));
         assert!(text.contains("--capture-dir"));
         assert!(text.contains("no capture"));
+    }
+
+    #[test]
+    fn account_export_parses_the_data_dir_and_saves_flag() {
+        let config = Config::parse_from([
+            "innkeeperd",
+            "account",
+            "export",
+            "100001",
+            "--data-dir",
+            "work/data",
+            "--with-saves",
+        ]);
+        match config.command {
+            Some(Command::Account {
+                action:
+                    AccountAction::Export {
+                        id,
+                        data_dir,
+                        with_saves,
+                    },
+            }) => {
+                assert_eq!(id, 100_001);
+                assert_eq!(data_dir, PathBuf::from("work/data"));
+                assert!(with_saves);
+            }
+            other => panic!("expected export, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn account_delete_is_a_dry_run_without_yes() {
+        let config = Config::parse_from([
+            "innkeeperd",
+            "account",
+            "delete",
+            "100001",
+            "--data-dir",
+            "work/data",
+        ]);
+        match config.command {
+            Some(Command::Account {
+                action: AccountAction::Delete { yes, .. },
+            }) => assert!(!yes),
+            other => panic!("expected delete, got {other:?}"),
+        }
     }
 }

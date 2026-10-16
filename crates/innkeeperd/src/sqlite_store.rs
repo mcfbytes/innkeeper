@@ -88,7 +88,7 @@ impl SqliteStore {
     }
 
     /// Every statement is a single atomic call, so a panic elsewhere leaves nothing half done.
-    fn connection(&self) -> MutexGuard<'_, Connection> {
+    pub(crate) fn connection(&self) -> MutexGuard<'_, Connection> {
         self.connection
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

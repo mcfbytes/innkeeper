@@ -1,4 +1,4 @@
-//! Pseudonymous peer labels for public-mode logs (`innkeeperd --public`).
+//! Pseudonymous peer labels for public-mode logs (docs/server/privacy.md).
 
 use std::fmt;
 use std::io::Read;

@@ -16,7 +16,8 @@ use crate::int14h_listener::serve_transport;
 use crate::sqlite_store::SqliteStore;
 use crate::websocket::serve_websocket;
 
-const DATABASE_FILE: &str = "innkeeper.db";
+pub(crate) const DATABASE_FILE: &str = "innkeeper.db";
+pub(crate) const LOCK_FILE: &str = "innkeeper.lock";
 const STARTUP_LINE: &str = "INT 14h hooked. Please wait while ImagiNation loads...";
 /// Pause after a failed accept, so a full descriptor table does not spin the loop.
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(100);
@@ -29,6 +30,10 @@ pub(crate) enum ServerError {
     DataDir { dir: String, source: io::Error },
     #[error("cannot open the account database: {0}")]
     Database(#[from] StoreError),
+    #[error("innkeeperd is already running (pid {pid}); stop that process first")]
+    AlreadyRunning { pid: u32 },
+    #[error("cannot write the data-dir lock {path}: {source}")]
+    Lock { path: String, source: io::Error },
 }
 
 /// The stock world, with its accounts kept under `data_dir` when one is given.
@@ -50,6 +55,10 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
         LogPolicy::Public
     } else {
         LogPolicy::Verbose
+    };
+    let _lock = match config.data_dir.as_deref() {
+        Some(dir) => Some(crate::subject::DataDirLock::acquire(dir)?),
+        None => None,
     };
     let legacy = listen(config.bind).await?;
     let transport = listen_if(config.int14h_bind()).await?;

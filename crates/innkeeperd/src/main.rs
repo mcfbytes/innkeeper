@@ -10,6 +10,7 @@ mod peer;
 mod save_channel;
 mod server;
 mod sqlite_store;
+mod subject;
 mod switchboard;
 mod websocket;
 
@@ -21,7 +22,11 @@ use tracing_subscriber::EnvFilter;
 async fn main() -> ExitCode {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
-    match server::serve(config::Config::load()).await {
+    let mut config = config::Config::load();
+    if let Some(config::Command::Account { action }) = config.command.take() {
+        return subject::run(action);
+    }
+    match server::serve(config).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "innkeeperd stopped");
