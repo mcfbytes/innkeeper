@@ -277,8 +277,8 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 - On the INT 14h transport, SwitchHost and Connect accept any address and keep the client on this host; a
   land switch between hosts is not modelled. No client speaks the transport yet (ScummVM's online executive
   is the first one planned).
-- Sign-in (section 8): Apple, the admin portal on `/admin/auth/callback`, and a periodic vault
-  refresh. The age and terms answer is required before an account or password is issued (8.6).
+- Sign-in (section 8): Apple, and a periodic vault refresh (the admin allowlist from the vault is
+  also read at startup only, section 9). The age and terms answer is required before an account or password is issued (8.6).
 
 ## 8. Sign-in
 
@@ -325,9 +325,12 @@ unknown or expired token is a 401, and one with no token behaves as before. With
 ### 8.2 The auth file
 
 TOML. `public_url` is the auth origin as the provider sees it, and the callbacks are
-`<public_url>/auth/callback` (players) and `<public_url>/admin/auth/callback` (reserved for the
-admin portal). It defaults to `http://<--ws-bind>`. Register the player callback with each
-provider.
+`<public_url>/auth/callback` (players) and `<public_url>/admin/auth/callback` (the admin portal, section 9;
+its origin is `admin_public_url` below when the portal has its own host name). It defaults to
+`http://<--ws-bind>`. Register the player callback with each provider, and the admin one too.
+An optional top-level `admin_public_url` names the portal's origin as the browser sees it (for
+example `https://host.example`); it defaults to `public_url`, and when it is `https` the cookie is
+`__Host-` prefixed.
 
 ```toml
 public_url = "https://inn.example.net"
@@ -487,3 +490,99 @@ What the server decided where the `docs/web.md` contract is open or silent:
   ignored, so a stale tab does not silently log on unbound.
 - Deleting an identity's last account (`account delete`) revokes its sessions; once nothing refers
   to it, the purge job removes the identity.
+
+## 9. Admin portal
+
+A small web office for the operator, served by `innkeeperd` on **its own listener** under `/admin/`.
+It is off unless `--admin-bind` is given. It shares nothing with player sessions: its own cookie, its
+own tables, its own callback.
+
+### 9.1 Flags
+
+- `--admin-bind ADDR` listens for the portal (for example `127.0.0.1:2317`). It needs
+  `--auth-config` (the same providers sign the operator in), must differ from `--ws-bind`, and under
+  `--public` must be a loopback address. The reverse proxy routes `/admin/*` to it.
+- `--admin-allowlist FILE` names a file of staff identity keys (needs `--admin-bind`). One key per
+  line, `#` starts a comment. The file is re-read whenever its size or modification time changes, so
+  an edit takes effect on the next request. An unreadable file lists nobody.
+- `--admin-dev-open` opens the door to any signed-in identity for local work (needs `--admin-bind`).
+  Refused with `--public`.
+- `--retain-admin-audit-days N` (365) keeps the audit log ([privacy.md](privacy.md) section 6).
+- Optional vault secret `admin-identities` (section 8.3): the same one-key-per-line list, read at
+  startup. A missing secret is not an error.
+
+### 9.2 Who may come in
+
+There is no sign-up. A person signs in with one of the configured providers, and the portal then
+decides from the identity's key (the full hex `identity_key`, an HMAC of provider and subject, never
+the subject itself). The allowlist is the union of: the vault secret, the `--admin-allowlist` file
+and the active rows of the `staff` table (`innkeeperd admin allow KEY [--note TEXT]`,
+`innkeeperd admin revoke KEY`, `innkeeperd admin list`, all with `--data-dir`, which also work
+while the server runs). **Precedence:** a revoked `staff` row beats everything, even a key still in
+the vault or the file, so revocation always works; otherwise any one source that lists the key
+lets it in. The vault list is read at startup only: to remove a vault entry for good, edit the
+secret and restart, or `admin revoke` it meanwhile. The decision is made again on **every
+request**; a revoked operator's session row is deleted and the next click lands on the login page.
+After an HMAC key rotation the candidate keys of older versions are also tried; re-add the new key
+when convenient.
+
+A signed-in identity that is not listed sees a polite 403 page in the narrator's voice with its own
+key, a Copy button and the three ways to add it. Only the handle is logged. This is how you get
+your key the first time: sign in once, copy it, put it in the file or run `admin allow`.
+
+**Dev fallback.** With no vault list, no file and no `staff` rows of any kind, the door is open to
+any signed-in identity, the log carries a loud WARN and every page wears a red "DEV: open door"
+banner. `--public` refuses to start in that state. A list that exists but is empty means closed.
+
+### 9.3 Caddy
+
+```
+handle /admin/* {
+    reverse_proxy 127.0.0.1:2317
+}
+```
+
+Add it beside the player routes; pass `Host` and `X-Forwarded-Proto` through as usual.
+
+### 9.4 What it does
+
+Menu: Ledger (dashboard, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
+Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
+
+- **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`.
+- **Accounts:** search by number or persona; detail page; suspend and unsuspend (a suspended
+  account's Login is refused with a Nak and its lines are kicked); stamps, staff level and land
+  rights; CasinoBucks; password reset (the new password is shown once); revoke web sessions;
+  soft delete and restore (the account tools of [privacy.md](privacy.md) section 3).
+- **Complaints and Member Services:** the operator board (location 0x63, sections 2 and 3). "Mark
+  handled" records a mark beside the message and never alters the original.
+- **Posts:** browse, read, soft-delete.
+- **Letters:** a metadata list (sender, recipient, size, date). Reading a body needs a typed reason of
+  at least 8 characters, written to the audit log **before** the body is shown.
+- **Legal holds:** list, place (with a reason) and release, through the existing hold code.
+- **Saves:** list and download; no editing. Each download is audited.
+- **Audit:** every state-changing action and every letter read or save download, with who, what,
+  target and reason. No bodies, subjects or tokens are ever written.
+
+Online accounts: flags and land rights, CasinoBucks and password reset are **refused (409)** while
+the account is logged on (the live session would overwrite or contradict the change). Suspend,
+revoke sessions and delete kick the live lines first, then apply. Unsuspend and restore need nothing.
+Destructive actions ask for confirmation: a dialog, or a visible "I mean it" tickbox without script.
+
+### 9.5 Security model
+
+- Cookie `__Host-inn-admin` (`Path=/; Secure; HttpOnly; SameSite=Strict`) when the portal origin is
+  https; over plain http on loopback it is `inn-admin` with `Path=/admin/` and no `Secure`. The value is an opaque
+  random token, stored only as a hash. Lifetime 8 hours, 30 minutes idle; Sign out deletes the row.
+- CSRF: every POST needs the per-session token (derived from the session token, not stored). The
+  `Origin` must equal the portal origin. Because the portal sends `Referrer-Policy: no-referrer`,
+  browsers send `Origin: null` on same-origin form posts; that (or no Origin) is accepted only when
+  `Referer` matches or `Sec-Fetch-Site: same-origin` says so. Anything else is 403.
+- Headers on every answer: CSP `default-src 'self'; script-src 'self'; style-src 'self'
+  https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;
+  connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors
+  'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+  `X-Frame-Options: DENY`, `Cache-Control: no-store`. No inline script or style, no third-party script.
+- Every stored string is HTML-escaped (tests use hostile strings). Assets are embedded in the binary.
+- Letter and post bodies and raw subjects never reach the log.
+- The callback is `/admin/auth/callback`, a separate audience from the players'.

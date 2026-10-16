@@ -73,7 +73,8 @@ A save has no parent either (like the bankroll): it is a file under an account n
 
 The schema version is SQLite's `user_version`: 1 added `deleted_at` and the sealed audit tables, 2 the
 sign-in tables (`identities`, `identity_accounts`, `sessions`; [privacy.md](privacy.md) section 1;
-`a_version_1_database_gains_the_sign_in_tables`). Those tables are the daemon's own and are not part of the `Store`
+`a_version_1_database_gains_the_sign_in_tables`). Version 3 added the portal tables (`staff`, `admin_sessions`, `admin_audit`, `complaint_handled`)
+and `accounts.suspended_at` (an `add_column` migration; `Store::suspended`). Those tables are the daemon's own and are not part of the `Store`
 trait. The bankroll did not need a version: it is a new table, so a database the host wrote before it
 existed simply gains it on the next open and keeps every row it had
 (`a_database_from_before_the_bankroll_table_gains_it` in `crates/innkeeperd/src/sqlite_store.rs`).

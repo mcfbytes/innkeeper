@@ -322,7 +322,12 @@ async fn a_post_needs_this_origin_and_the_session_s_csrf_token() {
     let wrong = fx.send(post(Some("http://evil.example"), &fx.csrf)).await;
     assert_eq!(wrong.status, 403, "{}", wrong.body);
     let null = fx.send(post(Some("null"), &fx.csrf)).await;
-    assert_eq!(null.status, 403);
+    assert_eq!(null.status, 403, "a sandboxed frame says null");
+    let cross = fx
+        .send(post(Some("null"), &fx.csrf).header("sec-fetch-site", "cross-site"))
+        .await;
+    assert_eq!(cross.status, 403);
+
     let bad_token = fx.send(post(Some(ORIGIN), "AAAA")).await;
     assert_eq!(bad_token.status, 403);
     let missing = fx
@@ -352,6 +357,12 @@ async fn a_post_needs_this_origin_and_the_session_s_csrf_token() {
         .await;
     assert_eq!(referer.status, 200, "{}", referer.body);
     assert!(fx.store.suspended(AccountId(100_001)).unwrap());
+    // With Referrer-Policy: no-referrer a browser sends Origin: null for its own same-origin forms;
+    // the Fetch Metadata header then vouches for it.
+    let same_origin_form = fx
+        .send(post(Some("null"), &fx.csrf).header("sec-fetch-site", "same-origin"))
+        .await;
+    assert_eq!(same_origin_form.status, 200, "{}", same_origin_form.body);
     // The token is bound to the session: another session's token does not work.
     assert_ne!(csrf_for("some-other-cookie"), fx.csrf);
 }

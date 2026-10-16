@@ -214,7 +214,7 @@ impl Admin {
             )
         };
         let status = format!(
-            "<p>{} {}</p><p class=\"muted\">The first answers for the players' door through the proxy; the second is this office.</p>",
+            "<ul><li>{}</li><li>{}</li></ul><p class=\"muted\">The first answers for the players' door through the proxy; the second is this office.</p>",
             link("/healthz", "Players' door: /healthz"),
             link("/admin/healthz", "This office: /admin/healthz"),
         );

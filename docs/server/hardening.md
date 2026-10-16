@@ -212,3 +212,15 @@ Direct dependencies of the Linux build, also recorded in [privacy.md](privacy.md
 (MIT), `libc` 0.2 (MIT OR Apache-2.0). `prctl` pulls `nix`; the server does not call it. The
 crates sign-in and the vault client add, with their licences, are listed in the same section of
 privacy.md.
+
+## 9. The admin portal listener
+
+`--admin-bind` is a second TCP listener for the operator portal. Under `--public` it must be loopback
+(the proxy routes `/admin/*` to it), must differ from `--ws-bind`, and `--admin-dev-open` is refused.
+The infra unit needs the flag `--admin-bind 127.0.0.1:2317`, a source of staff keys (the vault
+secret `admin-identities`, or `--admin-allowlist FILE`) and a Caddy `/admin/*` route.
+
+- Landlock: `--admin-allowlist` grants read-only access (file read, directory read) on **the
+  allowlist file's directory**, so edits and replacements by rename are seen. Nothing else is added.
+- seccomp: the end-to-end test drives the portal under `--public` with the filter in kill mode and
+  needed **no new syscalls**.

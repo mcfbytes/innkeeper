@@ -24,7 +24,7 @@ use base64::Engine;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Limited};
 use hyper::body::Incoming;
-use hyper::header::{HeaderValue, CONTENT_TYPE, COOKIE, LOCATION, ORIGIN, REFERER, SET_COOKIE};
+use hyper::header::{HeaderValue, CONTENT_TYPE, COOKIE, LOCATION, SET_COOKIE};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, StatusCode};
@@ -411,16 +411,20 @@ impl Admin {
         )
     }
 
-    /// `Origin` must be this office; failing that, `Referer` must be. Neither is a refusal.
+    /// A POST must come from this office. A real `Origin` must be this office's. A page served with
+    /// `Referrer-Policy: no-referrer` makes browsers send `Origin: null` (or none) even for a
+    /// same-origin form, so then the `Referer` must be this office, or the browser's own
+    /// `Sec-Fetch-Site` must say `same-origin`. A cross-site page, a sandboxed frame and a tool that
+    /// sends none of these are refused.
     fn origin_ok(&self, headers: &hyper::HeaderMap) -> bool {
-        if let Some(origin) = headers.get(ORIGIN).and_then(|value| value.to_str().ok()) {
+        let text = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
+        if let Some(origin) = text("origin").filter(|origin| *origin != "null") {
             return origin == self.origin;
         }
-        headers
-            .get(REFERER)
-            .and_then(|value| value.to_str().ok())
+        let referer_ok = text("referer")
             .and_then(|text| Url::parse(text).ok())
-            .is_some_and(|url| url.origin().ascii_serialization() == self.origin)
+            .is_some_and(|url| url.origin().ascii_serialization() == self.origin);
+        referer_ok || text("sec-fetch-site") == Some("same-origin")
     }
 
     fn forbidden(&self, req: &Req, why: &str) -> Reply {

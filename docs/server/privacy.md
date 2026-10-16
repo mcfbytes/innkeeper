@@ -9,7 +9,8 @@ are the one addition that is written in every mode, and only when an audit recip
 The SQLite file is `DIR/innkeeper.db` (`--data-dir DIR`). A row that a player or the operator deletes
 stays in the file until the retention job in section 6 hard-purges it. Schema:
 `crates/innkeeperd/src/sqlite_store.rs` (`user_version` 1 adds `deleted_at` and the audit tables;
-2 adds the sign-in tables).
+2 adds the sign-in tables, 3 the portal's `staff`, `admin_sessions`, `admin_audit` and
+`complaint_handled` tables and `accounts.suspended_at`).
 
 | Table | Columns | Why | How long |
 |---|---|---|---|
@@ -261,6 +262,8 @@ Every number is a field of `RetentionPolicy` (`innkeeper-world`) and a flag. Def
 | A bulletin post deleted by its author or the operator | at delete | 90 days | `--retain-post-days` | same |
 | An account deleted on request | at the request; the account is disabled at once | 30 days | `--retain-account-days` | erasure without undue delay (GDPR one month), long enough to undo abuse of the deletion itself |
 | Complaints on the operator board | on arrival | 365 days | `--retain-complaint-days` | reports are evidence; one year matches the CyberTipline preservation period (REPORT Act 2024) |
+| Admin audit log (`admin_audit`) | at each portal action | 365 days | `--retain-admin-audit-days` | who did what to whom, with a reason and no content; a row naming an account under a legal hold is kept while the hold lasts |
+| Admin sessions | at expiry or sign-out | 1 day after expiry | none | operator sign-in rows, hashed tokens only |
 | Sealed connection records | on creation | 90 days | `--audit-retention-days` | section 5 |
 | Sign-in sessions | at expiry, logout, or deletion of the identity's last account | 30 days after `expiry` | `--retain-session-days` | a short trail for abuse on a line; held when the session's account, or any account of its identity, is held |
 | Sign-in identities | when they own no account (the last one hard-purged) and have no session row | at the next purge, an hour after creation at the earliest | none | the identity exists only to own accounts; the hour covers a sign-in that has not created one yet |
@@ -362,3 +365,12 @@ by then is not found again and starts afresh. A new audit RSA key version means 
 the new `kid`; old versions stay enabled until the records that name them age out.
 
 **Vault protection.** Soft delete and purge protection are on for both vaults.
+
+## 8. Operator portal
+
+The portal ([innkeeperd.md](innkeeperd.md) section 9) records each action in `admin_audit`: time, the
+operator's handle (never the subject), action, target, and the typed reason. Letters are metadata
+only until an operator types a reason of at least 8 characters to read one; the reason is stored
+in the audit row before the body is shown. Bodies, subjects and tokens are not logged. A refused
+sign-in logs the handle only. `staff` holds allowed or revoked identity keys with a note;
+`complaint_handled` holds the "handled" marks beside complaints. All are purged as in section 6.

@@ -52,9 +52,11 @@
     });
   });
 
-  // The confirmation box.
+  // The confirmation box. Its tickbox stands in for the dialog without script, so it must not
+  // block the submit with browser validation once the dialog does the asking.
   var dialog = doc.getElementById('confirm-dialog');
   if (dialog && typeof dialog.showModal === 'function') {
+    doc.querySelectorAll('form[data-confirm] input[name=confirm]').forEach(function (b) { b.required = false; });
     var pending = null;
     var q = dialog.querySelector('.q'), detail = dialog.querySelector('.detail');
     var yes = dialog.querySelector('[data-yes]'), no = dialog.querySelector('[data-no]');

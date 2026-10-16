@@ -220,7 +220,7 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   over WSS. ScummVM connects over WSS directly.
 - The client sends its password as reversible obfuscation (`docs/protocol/messages.md` 4.1); the server stores
   only an Argon2id hash of it, and TLS protects the wire.
-- **Admin portal** (ledgered 2026-10-14; build it once the store's schema settles): a web page served by
+- [x] **Admin portal** (ledgered 2026-10-14; built 2026-10-16, see docs/server/innkeeperd.md section 9; the original sketch follows): a web page served by
   `innkeeperd` on its own bind address, behind an operator login, that can view and edit every table in the
   SQLite store: accounts (persona, `userFlags` such as INN stamps and staff level, `rating` land rights,
   password reset or expiry), mailboxes and letters, board posts, and whatever later phases add. Edits go
@@ -286,8 +286,7 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   - Enrolment modes (configuration): open (today: an unknown account is created at its first Login),
     web-only (new accounts only through sign-in; TCP clients log on to existing accounts), closed.
     Account creation is rate-limited per identity (`--accounts-per-day`, default 3).
-  - **Still open:** Apple (its client secret is a signed JWT), the admin portal's use of the
-    reserved `/admin/auth/callback`, a periodic vault refresh, and the infra unit's new flags
+  - **Still open:** Apple (its client secret is a signed JWT), a periodic vault refresh (the admin portal is done), and the infra unit's new flags
     (`--auth-config`, `--page-origin`, `--key-vault`).
   - **Public mode.** Public deployments run with `--public` ([privacy.md](server/privacy.md)).
   - Development works on `http://localhost` redirect URIs, which Google, Microsoft and GitHub accept. A
