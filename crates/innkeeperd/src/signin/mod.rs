@@ -74,6 +74,8 @@ pub(crate) struct SignInSetup {
     /// ... and at least this terms version.
     pub(crate) terms_version: u32,
     pub(crate) recipient: Option<Recipient>,
+    /// Every line must carry a session (public mode); the page then offers no unsigned way in.
+    pub(crate) required: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,6 +109,7 @@ pub(crate) struct SignIn {
     minimum_age: u32,
     terms_version: u32,
     recipient: Option<Recipient>,
+    required: bool,
     pending: Mutex<HashMap<String, PendingLogin>>,
 }
 
@@ -133,6 +136,7 @@ impl SignIn {
             minimum_age: setup.minimum_age,
             terms_version: setup.terms_version,
             recipient: setup.recipient,
+            required: setup.required,
             pending: Mutex::new(HashMap::new()),
         }
     }

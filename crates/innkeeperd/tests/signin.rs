@@ -50,7 +50,7 @@ async fn a_web_sign_in_opens_its_own_account_and_nothing_else() {
         .await
         .unwrap();
     assert_eq!(
-        listed,
+        listed["providers"],
         json!([{"id": "dev", "name": "Dev Phone Co.", "url": "/auth/login?provider=dev"}])
     );
 

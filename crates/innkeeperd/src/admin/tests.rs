@@ -82,6 +82,7 @@ fn sign_in_for(store: &Arc<SqliteStore>) -> SignIn {
         minimum_age: 18,
         terms_version: 1,
         recipient: None,
+        required: false,
     })
 }
 

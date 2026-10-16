@@ -125,7 +125,8 @@ impl SignIn {
                 })
             })
             .collect();
-        http::json_reply(StatusCode::OK, &Value::Array(list))
+        let reply = json!({ "signInRequired": self.required, "providers": list });
+        http::json_reply(StatusCode::OK, &reply)
     }
 
     async fn login(&self, query: &HashMap<String, String>) -> Reply {

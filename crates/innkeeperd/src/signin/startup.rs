@@ -191,6 +191,7 @@ fn build(
         minimum_age: config.minimum_age,
         terms_version: config.terms_version,
         recipient,
+        required: config.public,
     }))
 }
 

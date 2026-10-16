@@ -45,7 +45,12 @@ struct Fixture {
     http: reqwest::Client,
 }
 
-fn sign_in_for(store: &Arc<SqliteStore>, enrolment: EnrolmentMode, per_day: u32) -> SignIn {
+fn sign_in_for(
+    store: &Arc<SqliteStore>,
+    enrolment: EnrolmentMode,
+    per_day: u32,
+    required: bool,
+) -> SignIn {
     let entry = AuthFile::parse(PROVIDERS).unwrap().providers.remove(0);
     let provider = Provider::from_entry(&entry, Zeroizing::new("s".into())).unwrap();
     let key = HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap();
@@ -60,12 +65,13 @@ fn sign_in_for(store: &Arc<SqliteStore>, enrolment: EnrolmentMode, per_day: u32)
         minimum_age: 18,
         terms_version: 1,
         recipient: None,
+        required,
     })
 }
 
 async fn fixture(enrolment: EnrolmentMode, per_day: u32, require_session: bool) -> Fixture {
     let store = Arc::new(SqliteStore::open_in_memory().unwrap());
-    let sign_in = Arc::new(sign_in_for(&store, enrolment, per_day));
+    let sign_in = Arc::new(sign_in_for(&store, enrolment, per_day, require_session));
     let mut world = World::stored(Arc::clone(&store) as Arc<dyn innkeeper_world::Store>);
     world.accounts = crate::server::account_book(&store, enrolment);
     let mut settings = ConnectionSettings::new(SessionConfig::default(), world, None);
@@ -184,8 +190,27 @@ async fn cors_names_only_the_configured_page_origin() {
     let list: Value = other.json().await.unwrap();
     assert_eq!(
         list,
-        json!([{"id": "dev", "name": "Dev Phone Co.", "url": "/auth/login?provider=dev"}])
+        json!({
+            "signInRequired": false,
+            "providers": [{"id": "dev", "name": "Dev Phone Co.", "url": "/auth/login?provider=dev"}],
+        })
     );
+}
+
+#[tokio::test]
+async fn a_public_server_says_that_sign_in_is_required() {
+    let fx = fixture(EnrolmentMode::WebOnly, 3, true).await;
+    let listed: Value = fx
+        .http
+        .get(fx.url("/auth/providers"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(listed["signInRequired"], json!(true));
+    assert_eq!(listed["providers"][0]["id"], json!("dev"));
 }
 
 #[tokio::test]
