@@ -163,7 +163,7 @@ impl Admin {
     }
 
     pub(crate) fn dashboard_with(&self, req: &Req, flash: Option<&Flash>) -> Reply {
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let counts = match store::counts(&self.store, now) {
             Ok(counts) => counts,
             Err(error) => return self.failed(req, &error),
@@ -265,7 +265,9 @@ impl Admin {
             let mut rows = String::new();
             for account in &found {
                 let mut marks = String::new();
-                if account.deleted_at.is_some() {
+                if account.purged_at.is_some() {
+                    marks.push_str(&flag("purged", "bad"));
+                } else if account.deleted_at.is_some() {
                     marks.push_str(&flag("deleted", "bad"));
                 }
                 if account.suspended_at.is_some() {
@@ -337,7 +339,14 @@ impl Admin {
         if s.suspended_at.is_some() {
             state.push_str(&flag("suspended", "warn"));
         }
-        if let Some(at) = s.deleted_at {
+        if let Some(at) = s.purged_at {
+            state.push_str(&flag("purged", "bad"));
+            let _ = write!(
+                state,
+                " <span class=\"muted\">purged {}: only the number is left, and it is never issued again</span>",
+                esc(&when(at))
+            );
+        } else if let Some(at) = s.deleted_at {
             state.push_str(&flag("deleted", "bad"));
             let purge = dates::add_days(at, self.retention.account_days);
             let _ = write!(
@@ -416,7 +425,10 @@ impl Admin {
             ),
             d.hold_until.map_or_else(
                 || "none".to_owned(),
-                |until| format!("held through {}", esc(&dates::format_date(until - 86_400)))
+                |until| format!(
+                    "held through {}",
+                    esc(&dates::format_date(until - dates::DAY))
+                )
             ),
             if d.save_files > 0 {
                 link(
@@ -443,7 +455,7 @@ impl Admin {
         } else {
             table(&["Identity", "Provider"], &rows)
         };
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let mut rows = String::new();
         for session in &d.sessions {
             let state = if session.expiry > now {
@@ -480,6 +492,12 @@ impl Admin {
         let csrf = req.ctx.csrf.as_str();
         let action = |name: &str| format!("/admin/accounts/{id}/{name}");
         let reason = "<div><label>Reason (kept in the audit log, optional)</label><input type=\"text\" name=\"reason\" maxlength=\"200\"></div>";
+        if d.summary.purged_at.is_some() {
+            return window(
+                "Actions",
+                "<p class=\"muted\">A purged account cannot be restored.</p>",
+            );
+        }
         if d.summary.deleted_at.is_some() {
             let purge = d
                 .summary
@@ -741,35 +759,30 @@ impl Admin {
             Ok(None) => return self.not_found(req),
             Err(error) => return self.failed(req, &error),
         };
-        let lookup = |persona: &str| match persona.is_empty() {
-            true => None,
-            false => store::account_by_persona(&self.store, persona)
-                .ok()
-                .flatten(),
-        };
-        let author = c.account.or_else(|| lookup(&c.author));
+        // Both links are the account numbers stored with the complaint, never a name lookup: the
+        // writer's, and the one the named player was logged on as when it was filed.
+        let author = c.account;
         let offender_name = c.offender();
-        let offender = offender_name.as_deref().and_then(lookup);
         let mut facts = format!(
-            "<dl class=\"facts\"><dt>Kind</dt><dd>{}</dd><dt>Arrived</dt><dd>{}</dd><dt>From</dt><dd>{}{}</dd>",
+            "<dl class=\"facts\"><dt>Kind</dt><dd>{}</dd><dt>Arrived</dt><dd>{}</dd><dt>From</dt><dd>{} (account {})</dd>",
             esc(c.kind()),
             esc(&when(c.created_at)),
             esc(&c.author),
-            author.map_or_else(String::new, |id| format!(" (account {})", account_link(id)))
+            account_link(author)
         );
-        if let Some(name) = &offender_name {
+        if offender_name.is_some() || c.about.is_some() {
             let _ = write!(
                 facts,
                 "<dt>Names</dt><dd>{}{}</dd>",
-                esc(name),
-                offender.map_or_else(
-                    || " (no account by that persona)".to_owned(),
+                esc(offender_name.as_deref().unwrap_or("")),
+                c.about.map_or_else(
+                    || " (nobody online under that name when it was filed)".to_owned(),
                     |id| format!(" (account {})", account_link(id))
                 )
             );
         }
         let mut boxes = String::new();
-        for id in [author, offender].into_iter().flatten() {
+        for id in [Some(author), c.about].into_iter().flatten() {
             if let Ok(Some(number)) = store::mailbox_of_account(&self.store, id) {
                 let _ = write!(
                     boxes,
@@ -1081,7 +1094,7 @@ impl Admin {
             Ok(holds) => holds,
             Err(error) => return self.failed(req, &error),
         };
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let list = if holds.is_empty() {
             "<p>No account is under a legal hold. Nothing is being kept past its time.</p>"
                 .to_owned()
@@ -1109,7 +1122,7 @@ impl Admin {
                     esc(hold.persona.as_deref().unwrap_or("(erased)")),
                     esc(&format!(
                         "through {}",
-                        dates::format_date(hold.until - 86_400)
+                        dates::format_date(hold.until - dates::DAY)
                     )),
                     if open {
                         flag("open", "warn")

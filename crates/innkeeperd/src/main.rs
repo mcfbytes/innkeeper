@@ -8,6 +8,7 @@ mod config;
 mod connection;
 mod connection_gate;
 mod dates;
+mod db;
 mod dev_oidc;
 mod host;
 mod http;
@@ -46,6 +47,7 @@ fn main() -> ExitCode {
             return audit::run_release(account, &data_dir)
         }
         Some(config::Command::Admin { action }) => return admin::cli::run(action),
+        Some(config::Command::Db { action }) => return db::run(action),
         Some(config::Command::DevOidc { bind, issuer }) => return dev_oidc::run(bind, issuer),
         None => {}
     }

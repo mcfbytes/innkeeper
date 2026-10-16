@@ -4,7 +4,7 @@
 mod common;
 
 use common::Table;
-use innkeeper_world::{AccountId, Money};
+use innkeeper_world::{AccountId, AccountRecord, EncodedPassword, Money};
 
 /// The account the `{login}` of tests/common/mod.rs presents.
 const ACCOUNT: AccountId = AccountId(100_001);
@@ -52,6 +52,9 @@ fn a_save_above_or_below_the_start_is_what_the_next_read_returns() {
 #[test]
 fn a_stored_balance_is_not_replaced_by_the_starting_amount() {
     let mut table = Table::new();
+    // A bankroll needs its account row (docs/server/store.md section 2).
+    let record = AccountRecord::new(EncodedPassword([0; 10]), "guybrush");
+    table.world.store.create_account(ACCOUNT, record).unwrap();
     table
         .world
         .store

@@ -24,7 +24,7 @@ use super::{Mode, PageReturn, PendingLogin, SignIn};
 use crate::dates;
 use crate::http::{self, Reply};
 
-const DAY: i64 = 86_400;
+use crate::dates::DAY;
 const MAX_PERSONA: usize = 10;
 /// The most file bytes the saves listing carries inline; later files are fetched one by one.
 const PREFETCH_INLINE_BYTES: usize = 2 * 1024 * 1024;
@@ -102,7 +102,7 @@ impl SignIn {
         let header = request.headers().get(AUTHORIZATION)?.to_str().ok()?;
         let token = header.strip_prefix("Bearer ")?.trim();
         let hash = keys::token_hash(token);
-        match store::session_identity(&self.store, &hash, dates::unix_now()) {
+        match store::session_identity(&self.store, &hash, dates::now_ms()) {
             Ok(identity) => identity,
             Err(error) => {
                 warn!(%error, "the sign-in store failed");
@@ -214,7 +214,7 @@ impl SignIn {
         verified: &super::rp::Verified,
         attest: Option<(u32, u32)>,
     ) -> Result<zeroize::Zeroizing<String>, innkeeper_world::StoreError> {
-        let now = dates::unix_now();
+        let now = dates::now_ms();
         let signed = store::sign_in(
             &self.store,
             &self.keys,
@@ -225,8 +225,15 @@ impl SignIn {
             now,
         )?;
         if let Some((age, terms)) = attest {
-            let on = dates::format_date(now);
-            store::record_attestation(&self.store, &signed.key, &Attested { age, terms, on })?;
+            store::record_attestation(
+                &self.store,
+                &signed.key,
+                &Attested {
+                    age,
+                    terms,
+                    at: now,
+                },
+            )?;
         }
         let token = keys::new_token();
         let expiry = now.saturating_add(self.session_lifetime);
@@ -276,7 +283,7 @@ impl SignIn {
         if !self.enrolment.web_creates() {
             return Ok(false);
         }
-        let since = dates::unix_now().saturating_sub(DAY);
+        let since = dates::now_ms().saturating_sub(DAY);
         Ok(store::accounts_created_since(&self.store, key, since)? < self.accounts_per_day)
     }
 
@@ -293,8 +300,8 @@ impl SignIn {
                 "Use <age>+v<terms>, for example 18+v1.",
             );
         };
-        let on = dates::format_date(dates::unix_now());
-        match store::record_attestation(&self.store, key, &Attested { age, terms, on }) {
+        let at = dates::now_ms();
+        match store::record_attestation(&self.store, key, &Attested { age, terms, at }) {
             Ok(()) => http::empty(StatusCode::NO_CONTENT),
             Err(error) => server_error(&error),
         }
@@ -371,7 +378,7 @@ impl SignIn {
             );
         };
         let record = AccountRecord::new(unknown, persona.unwrap_or_default());
-        match store::create_owned_account(&self.store, key, &record, dates::unix_now()) {
+        match store::create_owned_account(&self.store, key, &record, dates::now_ms()) {
             Ok(Created::Account(id)) => {
                 info!(account = id.0, "account created through sign-in");
                 http::json_reply(
@@ -510,7 +517,7 @@ impl SignIn {
             .and_then(|header| header.strip_prefix("Bearer "));
         if let Some(token) = token {
             let hash = keys::token_hash(token.trim());
-            if let Err(error) = store::revoke_session(&self.store, &hash, dates::unix_now()) {
+            if let Err(error) = store::revoke_session(&self.store, &hash, dates::now_ms()) {
                 return server_error(&error);
             }
         }

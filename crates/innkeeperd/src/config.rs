@@ -174,6 +174,11 @@ pub(crate) enum Command {
         #[arg(long)]
         data_dir: PathBuf,
     },
+    /// The account database file: start afresh, or check it (docs/server/innkeeperd.md section 5).
+    Db {
+        #[command(subcommand)]
+        action: DbAction,
+    },
     /// Staff identities for the operator portal (docs/server/innkeeperd.md section 9).
     Admin {
         #[command(subcommand)]
@@ -187,6 +192,24 @@ pub(crate) enum Command {
         /// The issuer URL it announces. Default http://BIND.
         #[arg(long)]
         issuer: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, clap::Subcommand)]
+pub(crate) enum DbAction {
+    /// Keep innkeeper.db as innkeeper-<timestamp>.db.old (never deleted) and create a fresh one.
+    /// The remedy for a database from before the schema baseline. Stop the server first.
+    Reset {
+        /// Directory holding innkeeper.db.
+        #[arg(long)]
+        data_dir: PathBuf,
+    },
+    /// Print the schema version and run PRAGMA integrity_check and PRAGMA foreign_key_check.
+    /// Exits 1 unless all three are clean.
+    Check {
+        /// Directory holding innkeeper.db.
+        #[arg(long)]
+        data_dir: PathBuf,
     },
 }
 

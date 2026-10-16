@@ -1,10 +1,16 @@
-//! Civil dates as UTC midnights. Hold and export bounds are in docs/server/privacy.md.
+//! Stored instants and civil dates. Every time the database keeps is Unix milliseconds UTC
+//! (docs/server/store.md section 3); a civil date is the UTC midnight that starts it. Hold and export
+//! bounds are in docs/server/privacy.md.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use thiserror::Error;
 
-const DAY: i64 = 86_400;
+/// One second, one minute, one hour and one day in the stored unit.
+pub(crate) const SECOND: i64 = 1_000;
+pub(crate) const MINUTE: i64 = 60 * SECOND;
+pub(crate) const HOUR: i64 = 60 * MINUTE;
+pub(crate) const DAY: i64 = 24 * HOUR;
 
 #[derive(Debug, Error)]
 pub(crate) enum DateError {
@@ -14,11 +20,17 @@ pub(crate) enum DateError {
     Past(String),
 }
 
-pub(crate) fn unix_now() -> i64 {
+/// Now, in Unix milliseconds: the value every `*_at` column holds.
+pub(crate) fn now_ms() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(elapsed) => i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
+        Ok(elapsed) => i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX),
         Err(_) => 0,
     }
+}
+
+/// Now, in Unix seconds, for the JWT `iat` and `exp` claims, which are seconds by definition.
+pub(crate) fn unix_seconds() -> i64 {
+    now_ms() / SECOND
 }
 
 /// Midnight UTC at the start of `text`.
@@ -34,25 +46,37 @@ pub(crate) fn parse_date(text: &str) -> Result<i64, DateError> {
     days.checked_mul(DAY).ok_or(DateError::Format)
 }
 
-/// `YYYY-MM-DD` of the UTC day that contains `unix`.
-pub(crate) fn format_date(unix: i64) -> String {
-    let (year, month, day) = civil_from_days(unix.div_euclid(DAY));
+/// `YYYY-MM-DD` of the UTC day that contains the instant `at`.
+pub(crate) fn format_date(at: i64) -> String {
+    let (year, month, day) = civil_from_days(at.div_euclid(DAY));
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// `YYYY-MM-DD HH:MM UTC` of `unix`, for the portal's tables.
-pub(crate) fn format_datetime(unix: i64) -> String {
-    let minutes = unix.div_euclid(60).rem_euclid(1440);
+/// `YYYY-MM-DD HH:MM UTC` of the instant `at`, for the portal's tables.
+pub(crate) fn format_datetime(at: i64) -> String {
+    let minutes = at.div_euclid(MINUTE).rem_euclid(1440);
     format!(
         "{} {:02}:{:02} UTC",
-        format_date(unix),
+        format_date(at),
         minutes / 60,
         minutes % 60
     )
 }
 
-pub(crate) fn add_days(unix: i64, days: u32) -> i64 {
-    unix.saturating_add(i64::from(days).saturating_mul(DAY))
+/// `YYYYMMDDTHHMMSSZ` of the instant `at`, for a file name.
+pub(crate) fn format_stamp(at: i64) -> String {
+    let seconds = at.div_euclid(SECOND).rem_euclid(86_400);
+    let date = format_date(at).replace('-', "");
+    format!(
+        "{date}T{:02}{:02}{:02}Z",
+        seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
+    )
+}
+
+pub(crate) fn add_days(at: i64, days: u32) -> i64 {
+    at.saturating_add(i64::from(days).saturating_mul(DAY))
 }
 
 /// The hold is stored as the midnight after the named day, so that day is included.
@@ -130,8 +154,16 @@ mod tests {
     fn the_unix_epoch_and_a_leap_day_round_trip() {
         assert_eq!(parse_date("1970-01-01").unwrap(), 0);
         assert_eq!(parse_date("1970-01-02").unwrap(), DAY);
-        assert_eq!(parse_date("2000-01-01").unwrap(), 946_684_800);
-        assert_eq!(format_date(946_684_800 + 3600), "2000-01-01");
+        assert_eq!(parse_date("2000-01-01").unwrap(), 946_684_800_000);
+        assert_eq!(format_date(946_684_800_000 + HOUR), "2000-01-01");
+        assert_eq!(
+            format_datetime(946_684_800_000 + 90 * MINUTE),
+            "2000-01-01 01:30 UTC"
+        );
+        assert_eq!(
+            format_stamp(946_684_800_000 + 90 * MINUTE + 7 * SECOND),
+            "20000101T013007Z"
+        );
         assert!(parse_date("2024-02-29").is_ok());
         assert!(parse_date("2023-02-29").is_err());
         assert!(parse_date("2026-1-16").is_err());
@@ -139,7 +171,7 @@ mod tests {
 
     #[test]
     fn a_hold_includes_the_named_day_and_rejects_a_past_one() {
-        let now = parse_date("2026-10-16").unwrap() + 3600;
+        let now = parse_date("2026-10-16").unwrap() + HOUR;
         let until = hold_until("2026-10-16", now).unwrap();
         assert_eq!(until, parse_date("2026-10-17").unwrap());
         assert!(matches!(

@@ -109,13 +109,13 @@ async fn fixture(door: Door) -> Fx {
     let address = listener.local_addr().unwrap();
     tokio::spawn(accept_forever(listener, Arc::clone(&admin), serve));
     let token = keys::new_token().to_string();
-    let now = crate::dates::unix_now();
+    let now = crate::dates::now_ms();
     store::create_session(
         &store,
         &keys::token_hash(&token),
         &staff_key(),
         now,
-        now + 3600,
+        now + crate::dates::HOUR,
     )
     .unwrap();
     Fx {
@@ -450,13 +450,13 @@ fn the_cookie_is_host_prefixed_and_secure_over_https_and_plain_on_loopback() {
 async fn revoking_the_key_ends_the_session_on_the_next_request() {
     let fx = fixture(Door::Listed).await;
     assert_eq!(fx.get("/admin/").await.status, 200);
-    store::staff_revoke(&fx.store, &staff_key(), crate::dates::unix_now()).unwrap();
+    store::staff_revoke(&fx.store, &staff_key(), crate::dates::now_ms()).unwrap();
     let after = fx.get("/admin/").await;
     assert_eq!(
         after.status, 303,
         "the vault still lists the key; the revocation wins"
     );
-    store::staff_allow(&fx.store, &staff_key(), None, crate::dates::unix_now()).unwrap();
+    store::staff_allow(&fx.store, &staff_key(), None, crate::dates::now_ms()).unwrap();
     assert_eq!(
         fx.get("/admin/").await.status,
         303,
@@ -467,17 +467,20 @@ async fn revoking_the_key_ends_the_session_on_the_next_request() {
 #[tokio::test]
 async fn an_idle_or_expired_session_is_not_served() {
     let fx = fixture(Door::Listed).await;
-    let now = crate::dates::unix_now();
+    let now = crate::dates::now_ms();
     fx.store
         .connection()
-        .execute("UPDATE admin_sessions SET last_seen = ?1", [now - 31 * 60])
+        .execute(
+            "UPDATE admin_sessions SET last_seen_at = ?1",
+            [now - 31 * crate::dates::MINUTE],
+        )
         .unwrap();
     assert_eq!(fx.get("/admin/").await.status, 303, "idle for 31 minutes");
     let fresh = fixture(Door::Listed).await;
     fresh
         .store
         .connection()
-        .execute("UPDATE admin_sessions SET expiry = ?1", [now - 1])
+        .execute("UPDATE admin_sessions SET expires_at = ?1", [now - 1])
         .unwrap();
     assert_eq!(
         fresh.get("/admin/").await.status,
@@ -521,6 +524,7 @@ async fn hostile_strings_are_escaped_on_every_page_that_shows_them() {
     fx.store
         .append_letter(
             mailbox,
+            AccountId(100_002),
             &letter_body(
                 other.0,
                 HOSTILE,
@@ -532,12 +536,19 @@ async fn hostile_strings_are_escaped_on_every_page_that_shows_them() {
         .unwrap();
     let board = BoardId(1 << 24 | 66 << 8 | 1);
     fx.store
-        .post(board, format!("{HOSTILE}|<iframe src=//evil>").as_bytes())
+        .post(
+            board,
+            AccountId(100_001),
+            None,
+            format!("{HOSTILE}|<iframe src=//evil>").as_bytes(),
+        )
         .unwrap();
     let complaint = BoardId(99 << 8 | 3);
     fx.store
         .post(
             complaint,
+            AccountId(100_001),
+            Some(AccountId(100_002)),
             format!(
                 "{HOSTILE}|Complaint: From: x; about: Bruno, who said \"<svg onload=alert(2)>\""
             )
@@ -623,6 +634,7 @@ async fn a_letter_cannot_be_read_without_a_typed_reason_and_every_read_is_record
     fx.store
         .append_letter(
             a,
+            AccountId(100_002),
             &letter_body(b.0, "Bruno", "Elaine", "hello", "meet me at the pier"),
         )
         .unwrap();
@@ -878,6 +890,7 @@ async fn deleting_and_restoring_use_the_retention_paths() {
     fx.store
         .append_letter(
             mailbox,
+            AccountId(100_001),
             &letter_body(mailbox.0, "Elaine", "Elaine", "n", "t"),
         )
         .unwrap();
@@ -921,7 +934,10 @@ async fn removing_a_post_hides_it_for_its_window_and_needs_a_yes() {
     let fx = fixture(Door::Listed).await;
     fx.account(100_001, "Elaine");
     let board = BoardId(1 << 24 | 66 << 8 | 1);
-    let post = fx.store.post(board, b"Elaine|spam spam spam").unwrap();
+    let post = fx
+        .store
+        .post(board, AccountId(100_001), None, b"Elaine|spam spam spam")
+        .unwrap();
     let path = format!("/admin/posts/{}/{}/remove", board.0, post.0);
     let ask = fx.post(&path, &[]).await;
     assert!(ask.body.contains("needs a yes"));
@@ -966,7 +982,15 @@ async fn complaints_are_marked_beside_the_original_and_link_to_the_people_named(
     fx.store.assign_mailbox(AccountId(100_002)).unwrap();
     let board = BoardId(99 << 8 | 3);
     let body = "Elaine|Complaint: From: Elaine in: Tavern; about: Bruno, who said \"rude\" Comments: very rude";
-    let post = fx.store.post(board, body.as_bytes()).unwrap();
+    let post = fx
+        .store
+        .post(
+            board,
+            AccountId(100_001),
+            Some(AccountId(100_002)),
+            body.as_bytes(),
+        )
+        .unwrap();
     let list = fx.get("/admin/complaints").await.body;
     assert!(
         list.contains("Elaine") && list.contains("waiting"),
@@ -1064,7 +1088,7 @@ async fn holds_are_placed_and_released_through_the_retention_code() {
     assert_eq!(done.status, 200);
     assert!(done.body.contains("through 2099-01-01"), "{}", done.body);
     assert!(done.body.contains("overrides the purge"));
-    assert!(crate::retention::account_held(&fx.store, 100_001, crate::dates::unix_now()).unwrap());
+    assert!(crate::retention::account_held(&fx.store, 100_001, crate::dates::now_ms()).unwrap());
     let ask = fx
         .post("/admin/holds/release", &[("account", "100001")])
         .await;
@@ -1129,9 +1153,14 @@ async fn the_dashboard_counts_and_the_empty_states_speak_in_the_clerk_s_voice() 
     assert!(page.contains("/healthz") && page.contains("/admin/healthz"));
     fx.account(100_001, "Elaine");
     fx.store
-        .post(BoardId(1 << 24 | 66 << 8 | 1), b"Elaine|hi")
+        .post(
+            BoardId(1 << 24 | 66 << 8 | 1),
+            AccountId(100_001),
+            None,
+            b"Elaine|hi",
+        )
         .unwrap();
-    let counts = store::counts(&fx.store, crate::dates::unix_now()).unwrap();
+    let counts = store::counts(&fx.store, crate::dates::now_ms()).unwrap();
     assert_eq!((counts.accounts, counts.posts, counts.letters), (1, 1, 0));
     assert_eq!(fx.get("/admin/healthz").await.body, "ok");
     assert_eq!(fx.get("/admin/nowhere").await.status, 404);

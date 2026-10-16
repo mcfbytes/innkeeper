@@ -4,7 +4,8 @@ use tracing::{info, warn};
 
 use crate::assumptions::{PASSWORD_REFUSED_SUB_ASSUMED, UNLISTED_LAND_NAK_ASSUMED};
 use crate::{
-    Account, Ack, ChangePassword, HostMessage, Login, LoginNakReason, Nak, Refusal, World,
+    Account, AccountRecord, Ack, ChangePassword, HostMessage, Login, LoginNakReason, Nak, Refusal,
+    StoreError, World,
 };
 
 const PASSWORD_TRIES: u8 = 3;
@@ -18,10 +19,25 @@ pub(crate) fn admit(world: &World, login: &Login) -> Result<Account, Nak> {
         let text = "This land is not known here.";
         return Err(Nak::login(UNLISTED_LAND_NAK_ASSUMED, 0, text));
     }
-    world.accounts.admit(login).map_err(|refusal| {
+    let account = world.accounts.admit(login).map_err(|refusal| {
         warn!(account = login.account.0, ?refusal, "login refused");
         nak_for(refusal)
-    })
+    })?;
+    if !world.accounts.is_stored() {
+        give_a_row(world, login);
+    }
+    Ok(account)
+}
+
+/// A book that is not the store's (the dev default, a test's list) still gives the account a row,
+/// so its bankroll, mail, posts and saves have a parent: the store keeps no orphans
+/// (docs/server/store.md section 2). A row already there, live or deleted, is left alone.
+fn give_a_row(world: &World, login: &Login) {
+    let record = AccountRecord::new(login.password, login.name.as_str());
+    match world.store.create_account(login.account, record) {
+        Ok(()) | Err(StoreError::AccountExists(_)) => {}
+        Err(error) => warn!(account = login.account.0, %error, "no store row for the account"),
+    }
 }
 
 /// Stores the new password for the logged-in account; the Ack tells the client to keep it too.

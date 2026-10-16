@@ -281,8 +281,15 @@ mod tests {
         channel
     }
 
+    /// Alice and Bob have account rows: a save needs its account (docs/server/store.md).
     fn new_store() -> Arc<dyn Store> {
-        Arc::new(MemoryStore::new())
+        let store = MemoryStore::new();
+        for id in [ALICE, BOB] {
+            let record =
+                innkeeper_world::AccountRecord::new(innkeeper_world::EncodedPassword([1; 10]), "p");
+            store.create_account(id, record).unwrap();
+        }
+        Arc::new(store)
     }
 
     fn ask(channel: &mut SaveChannel, request: &Value, now: u64) -> Value {

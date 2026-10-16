@@ -140,7 +140,7 @@ fn attestation_is_kept_on_the_identity() {
     let attested = Attested {
         age: 18,
         terms: 2,
-        on: "2026-10-16".into(),
+        at: 1_792_108_800_000,
     };
     record_attestation(&store, &key, &attested).unwrap();
     let row = identity(&store, &key).unwrap().unwrap();

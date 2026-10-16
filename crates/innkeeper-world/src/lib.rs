@@ -33,7 +33,7 @@ mod user_find;
 mod world;
 
 pub use account::{Account, AccountBook, Enrolment, Refusal};
-pub use bbs::{is_complaint_board, COMPLAINT_BOARD_LOCATION};
+pub use bbs::{is_complaint_board, named_offender, post_kind, PostKind, COMPLAINT_BOARD_LOCATION};
 pub use error::MessageError;
 pub use host_time::{Clock, FixedClock, HostTime, SystemClock};
 pub use ids::{
@@ -68,7 +68,7 @@ pub use retention::RetentionPolicy;
 #[cfg(feature = "test-support")]
 pub use store::conformance;
 pub use store::{
-    AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post, PostId, Store,
-    StoreError,
+    not_a_complaint, AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post,
+    PostId, Store, StoreError,
 };
 pub use world::World;

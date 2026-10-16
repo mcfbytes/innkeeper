@@ -15,7 +15,7 @@ pub struct RetentionPolicy {
     pub complaint_days: u32,
     /// Sealed connection records, counted from when the connection opened.
     pub audit_days: u32,
-    /// Expired session tokens, counted from expiry. The sessions table is not built yet.
+    /// Expired session tokens, counted from expiry.
     pub session_days: u32,
     /// The operator portal's audit log (who changed what, and every letter read), counted from the
     /// entry. A hold on the account an entry concerns keeps it.
@@ -37,8 +37,9 @@ impl Default for RetentionPolicy {
 }
 
 impl RetentionPolicy {
-    /// Seconds in `days`, for a cutoff of `now - seconds`.
-    pub fn seconds(days: u32) -> i64 {
-        i64::from(days) * 86_400
+    /// Milliseconds in `days`, for a cutoff of `now - millis`: every stored time is Unix
+    /// milliseconds (docs/server/store.md section 3).
+    pub fn millis(days: u32) -> i64 {
+        i64::from(days) * 86_400_000
     }
 }

@@ -340,7 +340,7 @@ fn adopt_if(listener: Option<StdListener>) -> Result<Option<TcpListener>, Server
 }
 
 fn run_purge(store: &SqliteStore, policy: RetentionPolicy) {
-    match retention::purge_expired(store, policy, dates::unix_now()) {
+    match retention::purge_expired(store, policy, dates::now_ms()) {
         Ok(counts) => retention::log_counts(&counts),
         Err(error) => warn!(%error, "retention purge failed"),
     }

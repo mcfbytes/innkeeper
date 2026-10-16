@@ -40,16 +40,24 @@ word at byte 6 is the literal 99, which is the complaint board's location (`0x63
   `persona|Complaint: text`. The client's own `Complaint|` prefix is dropped; the post records the writing
   account (`posts.account`), so the account's export and delete find it (privacy.md sections 1 and 6);
 - keeps at most `COMPLAINT_TEXT_LIMIT_ASSUMED` (2000) bytes of the text;
+- records the account the complaint is about (`posts.about_account`) when it can tell, as below;
 - is covered by the 365-day complaint retention (`--retain-complaint-days`) because the board location is
-  `0x63`, and by a legal hold on the author's account;
-- logs only the account, the post id, the length and whether someone was named ("complaint kept"). The
+  `0x63`, and by a legal hold on the author's account or on the account it is about;
+- logs only the account, the post id, the length, whether someone was named and the account resolved for
+  them ("complaint kept"). The
   decoded request prints `ComplaintText(len N)`, never the text, in every mode. The raw hex line of the
   verbose mode still carries the bytes, as it does for mail; `--public` drops it;
 - answers nothing, and needs no land: the hub has none for the player. A store failure is logged as a
   warning with the length and the account.
 
 The SID of the player complained about (sub 9) is a connection-local object number, so it is not stored; the
-client's text names the player. Section 2 of the board (Member Services) and section 3 (this) are listed by no
+client's text names the player after `about: `, up to the next `,` or `;` (`bbs::named_offender`, 1 to 16
+printable characters). The host resolves that name once, at filing time, against the players online
+(`bbs::offender`): when exactly one account other than the complainer's is playing under that persona,
+case-insensitive and trimmed, that account is stored as `about_account`. No match, two accounts under the
+name, or only the complainer leaves `about_account` NULL, and the name stays only in the text. Nothing reads
+the name again later: the portal links the complaint to `about_account` and the author's account, never to an
+account found by name. Section 2 of the board (Member Services) and section 3 (this) are listed by no
 directory, so no game client can read either back.
 
 ## 3. Bulletin board erase (27/6)
@@ -61,8 +69,9 @@ no bulletin boards available." Erase is only offered at sysop level 3, from the 
 
 27/6 removes message number `message` (the position in the board, counted from 1) of the board named by
 `location` and `section`, in the player's land. The host deletes it when the requester's flags are privileged
-(`0x0002` or `0x0004`, the same flags that move the text of a read) or the post's author is the requester's
-persona (`ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED`), and ignores it otherwise; a message that is not there is
+(`0x0002` or `0x0004`, the same flags that move the text of a read) or the post was written by the requester's
+account (`posts.account`; the name at the head of the body is not compared, so a player cannot erase a
+same-named player's post; `ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED`), and ignores it otherwise; a message that is not there is
 ignored. No reply is sent. A deleted post leaves the board's numbering shifted, as every delete here does. Not
 exercised live: nothing reaches it while the hub's directory is empty (the transcripts test it on the Tavern board).
 

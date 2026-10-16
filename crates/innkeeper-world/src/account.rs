@@ -119,6 +119,12 @@ impl AccountBook {
         }
     }
 
+    /// True when the book's accounts are the store's rows. The dev and test books admit numbers the
+    /// store has never seen; the logon gives such an account a row so what it writes has a parent.
+    pub fn is_stored(&self) -> bool {
+        matches!(self.admission, Admission::Stored { .. })
+    }
+
     /// Keeps a new password for an account the book stores; other books have nothing to update.
     pub fn change_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), Refusal> {
         match &self.admission {
@@ -298,14 +304,6 @@ mod tests {
             Some(MONEY_STARTING_BALANCE)
         );
         assert_eq!(book.admit(&login(100_002, 8)), Err(Refusal::WrongPassword));
-        store
-            .set_money(AccountId(100_003), Money(1_000_000))
-            .unwrap();
-        assert!(book.admit(&login(100_003, 4)).is_ok());
-        assert_eq!(
-            store.money(AccountId(100_003)).unwrap(),
-            Some(Money(1_000_000))
-        );
     }
 
     #[test]

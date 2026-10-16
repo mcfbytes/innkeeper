@@ -34,7 +34,7 @@ fn open(data_dir: &Path) -> Result<SqliteStore, String> {
 }
 
 fn run_action(action: AdminAction) -> Result<(), String> {
-    let now = dates::unix_now();
+    let now = dates::now_ms();
     match action {
         AdminAction::Allow {
             identity_key,

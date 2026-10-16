@@ -20,6 +20,10 @@ fn stored_table(flags: u16) -> (Table, Arc<MemoryStore>) {
     let mut record = AccountRecord::new(EncodedPassword(LOGIN_PASSWORD), "guybrush");
     record.user_flags = 0x0200 | flags;
     store.create_account(AccountId(100_001), record).unwrap();
+    for id in [100_002, 100_003] {
+        let other = AccountRecord::new(EncodedPassword(LOGIN_PASSWORD), "Mo");
+        store.create_account(AccountId(id), other).unwrap();
+    }
     let mut table = Table::new();
     table.world = World::stored(store.clone());
     (table, store)
@@ -27,6 +31,52 @@ fn stored_table(flags: u16) -> (Table, Arc<MemoryStore>) {
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x} ")).collect()
+}
+
+/// The table's Login with another account number and name.
+fn login_as(account: u32, name: &str) -> String {
+    let mut bytes = vec![0x35, 0, 0, 0, 1, 2, 3, 0x12];
+    bytes.extend(account.to_le_bytes());
+    bytes.push(1);
+    bytes.extend(LOGIN_PASSWORD);
+    bytes.push(0);
+    bytes.extend(name.as_bytes());
+    bytes.push(0);
+    hex(&bytes)
+}
+
+fn named_accounts(store: &MemoryStore) -> Vec<Option<AccountId>> {
+    let board = BoardId(u32::from(COMPLAINT_BOARD_LOCATION) << 8 | 3);
+    let posts = store.posts(board).unwrap();
+    posts.iter().map(|post| post.about).collect()
+}
+
+#[test]
+fn a_complaint_names_the_account_of_the_one_player_online_under_that_name() {
+    let (mut table, store) = stored_table(0);
+    let about_mo = hex(b"Complaint|From: guybrush about: Mo, who said \"boo\"\0");
+    let about_nobody = hex(b"Complaint|From: guybrush about: Zed, rude\0");
+    let steps = format!(
+        "
+        A > login | {{login}}
+        A < login ack | {{login ack}}
+        B > login | {}
+        B < login ack | {{login ack}}
+        A > about Mo, the only Mo online | 1b 09 00 00 00 01 63 00 34 12 {about_mo}
+        A > about Zed, who is not online | 1b 09 00 00 00 01 63 00 34 12 {about_nobody}
+        C > login | {}
+        C < login ack | {{login ack}}
+        A > about Mo, now two accounts | 1b 00 00 00 00 01 63 00 {about_mo}
+        ",
+        login_as(100_002, "Mo"),
+        login_as(100_003, "Mo"),
+    );
+    table.run(&steps);
+    assert_eq!(
+        named_accounts(&store),
+        [Some(AccountId(100_002)), None, None],
+        "a name two accounts share online, or nobody's, names no account"
+    );
 }
 
 fn bodies(store: &MemoryStore, location: u16, section: u32) -> Vec<String> {
@@ -96,7 +146,7 @@ fn erase_removes_the_players_own_message_and_leaves_other_peoples() {
     let (mut table, store) = stored_table(0);
     // Message 1 is another account's (the name at its head does not matter); message 2 is the player's.
     store
-        .post_as(BOARD_59_1, b"Sir|hi\0", Some(AccountId(100_002)))
+        .post(BOARD_59_1, AccountId(100_002), None, b"Sir|hi\0")
         .unwrap();
     let steps = format!(
         "{IN_A_LAND}
@@ -114,19 +164,25 @@ fn erase_removes_the_players_own_message_and_leaves_other_peoples() {
 #[test]
 fn a_player_erases_by_account_not_by_a_name_another_player_shares() {
     let (mut table, store) = stored_table(0);
-    // Another account that shares the persona, and an old post that has no account.
+    // Two other accounts write under the player's own name: neither post is the player's.
+    store.set_persona(AccountId(100_002), "Guybrush").unwrap();
     store
-        .post_as(BOARD_59_1, b"Guybrush|twin\0", Some(AccountId(100_002)))
+        .post(BOARD_59_1, AccountId(100_002), None, b"Guybrush|twin\0")
         .unwrap();
-    store.post(BOARD_59_1, b"Guybrush|old\0").unwrap();
+    store
+        .post(BOARD_59_1, AccountId(100_003), None, b"guybrush|other\0")
+        .unwrap();
     let steps = format!(
         "{IN_A_LAND}
         A > 27/6 erase the twin's message | 1b 06 59 00 00 01 01 00 01 00 00
-        A > 27/6 erase the old message | 1b 06 59 00 00 01 01 00 02 00 00
+        A > 27/6 erase the other one | 1b 06 59 00 00 01 01 00 02 00 00
         "
     );
     table.run(&steps);
-    assert_eq!(bodies(&store, 0x59, 1 | 4 << 24), ["Guybrush|twin\0"]);
+    assert_eq!(
+        bodies(&store, 0x59, 1 | 4 << 24),
+        ["Guybrush|twin\0", "guybrush|other\0"]
+    );
 }
 
 #[test]
@@ -142,9 +198,9 @@ fn board_posts_and_complaints_record_the_writing_account() {
     );
     table.run(&steps);
     let writer = |board: BoardId| store.posts(board).unwrap()[0].account;
-    assert_eq!(writer(BOARD_59_1), Some(AccountId(100_001)));
+    assert_eq!(writer(BOARD_59_1), AccountId(100_001));
     let complaint = BoardId(u32::from(COMPLAINT_BOARD_LOCATION) << 8 | 3);
-    assert_eq!(writer(complaint), Some(AccountId(100_001)));
+    assert_eq!(writer(complaint), AccountId(100_001));
 }
 
 #[test]

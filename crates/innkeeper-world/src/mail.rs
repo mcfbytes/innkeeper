@@ -31,7 +31,7 @@ pub(crate) fn assign_mailbox(
     request: MailboxRequest,
 ) -> HostMessage {
     let to = request.sid;
-    let answer = match world.store.assign_mailbox(account.id) {
+    let answer = match own_mailbox(world, account.id) {
         Ok(mailbox) => MailboxAnswer::Assigned { to, mailbox },
         Err(StoreError::UnknownAccount(_)) => MailboxAnswer::Refused {
             to,
@@ -63,7 +63,7 @@ pub(crate) fn answer(world: &World, account: &Account, request: &MailRequest) ->
     if let Some(replies) = replies {
         return replies.into_iter().map(HostMessage::Mail).collect();
     }
-    let reply = match world.store.assign_mailbox(account.id) {
+    let reply = match own_mailbox(world, account.id) {
         Ok(own) => PostOffice {
             world,
             account: account.id,
@@ -73,6 +73,16 @@ pub(crate) fn answer(world: &World, account: &Account, request: &MailRequest) ->
         Err(error) => request.refused(refusal_of(&error)),
     };
     reply.into_iter().map(HostMessage::Mail).collect()
+}
+
+/// The account's box. A book that is not the store's (the open book) runs no post office: its
+/// accounts have store rows only so their other writes have a parent (`logon::give_a_row`), and the
+/// client is told there is no mailbox, as before those rows existed (mail.md section 6).
+fn own_mailbox(world: &World, account: AccountId) -> Result<MailboxNumber, StoreError> {
+    match world.accounts.is_stored() {
+        true => world.store.assign_mailbox(account),
+        false => Err(StoreError::UnknownAccount(account)),
+    }
 }
 
 fn refusal_of(error: &StoreError) -> MailFault {
@@ -244,7 +254,10 @@ impl PostOffice<'_> {
             received: self.world.clock.now(),
             envelope: envelope.clone(),
         };
-        let appended = self.world.store.append_letter(mailbox, &letter.to_body());
+        let appended = self
+            .world
+            .store
+            .append_letter(mailbox, self.account, &letter.to_body());
         appended.map(drop).map_err(|error| refusal_of(&error))
     }
 }

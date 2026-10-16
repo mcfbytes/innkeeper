@@ -8,8 +8,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use innkeeper_session::SessionConfig;
 use innkeeper_world::{
-    AccountId, AccountRecord, ClientMessage, ClientVersion, ConnectionId, HostMessage, LandType,
-    Login, PasswordSource, Store, World,
+    AccountId, AccountRecord, ClientMessage, ClientVersion, ConnectionId, EncodedPassword,
+    HostMessage, LandType, Login, PasswordSource, Store, World,
 };
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
@@ -96,11 +96,10 @@ impl Fixture {
     /// A signed-in identity and a live token for it, without a provider round trip.
     fn token(&self, subject: &str) -> (String, IdentityKey) {
         let (token, key) = self.token_unattested(subject);
-        let on = "2026-10-16".to_owned();
         let said = store::Attested {
             age: 18,
             terms: 1,
-            on,
+            at: crate::dates::now_ms(),
         };
         store::record_attestation(&self.store, &key, &said).unwrap();
         (token, key)
@@ -112,7 +111,7 @@ impl Fixture {
             HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap()
         ])
         .unwrap();
-        let now = crate::dates::unix_now();
+        let now = crate::dates::now_ms();
         let signed =
             store::sign_in(&self.store, &keys, "iss", subject, "dev", || None, now).unwrap();
         let token = keys::new_token();
@@ -121,7 +120,7 @@ impl Fixture {
             &signed.key,
             &keys::token_hash(&token),
             now,
-            now + 3600,
+            now + crate::dates::HOUR,
         )
         .unwrap();
         (token.to_string(), signed.key)
@@ -454,7 +453,7 @@ async fn an_account_or_password_needs_the_age_and_terms_answer() {
         &store::Attested {
             age: 13,
             terms: 1,
-            on: "2026-10-16".into(),
+            at: crate::dates::now_ms(),
         },
     )
     .unwrap();
@@ -613,6 +612,10 @@ async fn the_saves_route_hands_an_owner_the_files_the_channel_would() {
     for path in ["INN\\TWINION\\TWINCHAR.DAT", "INN\\TWINION\\AUTOMAPS.DAT"] {
         fx.store.save_write(id, path, &big, 79, true).unwrap();
     }
+    let stranger = AccountRecord::new(EncodedPassword([5; 10]), "other");
+    fx.store
+        .create_account(AccountId(100_009), stranger)
+        .unwrap();
     fx.store
         .save_write(AccountId(100_009), chars, b"not yours", 1, true)
         .unwrap();

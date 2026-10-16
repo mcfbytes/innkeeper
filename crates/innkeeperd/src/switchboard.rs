@@ -25,7 +25,7 @@ type Inboxes = HashMap<ConnectionId, Line>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Connected {
     pub(crate) connection: ConnectionId,
-    /// Unix seconds.
+    /// Unix milliseconds.
     pub(crate) since: i64,
     pub(crate) transport: &'static str,
 }
@@ -52,7 +52,7 @@ impl Switchboard {
         let line = Line {
             sender,
             kick: Arc::clone(&kick),
-            since: dates::unix_now(),
+            since: dates::now_ms(),
             transport: "",
         };
         self.lock().insert(connection, line);
