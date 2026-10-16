@@ -382,7 +382,9 @@ hour and fetched again when a token names an unknown key. Redirects are not foll
 has not come back within ten minutes is forgotten.
 
 Apple is not supported: its client secret is a signed JWT, which this file cannot express yet. For
-Microsoft, use a tenant-specific issuer or `https://login.microsoftonline.com/consumers/v2.0`; the
+Microsoft, use a tenant-specific issuer, or for personal accounts the consumer tenant's
+`https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0`. Discovery must return the
+configured issuer exactly: the `/consumers/v2.0` document names that GUID issuer instead of itself, and the
 multi-tenant `common` issuer does not match the tokens it signs.
 
 ### 8.3 Key Vault
