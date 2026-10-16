@@ -13,6 +13,8 @@ use crate::assumptions::{
 };
 use crate::message::Command;
 use crate::rpg::RPG_OBJECT_LAND_TYPE;
+#[cfg(test)]
+use crate::Cookie;
 use crate::{
     GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest, HostMessage, JoinNet, LandType, Nak,
     ObjectKind, Sid,
@@ -75,6 +77,8 @@ enum GroupJoinRefusal {
 pub struct ObjectStore {
     objects: BTreeMap<Sid, NetObject>,
     shared_groups: HashMap<GroupKey, Sid>,
+    /// Conference name tail to the object that holds it. Empty until something binds a name.
+    conferences: HashMap<Vec<u8>, Sid>,
     next_sid: u16,
     locks: LockTable,
     games: GameBook,
@@ -132,6 +136,7 @@ impl ObjectStore {
         ObjectStore {
             objects: BTreeMap::new(),
             shared_groups: HashMap::new(),
+            conferences: HashMap::new(),
             next_sid: FIRST_SID,
             locks: LockTable::default(),
             games: GameBook::default(),
@@ -170,6 +175,39 @@ impl ObjectStore {
     /// The key of the shared group with this SID; none for an object, an own group or a free SID.
     pub fn group_key(&self, sid: Sid) -> Option<GroupKey> {
         self.objects.get(&sid)?.shared
+    }
+
+    /// The SID bound to this conference-name tail, or 0 when the name is free.
+    pub(crate) fn conference_sid(&self, name: &[u8]) -> Sid {
+        let Some(&sid) = self.conferences.get(name) else {
+            return Sid::GAME_OBJECT;
+        };
+        if self.objects.contains_key(&sid) {
+            sid
+        } else {
+            Sid::GAME_OBJECT
+        }
+    }
+
+    /// Remembers `name` on a new plain object. A name that already has a live object keeps it.
+    /// Nothing in a session binds a name yet; the check stays free until a caller does.
+    #[cfg(test)]
+    pub(crate) fn bind_conference(&mut self, connection: ConnectionId, name: &[u8]) -> Option<Sid> {
+        if let Some(sid) = self.conferences.get(name).copied() {
+            if self.objects.contains_key(&sid) {
+                return Some(sid);
+            }
+        }
+        let request = JoinNet {
+            cookie: Cookie(0),
+            kind: ObjectKind::Object,
+            land_type: LandType(0),
+            parameter: 0,
+            size: 1,
+        };
+        let sid = self.create(connection, request, Role::Object)?;
+        self.conferences.insert(name.to_vec(), sid);
+        Some(sid)
     }
 
     /// The land type the object was created with; none for a free SID.
@@ -443,6 +481,7 @@ impl ObjectStore {
             .flat_map(|group| self.remove_member(actor, group, sid))
             .collect();
         self.mirror.forget(sid);
+        self.conferences.retain(|_, bound| *bound != sid);
         if let Some(object) = self.objects.remove(&sid) {
             info!(sid = sid.0, request = ?object.request, "object freed");
             if let Some(key) = object.shared {

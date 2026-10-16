@@ -5,6 +5,7 @@
 mod account;
 mod assumptions;
 mod bbs;
+mod conference;
 mod error;
 mod host_time;
 mod ids;

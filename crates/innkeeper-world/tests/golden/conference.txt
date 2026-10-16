@@ -1,0 +1,6 @@
+# Conference name check (command 41/0), from hub/script.120 GotoConference::init and handleMsg.
+# The tail is the land number's low byte, 15 and 0. A free name is SID 0 at word 6; a taken name
+# is that object's SID. The word at byte 4 is unread.
+> conference name | 29 00 02 01 02 01 01 0F 00
+< name is free | 29 00 02 01 00 00 00 00
+< name is taken | 29 00 02 01 00 00 00 01

@@ -15,6 +15,9 @@ pub(crate) const OPEN_LAND_FLAGS_ASSUMED: LandFlags = LandFlags(0x01);
 pub(crate) const MEMBER_LIST_UNREAD_WORD_ASSUMED: u16 = 0;
 /// The word at byte 4 of a located-object reply: only the SID at byte 6 is read (section 3.2.1).
 pub(crate) const LOCATED_UNREAD_WORD_ASSUMED: u16 = 0;
+/// A conference name check is keyed by the raw tail `GotoConference::init` sends: the land number's
+/// low byte, 15 and 0 (`hub/script.120`). A 41/0 whose tail was a title string would settle it.
+pub(crate) const CONFERENCE_KEY_IS_THE_RAW_TAIL_ASSUMED: bool = true;
 /// Byte 1 of a notice: both DOS handlers show the text from byte 2 and never read it (section 3.2.1).
 pub(crate) const NOTICE_UNREAD_BYTE_ASSUMED: u8 = 0;
 /// Host time in HostInfoRequest reply (messages.md 3.3): sent as UTC, matching SystemTime::now().

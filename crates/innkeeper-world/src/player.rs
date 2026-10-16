@@ -2,8 +2,8 @@ use tracing::{info, info_span, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::{
-    bbs, logon, mail, mall, money, presence, red_baron, router, rpg, signup, Account, AccountId,
-    ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, Login,
+    bbs, conference, logon, mail, mall, money, presence, red_baron, router, rpg, signup, Account,
+    AccountId, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, Login,
     ObjectStore, Place, Unexplained, UnexplainedCommand, World,
 };
 
@@ -150,8 +150,9 @@ impl PlayerSession {
                 Vec::new()
             }
             ClientMessage::ObjExists(ref lookup) => self.when_logged_in(|_| {
-                let located =
-                    rpg::locate_service(lookup).or_else(|| red_baron::locate_service(lookup));
+                let located = rpg::locate_service(lookup)
+                    .or_else(|| red_baron::locate_service(lookup))
+                    .or_else(|| conference::locate(objects, lookup));
                 if located.is_none() {
                     info!(?message, "decoded, no handler yet: ignored");
                 }
