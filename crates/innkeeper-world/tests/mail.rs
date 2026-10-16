@@ -252,19 +252,46 @@ fn a_forwarded_letter_reaches_the_third_box_under_the_new_name() {
 }
 
 #[test]
-fn a_form_for_a_service_box_is_dropped_and_the_service_lists_are_empty() {
+fn the_service_lists_are_answered_and_services_has_no_rows() {
     let mut host = Host::stored();
     let alice = host.join(LOGIN_A);
     host.mailbox_of(alice);
+    assert_eq!(host.say(alice, &about_box(31, 1)), [reply(19, &[long(1)])]);
+    let request = [37, 32, 0, 0, 0, 0, 0, 0];
+    let answer = host.say(alice, &request);
+    let mut expected = request.to_vec();
+    expected.extend([1, 0, 0xFE, 0, 100]);
+    expected.extend(b"Member_Services\0");
+    expected.extend([2, 0, 0xFE, 0, 101]);
+    expected.extend(b"Accounting\0");
+    assert_eq!(answer, [expected]);
+}
+
+#[test]
+fn a_form_to_a_service_box_is_acknowledged_with_that_box() {
+    let mut host = Host::stored();
+    let alice = host.join(LOGIN_A);
+    for (to, text) in [(0x00FE_0001, "question"), (0x00FE_0002, "card 4111")] {
+        let form = send(30, to, envelope(1, b"MemberServ", b"User", text.as_bytes()));
+        let ack = [0, 0, 0, 1, 37, 30, 0, to as u8, 0, 0xFE, 0];
+        assert_eq!(host.say(alice, &form), [ack]);
+    }
+    let elsewhere = send(30, 5, envelope(1, b"MemberServ", b"User", b"x\0"));
+    let nak = [1, 0, 0, 1, 37, 30, 6, 5, 0, 0, 0];
+    assert_eq!(host.say(alice, &elsewhere), [nak]);
+}
+
+#[test]
+fn the_open_book_still_lists_the_services_and_takes_the_forms() {
+    let mut host = Host::on(World::stock());
+    let alice = host.join(LOGIN_A);
     let form = send(
         30,
-        0x10000,
-        envelope(1, b"MemberServ", b"User", b"bill me\0"),
+        0x00FE_0001,
+        envelope(1, b"MemberServ", b"User", b"hi\0"),
     );
-    assert!(host.say(alice, &form).is_empty());
-    assert_eq!(host.say(alice, &about_box(31, 1)), [reply(19, &[long(1)])]);
-    let system_list = [37, 32, 0, 0, 0, 0, 0, 0];
-    assert_eq!(host.say(alice, &system_list), [system_list]);
+    assert_eq!(host.say(alice, &form).len(), 1);
+    assert_eq!(host.say(alice, &[37, 32, 0, 0, 0, 0, 0, 0]).len(), 1);
 }
 
 #[test]

@@ -16,6 +16,7 @@ stays in the file until the retention job in section 6 hard-purges it. Schema:
 | `mailboxes` | `number` (stable from 1), `account`, `deleted_at` | Command 45 assigns one box per account | With the account. A box with letters still in it waits for those letters (section 6) |
 | `letters` | `id`, `mailbox`, `body` (six time bytes then the client's envelope: names, subject, text), `deleted_at` | Mail (command 37). The store does not look inside | Hidden at the player's delete; hard-purged after the mail window |
 | `posts` | `id`, `board`, `body` (`author\|text` as the RPG client wrote it), `deleted_at`, `created_at` | Bulletin board (command 27) | Hidden when deleted; hard-purged after the post window. Complaints use `created_at` (section 6) |
+| `posts` (Member Services) | as `posts`, on board location `0x63`, section 2, land 0: `persona\|Member Services: text` | A question a player types into Town Hall "Ask Member Services" is a message to the operator ([services.md](services.md) section 5) | Complaint retention, 365 days from arrival (section 6) |
 | `money` | `account`, `amount`, `deleted_at` | CasinoLand bankroll (command 40) | With the account |
 | `saves` | `account`, `path`, `version`, `hash`, `data`, `updated_at`, `current`, `deleted_at` | Browser game files ([saves.md](saves.md)) | With the account. The channel still keeps three versions per path and drops older versions at once |
 | `audit_sessions` | `id`, `started_at`, `ended_at`, `account_id`, `identity_key`, `hold_until`, `sealed` | Lawful-request record of a connection (section 5) | From creation, for `--audit-retention-days` (default 90) |
@@ -27,6 +28,8 @@ HMAC and is written NULL today.
 A 40/4 persona rename is session-only and is not written to `accounts`. Board posts are attributed by
 matching the stored Login persona to the `author` prefix, case-insensitive; a renamed session can leave
 a post the delete command will not find. An empty persona matches no posts.
+
+`Envelope`'s `Debug` prints the text length and not the text, so a letter or a Town Hall form never appears in a log line, in any mode. (The raw hex line of the verbose default mode still carries message bytes; `--public` drops them.)
 
 Readable IP addresses and message contents are not written to logs or to clear columns. The peer
 address of a connection is inside `audit_sessions.sealed` only (section 5). The planned sign-in table
@@ -230,6 +233,8 @@ Players see a deleted letter or post as gone: every read skips `deleted_at`. The
 delete in the protocol today is mail sub-command 26. Command 27 has no delete sub-command on this
 host (27/6, 27/8 and 27/9 are unsupported). `Store::delete_post` is there for the operator path, and
 `account delete` soft-deletes posts whose `author` is the stored persona.
+
+The Town Hall's "Update Account Information" form is free text about billing, so it may hold an address or a card number. It is acknowledged and discarded unread: nothing of it is stored, and only the account number and the fact that a form arrived are logged. The "Ask Member Services" text is kept as a complaint post (section 1) and is part of the account's export and delete (matched by persona).
 
 Complaints are posts on board location `0x63` (`COMPLAINT_BOARD_LOCATION`), any land. That is the
 operator-only complaint board the RPG client already lists. LSCI 27/9 is not a stored complaint

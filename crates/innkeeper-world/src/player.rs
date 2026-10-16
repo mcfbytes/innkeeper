@@ -4,9 +4,9 @@ use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::objects::OnlinePlayer;
 use crate::{
     bbs, conference, logon, mail, mall, money, object_list, presence, red_baron, router, rpg,
-    signup, user_find, Account, AccountId, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
-    HostMessage, JoinNet, LogPolicy, Login, ObjectStore, Place, Unexplained, UnexplainedCommand,
-    World,
+    signup, town_hall, user_find, Account, AccountId, AccountRequest, ClientMessage, ConnectionId,
+    Delivery, HostInfoRequest, HostMessage, JoinNet, LogPolicy, Login, ObjectStore, Place,
+    Unexplained, UnexplainedCommand, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -30,6 +30,8 @@ struct Player {
     /// The land place of the player's latest land joinNet; the RPG clients' map groups and boards
     /// belong to it. A group leave does not clear it.
     place: Option<Place>,
+    /// True once the logon's 34/4 has been seen; later ones come from the Town Hall.
+    logon_rates_seen: bool,
 }
 
 impl Player {
@@ -188,6 +190,7 @@ impl PlayerSession {
             ClientMessage::UserFind(ref request) => {
                 self.when_logged_in(|_| reply(user_find::answer(world, objects, request)))
             }
+            ClientMessage::Account(request) => reply(self.account_request(&request)),
         };
         self.publish(objects, connection);
         deliveries
@@ -248,6 +251,23 @@ impl PlayerSession {
         rpg::join(objects, connection, join, player.place)
     }
 
+    /// The Town Hall billing screens. The first 34/4 of a Login is the logon's and stays unanswered.
+    fn account_request(&mut self, request: &AccountRequest) -> Vec<HostMessage> {
+        match &mut self.state {
+            PlayerState::LoggedIn(player) => {
+                let _player = self
+                    .log
+                    .player_span(player.account.id.0, &player.account.persona)
+                    .entered();
+                town_hall::account_request(&player.account, &mut player.logon_rates_seen, request)
+            }
+            PlayerState::AwaitingLogin => {
+                warn!("message before Login ignored");
+                Vec::new()
+            }
+        }
+    }
+
     fn when_logged_in(&self, answer: impl FnOnce(&Player) -> Vec<Delivery>) -> Vec<Delivery> {
         match &self.state {
             PlayerState::LoggedIn(player) => {
@@ -280,6 +300,7 @@ impl PlayerSession {
                     login_name: login.name.clone(),
                     account,
                     place: None,
+                    logon_rates_seen: false,
                 });
                 HostMessage::LoginAccepted(ack)
             }

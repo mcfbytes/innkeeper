@@ -169,3 +169,39 @@ pub(crate) const FIND_ALSO_MATCHES_LOGIN_NAME_ASSUMED: bool = true;
 /// Find results follow connection order. `FindPerson::handleMsg` prints records as they arrive
 /// (section 3.3). A capture of two hits would settle the order.
 pub(crate) const FIND_RESULTS_IN_CONNECTION_ORDER_ASSUMED: bool = true;
+/// Bytes 4 to 15 of a 34/12 or 34/15 summary reply. `GetDetailedInfo::handleMsg` reads the length
+/// word at 16 and the text at 18 and nothing before them (`hub/script.050`). A capture of a live
+/// summary would say what the twelve bytes held.
+pub(crate) const SUMMARY_UNREAD_BYTES_ASSUMED: [u8; 12] = [0; 12];
+/// The first 34/4 after a Login is the logon request, which this host leaves unanswered. The
+/// logon handler would answer a rates text with a modal "Quit / OK" box on every logon
+/// (`RoomZeroHandler::handleMsg`, `hub/script.011`), and the Town Hall request is the same four
+/// bytes. Every later 34/4 is the Town Hall menu and gets the rates text. A client with
+/// `LSCI.CFG ShutUp` sends no logon request, so its first Town Hall request goes unanswered.
+pub(crate) const FIRST_RATES_REQUEST_IS_THE_LOGON_ASSUMED: bool = true;
+/// The mailbox the Member Services form (`"MemberServ"`) is sent to. `syslst.dat` type 100 carries
+/// it and the client compares it with the Ack (`TSNMap::handleMsg`, `hub/script.050`). Both words of
+/// the number must be below 256: `RoomZeroHandler` keeps each word of a list record as its low byte
+/// only (`syslst.dat` after a live logon holds 1 and 0xFE for the words 0x0001 and 0xFFFE), and the
+/// Ack's words are compared whole. Account mailboxes count up from 1, so a high word of 0xFE keeps
+/// the number out of reach of any account's box. The original host's numbers are unknown.
+pub(crate) const MEMBER_SERVICES_BOX_ASSUMED: MailboxNumber = MailboxNumber(0x00FE_0001);
+/// The mailbox the Update Account Information form (`"AcctUpdate"`) is sent to; `syslst.dat` type 101.
+pub(crate) const ACCOUNTING_BOX_ASSUMED: MailboxNumber = MailboxNumber(0x00FE_0002);
+/// A question for Member Services is kept as a post on the complaint board, under the complaint
+/// retention (docs/server/privacy.md section 6). The original host forwarded it to staff; this one
+/// keeps it for the operator.
+pub(crate) const MEMBER_SERVICES_MESSAGES_ARE_KEPT_ASSUMED: bool = true;
+/// The Update Account Information form is acknowledged and its text is thrown away. The form asks
+/// for billing changes in free text, so a player may type an address or a card number into it, and
+/// this host has no billing to change.
+pub(crate) const ACCOUNT_FORMS_ARE_DISCARDED_ASSUMED: bool = true;
+/// The longest Member Services message kept, in bytes. The client's input box holds far less.
+pub(crate) const MEMBER_SERVICES_MESSAGE_LIMIT_ASSUMED: usize = 2000;
+/// Section of the complaint board that holds Member Services messages. No directory lists it, so no
+/// client can read it back; the retention job finds it by the board's location, as for every complaint.
+pub(crate) const MEMBER_SERVICES_SECTION_ASSUMED: u16 = 2;
+/// A refused password change names sub-command 1 in its Nak: `RoomZeroHandler::handleMsg` shows its
+/// failure text for Nak 44 with sub 1 or 2 only, and a Nak with any other sub leaves the client
+/// waiting for the previous password to come back (`hub/script.011`, `hub/script.050`).
+pub(crate) const PASSWORD_REFUSED_SUB_ASSUMED: u8 = 1;

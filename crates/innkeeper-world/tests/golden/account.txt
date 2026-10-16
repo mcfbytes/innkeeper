@@ -1,0 +1,13 @@
+# The Town Hall billing screens (command 34), from hub/script.050 GetInfo and GetDetailedInfo.
+# Requests are "bbw" (4 rates, 5 status, 8 rates seen) and "bbwwwbw" (12 usage, 15 billing: sid, account
+# low and high words, a byte 0, a word 100). Replies are b 34, b whichCmd, w toSID, then a string at byte 4
+# (4, 5) or twelve unread bytes, a length word at 16 and the text from 18 (12, 15). docs/server/services.md.
+> rates 34/4 | 22 04 00 01
+> status 34/5 | 22 05 00 00
+> rates seen 34/8 | 22 08 00 01
+> usage summary 34/12 | 22 0c 00 01 a1 86 01 00 00 64 00
+> billing summary 34/15 | 22 0f 00 01 a1 86 01 00 00 64 00
+< rates text | 22 04 00 01 46 72 65 65 00
+< status text | 22 05 00 00 4f 4b 00
+< usage summary | 22 0c 00 01 00 00 00 00 00 00 00 00 00 00 00 00 05 00 4e 6f 6e 65 0a
+< billing summary | 22 0f 00 01 00 00 00 00 00 00 00 00 00 00 00 00 02 00 0d 0a

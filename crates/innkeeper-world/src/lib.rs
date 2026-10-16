@@ -27,6 +27,7 @@ mod rpg;
 pub mod saves;
 mod signup;
 mod store;
+mod town_hall;
 mod user_find;
 mod world;
 
@@ -41,14 +42,15 @@ pub use ids::{
 pub use land::LandCatalog;
 pub use log_policy::LogPolicy;
 pub use message::{
-    Ack, BbsReply, BbsRequest, BoardListing, BoardRef, ChangePassword, ClientMessage,
-    EncodedPassword, Envelope, FoundUser, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest,
-    HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory, LandEntry, LetterRef,
-    ListedLetter, Login, LoginAck, LoginNakReason, LoginStatus, MailFault, MailReply, MailRequest,
-    MailboxAnswer, MailboxRequest, MallHeader, MallReply, MallRequest, MessagePosition, MoneyReply,
-    Multicast, Nak, Notice, ObjExists, ObjFreeList, ObjNewList, ObjNewListReply, ObjectKind,
-    ObjectLocated, Occupancy, OutgoingLetter, PasswordSource, PlayStatus, ReadMoney, ReadStep,
-    SaveMoney, SendMessage, SetInt, SetPersona, SetStr, Signup, UserFind, UserFindReply,
+    AccountReply, AccountRequest, Ack, BbsReply, BbsRequest, BoardListing, BoardRef,
+    ChangePassword, ClientMessage, EncodedPassword, Envelope, FoundUser, GroupJoin, GroupLeave,
+    GroupMembers, GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet,
+    LandDirectory, LandEntry, LetterRef, ListedLetter, Login, LoginAck, LoginNakReason,
+    LoginStatus, MailFault, MailReply, MailRequest, MailboxAnswer, MailboxRequest, MallHeader,
+    MallReply, MallRequest, MessagePosition, MoneyReply, Multicast, Nak, Notice, ObjExists,
+    ObjFreeList, ObjNewList, ObjNewListReply, ObjectKind, ObjectLocated, Occupancy, OutgoingLetter,
+    PasswordSource, PlayStatus, ReadMoney, ReadStep, SaveMoney, SendMessage, ServiceKind, SetInt,
+    SetPersona, SetStr, Signup, SummaryKind, SystemService, UserFind, UserFindReply,
 };
 pub use message::{
     InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,

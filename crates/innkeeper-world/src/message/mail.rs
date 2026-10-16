@@ -75,7 +75,9 @@ fn read_time(reader: &mut WireReader) -> Result<HostTime, MessageError> {
 }
 
 /// A letter as the client composed it: every byte of a send message after the addressee's box.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// `Debug` prints the length of the text and not the text, so no log line carries what a player wrote
+/// in a letter or a Town Hall form (docs/server/privacy.md section 2).
+#[derive(Clone, PartialEq, Eq)]
 pub struct Envelope {
     /// Ten bytes the client fills from an empty string; nothing reads them.
     pub reserved: [u8; FIELD_LEN],
@@ -87,6 +89,19 @@ pub struct Envelope {
     pub sender: [u8; FIELD_LEN],
     /// The body as the client wrote it, with the NUL the client counts in.
     pub text: Vec<u8>,
+}
+
+impl std::fmt::Debug for Envelope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Envelope")
+            .field("from", &self.from)
+            .field("subject", &self.subject)
+            .field("flags", &self.flags)
+            .field("addressee", &self.addressee)
+            .field("sender", &self.sender)
+            .field("text_len", &self.text.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Envelope {
@@ -248,7 +263,7 @@ impl MailRequest {
         }
     }
 
-    /// The Nak that refuses this request, shaped as the client matches it; a form has no answer.
+    /// The Nak that refuses this request, shaped as the client matches it.
     pub fn refused(&self, fault: MailFault) -> Option<MailReply> {
         let refusal = |sub, to, mailbox| MailReply::Refused {
             sub,
@@ -263,7 +278,7 @@ impl MailRequest {
             MailRequest::NewMail { sid, mailbox } => Some(refusal(NEW_MAIL, *sid, *mailbox)),
             MailRequest::List { sid, mailbox } => Some(refusal(LIST, *sid, *mailbox)),
             MailRequest::Send { sub, letter } => Some(refusal(*sub, letter.sid, letter.to)),
-            MailRequest::Form(_) => None,
+            MailRequest::Form(letter) => Some(refusal(FORM, letter.sid, letter.to)),
             MailRequest::Read(letter) => Some(refusal(READ, letter.sid, letter.mailbox)),
             MailRequest::Delete(letter) => Some(refusal(DELETE, letter.sid, letter.mailbox)),
             MailRequest::Forward { letter, to, .. } => Some(refusal(FORWARD, letter.sid, *to)),
@@ -430,6 +445,54 @@ impl ListedLetter {
     }
 }
 
+/// What a `syslst.dat` record is for; `TSNServices` reads the type (`proc_256`, `hub/script.050`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ServiceKind {
+    /// 100: the Member Services mailbox, the target of the "MemberServ" form.
+    MemberServices,
+    /// 101: the Accounting mailbox, the target of the "AcctUpdate" form.
+    Accounting,
+    /// 3: a service for the Town Hall menu (`ProcessServices`).
+    Menu,
+    /// Any other type; the client ignores it.
+    Other(u8),
+}
+
+impl ServiceKind {
+    const MEMBER_SERVICES: u8 = 100;
+    const ACCOUNTING: u8 = 101;
+    const MENU: u8 = 3;
+
+    pub const fn byte(self) -> u8 {
+        match self {
+            ServiceKind::MemberServices => Self::MEMBER_SERVICES,
+            ServiceKind::Accounting => Self::ACCOUNTING,
+            ServiceKind::Menu => Self::MENU,
+            ServiceKind::Other(byte) => byte,
+        }
+    }
+}
+
+impl From<u8> for ServiceKind {
+    fn from(byte: u8) -> Self {
+        match byte {
+            Self::MEMBER_SERVICES => ServiceKind::MemberServices,
+            Self::ACCOUNTING => ServiceKind::Accounting,
+            Self::MENU => ServiceKind::Menu,
+            other => ServiceKind::Other(other),
+        }
+    }
+}
+
+/// One record of the system list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemService {
+    pub mailbox: MailboxNumber,
+    pub kind: ServiceKind,
+    /// The client turns each `_` into a space.
+    pub name: String,
+}
+
 /// Command 37 from the host, and the Ack and Nak for it, which carry `whichCmd` 37.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MailReply {
@@ -456,8 +519,12 @@ pub enum MailReply {
         id: LetterId,
         text: Vec<u8>,
     },
-    /// 32: the system list, always without records.
-    EmptySystemList { to: Sid },
+    /// 32: the system list. After the header, from byte 8, each service is `w boxLow, w boxHigh,
+    /// b type` and its name; `RoomZeroHandler` keeps them in `syslst.dat` (docs/server/services.md).
+    SystemList {
+        to: Sid,
+        services: Vec<SystemService>,
+    },
     /// Ack 37/20, 37/21 or 37/24: the letter reached `mailbox`.
     Delivered {
         sub: u8,
@@ -512,8 +579,19 @@ impl MailReply {
                 text: reader.rest(),
             }),
             SYSTEM_LIST => {
-                read_box(reader)?;
-                Ok(MailReply::EmptySystemList { to })
+                reader.word("unread")?;
+                reader.word("unread")?;
+                let mut services = Vec::new();
+                while !reader.is_empty() {
+                    let mailbox = read_box(reader)?;
+                    let kind = ServiceKind::from(reader.byte("type")?);
+                    services.push(SystemService {
+                        mailbox,
+                        kind,
+                        name: reader.text("name")?,
+                    });
+                }
+                Ok(MailReply::SystemList { to, services })
             }
             sub => Err(MessageError::UnsupportedSub {
                 command: Command::Mail.byte(),
@@ -559,13 +637,17 @@ impl MailReply {
                 write_letter(writer, *id);
                 writer.array(text);
             }
-            MailReply::EmptySystemList { to } => {
+            MailReply::SystemList { to, services } => {
                 writer
                     .byte(Command::Mail.byte())
                     .byte(SYSTEM_LIST)
                     .word(to.0);
                 let [low, high] = SYSTEM_LIST_UNREAD_WORDS_ASSUMED;
                 writer.word(low).word(high);
+                for service in services {
+                    write_box(writer, service.mailbox);
+                    writer.byte(service.kind.byte()).text(&service.name);
+                }
             }
             MailReply::Delivered { sub, to, mailbox } => {
                 writer.byte(Command::Ack.byte()).byte(0).word(to.0);

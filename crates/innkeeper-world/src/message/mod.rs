@@ -1,5 +1,6 @@
 //! Typed application messages in both directions, parsed and encoded at the link boundary.
 
+mod account;
 mod ack;
 mod bbs;
 mod client;
@@ -26,6 +27,7 @@ mod user_find;
 mod user_info;
 mod wire;
 
+pub use account::{AccountReply, AccountRequest, SummaryKind};
 pub use ack::Ack;
 pub use bbs::{BbsReply, BbsRequest, BoardListing, BoardRef, MessagePosition, ReadStep};
 pub use client::{
@@ -41,7 +43,7 @@ pub use invoke_method::InvokeMethod;
 pub use lock::{LockId, LockRefused, LockRequest};
 pub use mail::{
     Envelope, LetterRef, ListedLetter, MailFault, MailReply, MailRequest, MailboxAnswer,
-    MailboxRequest, OutgoingLetter,
+    MailboxRequest, OutgoingLetter, ServiceKind, SystemService,
 };
 pub(crate) use mail::{StoredLetter, FIELD_LEN};
 pub use mall::{MallHeader, MallReply, MallRequest};

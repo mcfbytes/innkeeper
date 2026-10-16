@@ -2,10 +2,10 @@ use std::fmt;
 
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::{
-    parse_user_info, BbsRequest, Command, GroupLeave, GroupMembersRequest, InvokeMethod,
-    LockRequest, MailRequest, MailboxRequest, MallRequest, Multicast, ObjExists, ObjFreeList,
-    ObjNewList, ObjectKind, PlayStatus, PropertyRequest, ReadMoney, SaveMoney, SendMessage,
-    ServicePropertyRequest, SetInt, SetPersona, SetStr, Signup, Unexplained, UserFind,
+    parse_user_info, AccountRequest, BbsRequest, Command, GroupLeave, GroupMembersRequest,
+    InvokeMethod, LockRequest, MailRequest, MailboxRequest, MallRequest, Multicast, ObjExists,
+    ObjFreeList, ObjNewList, ObjectKind, PlayStatus, PropertyRequest, ReadMoney, SaveMoney,
+    SendMessage, ServicePropertyRequest, SetInt, SetPersona, SetStr, Signup, Unexplained, UserFind,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -56,6 +56,8 @@ pub enum ClientMessage {
     ObjFreeList(ObjFreeList),
     /// The phone book (49): who is online, by account or by name.
     UserFind(UserFind),
+    /// The Town Hall billing screens (34).
+    Account(AccountRequest),
     Unexplained(Unexplained),
 }
 
@@ -206,6 +208,7 @@ impl ClientMessage {
             Command::ObjNewList => ClientMessage::ObjNewList(ObjNewList::parse(&mut reader)?),
             Command::ObjFreeList => ClientMessage::ObjFreeList(ObjFreeList::parse(&mut reader)?),
             Command::UserFind => ClientMessage::UserFind(UserFind::parse(&mut reader)?),
+            Command::Account => ClientMessage::Account(AccountRequest::parse(&mut reader)?),
             Command::PlayerObjectNotice | Command::Register => {
                 ClientMessage::Unexplained(Unexplained::parse(&mut reader, command)?)
             }
@@ -267,6 +270,7 @@ impl ClientMessage {
             ClientMessage::ObjNewList(list) => list.write(&mut writer),
             ClientMessage::ObjFreeList(list) => list.write(&mut writer),
             ClientMessage::UserFind(find) => find.write(&mut writer),
+            ClientMessage::Account(request) => request.write(&mut writer),
             ClientMessage::Unexplained(unexplained) => unexplained.write(&mut writer),
         }
         writer.into_bytes()
@@ -307,6 +311,7 @@ impl ClientMessage {
             ClientMessage::ObjNewList(_) => "ObjNewList",
             ClientMessage::ObjFreeList(_) => "ObjFreeList",
             ClientMessage::UserFind(_) => "UserFind",
+            ClientMessage::Account(_) => "Account",
             ClientMessage::Unexplained(_) => "Unexplained",
         }
     }

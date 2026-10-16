@@ -2,7 +2,7 @@
 
 use tracing::{info, warn};
 
-use crate::assumptions::UNLISTED_LAND_NAK_ASSUMED;
+use crate::assumptions::{PASSWORD_REFUSED_SUB_ASSUMED, UNLISTED_LAND_NAK_ASSUMED};
 use crate::{
     Account, Ack, ChangePassword, HostMessage, Login, LoginNakReason, Nak, Refusal, World,
 };
@@ -46,7 +46,7 @@ pub(crate) fn change_password(
             HostMessage::Nak(Nak {
                 to: change.sid,
                 which_cmd,
-                which_sub: 0,
+                which_sub: PASSWORD_REFUSED_SUB_ASSUMED,
                 num_tries: 0,
                 text: "The password could not be changed.".to_owned(),
             })

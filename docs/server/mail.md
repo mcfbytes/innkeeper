@@ -29,9 +29,9 @@ Every command 37 request is `b 37, b sub, w sid`; the host answers to `sid`.
 | 25 | box, letter id | reply 25: the letter's text, or Nak |
 | 26 | box, letter id | nothing, or Nak when the letter is not there |
 | 27 | box, letter id, addressee's box, `a[10]` new addressee name, `s` note | Ack 37/27 ("Letter successfully forwarded."), or Nak |
-| 30 | box of the service, then the envelope | nothing: the form is accepted and dropped |
+| 30 | box of the service, then the envelope | Ack 37/30 for the two service boxes, Nak 6 for any other ([services.md](services.md)) |
 | 31 | box | reply 19 with no rows |
-| 32 | `w 0, w 0` | reply 32 with no rows |
+| 32 | `w 0, w 0` | reply 32 with the two service boxes ([services.md](services.md) section 4) |
 
 Sub 17 is the Mail Room asking which boxes the signed-on account owns (`script.140` export 4 with the
 account number); the answer opens the box directly when there is one. Sub 20 and 21 also exist as short
@@ -51,7 +51,7 @@ fields. The client matches the box words with the box it asked about and ignores
 | 18 | `w status` at 8: bit 0 lights the map's mail icon (`HaveMailIcon`) and the logon notice, bit 1 marks the box in the window | CONFIRMED layout; the meaning of the bits INFERRED |
 | 19 | rows of 47 bytes from byte 8 (`class_c7::ackMsgStr`): `b status, w idLow, w idHigh, w fromLow, w fromHigh, a[10] subject, a[10] sender, w flags, a[6] time, a[10] addressee`; at most 64 rows are read | CONFIRMED layout |
 | 25 | `w idLow, w idHigh` at 8, the text from byte 12 to the end | CONFIRMED layout |
-| 32 | nothing: the loop in `RoomZeroHandler` reads records from byte 8 and stops at the end, so an empty list is the 8-byte header | CONFIRMED layout; empty list INFERRED |
+| 32 | records from byte 8: `w boxLow, w boxHigh, b type`, name NUL ([services.md](services.md) section 4); an empty list is the 8-byte header | CONFIRMED layout |
 | Ack 37/24, 37/27 | `b 0, w low, w high` of the box that received the letter (the client shows "Letter received by box N.") | CONFIRMED layout |
 | Nak 37/sub | `b fault, w low, w high` of the box the request named | CONFIRMED layout |
 
@@ -110,7 +110,7 @@ Each is a named constant in `innkeeper-world/src/assumptions.rs`, labelled INFER
 
 `World::stock()` has no stored accounts: the account book admits anyone but the store knows nobody, so
 `assign_mailbox` fails with `UnknownAccount`. 45/1 answers status 2, and every 37 request is refused with
-fault 21 ("the post office is closed"), except a form (30), which is dropped as always. A host started
+fault 21 ("the post office is closed"), except the system list (32) and a form (30), which need no mailbox. A host started
 without `--data-dir` therefore has no mail, and a logon still completes, because the client carries on
 without the mailbox.
 
@@ -142,6 +142,5 @@ mailbox number is stable) and the golden rows, which replay the layouts the clie
 
 - A sysop's view of other accounts' boxes (`sysopIDToBoxMI`), mailing lists and the short sub-20 and
   sub-21 forms.
-- Services (31) is an empty list; the service forms (30) are dropped, so "Member Services" requests are
-  accepted and never answered.
+- Services (31) is an empty list; the service forms (30) are acknowledged ([services.md](services.md)).
 - Push delivery: a client learns of a letter at its next 18, not when it arrives.

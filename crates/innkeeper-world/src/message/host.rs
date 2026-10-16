@@ -4,9 +4,9 @@ use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
-    Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply,
-    MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjNewListReply, ObjectLocated,
-    PropertyValues, SendMessage, SetInt, SetStr, UserFindReply,
+    AccountReply, Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused,
+    MailReply, MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjNewListReply,
+    ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr, UserFindReply,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -61,6 +61,8 @@ pub enum HostMessage {
     ObjNewList(ObjNewListReply),
     /// The phone book (49): who is online.
     UserFind(UserFindReply),
+    /// The Town Hall billing texts (34).
+    Account(AccountReply),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -180,6 +182,7 @@ impl HostMessage {
             HostMessage::Mall(_) => "Mall",
             HostMessage::ObjNewList(_) => "ObjNewList",
             HostMessage::UserFind(_) => "UserFind",
+            HostMessage::Account(_) => "Account",
         }
     }
 
@@ -254,6 +257,7 @@ impl HostMessage {
             HostMessage::Mall(reply) => reply.write(&mut writer),
             HostMessage::ObjNewList(reply) => reply.write(&mut writer),
             HostMessage::UserFind(reply) => reply.write(&mut writer),
+            HostMessage::Account(reply) => reply.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -349,6 +353,7 @@ impl HostMessage {
             Command::ObjNewList => HostMessage::ObjNewList(ObjNewListReply::parse(&mut reader)?),
             Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
             Command::UserFind => HostMessage::UserFind(UserFindReply::parse(&mut reader)?),
+            Command::Account => HostMessage::Account(AccountReply::parse(&mut reader)?),
             Command::Lock
             | Command::ServiceProperties
             | Command::Unlock

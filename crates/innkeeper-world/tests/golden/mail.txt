@@ -28,6 +28,9 @@
 < services, empty listing | 25 13 00 01 01 00 00 00
 > system list 37/32 | 25 20 00 00 00 00 00 00
 < system list, empty | 25 20 00 00 00 00 00 00
+< system list, Member Services and Accounting | 25 20 00 00 00 00 00 00 01 00 fe 00 64 4d 65 6d 62 65 72 5f 53 65 72 76 69 63 65 73 00 02 00 fe 00 65 41 63 63 6f 75 6e 74 69 6e 67 00
+< form accepted, ack 37/30 | 00 00 00 01 25 1e 00 01 00 fe 00
+< form refused, nak 37/30 no such box | 01 00 00 01 25 1e 06 09 00 00 00
 < nak not your box 37/25 | 01 00 00 01 25 19 0c 02 00 00 00
 < nak no such box 37/24 | 01 00 00 01 25 18 06 09 00 00 00
 < nak no such letter 37/26 | 01 00 00 01 25 1a 0e 02 00 00 00

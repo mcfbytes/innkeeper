@@ -168,6 +168,7 @@ DATA frame per client message.
 | `mail` | the mailbox assignment (45/1) and the `EMMsg` requests (37) over the store: new-mail check, listing, send, read, delete, forward. See [mail.md](mail.md) |
 | `money` | the CasinoLand bankroll: a 40/3 read answered from the store with the starting 1,000,000 for an account that has none, and a 40/2 save stored and acked. See [store.md](store.md) section 5 |
 | `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
+| `town_hall` | the Town Hall: account texts (34), the system list boxes (37/32) and the Member Services and Accounting forms (37/30). See [services.md](services.md) |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4). Each message republishes the signed-on player for the phone book |
 | `rpg` | Yserbius and Twinion: the title table (land type, version, land size), the 41/2 service lookup, the place a land joinNet sets and the map groups shared within it, the land version gate, no echo of RPG sends. See [yserbius.md](../protocol/yserbius.md) |
 | `bbs` | the RPG bulletin board (27) over the store's boards: a fixed directory per location, messages numbered in posting order |

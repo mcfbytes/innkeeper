@@ -3,13 +3,14 @@
 
 use std::ops::RangeInclusive;
 
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::assumptions::{
     NO_ACCOUNT_MAILBOX_STATUS_ASSUMED, OTHER_BOXES_ARE_PRIVATE_ASSUMED,
     STORE_FAULT_MAILBOX_STATUS_ASSUMED,
 };
 use crate::message::{StoredLetter, FIELD_LEN};
+use crate::town_hall;
 use crate::{
     Account, AccountId, Envelope, HostMessage, Letter, LetterId, ListedLetter, MailFault,
     MailReply, MailRequest, MailboxAnswer, MailboxNumber, MailboxRequest, OutgoingLetter, Sid,
@@ -49,6 +50,19 @@ pub(crate) fn assign_mailbox(
 
 /// The replies to one command 37 request; an account the store does not know gets a refusal.
 pub(crate) fn answer(world: &World, account: &Account, request: &MailRequest) -> Vec<HostMessage> {
+    // The system list and the service forms need no mailbox of the requester's, so an open book
+    // (no stored accounts) answers them too; the Town Hall works without a data directory.
+    let replies = match request {
+        MailRequest::SystemList { sid } => Some(vec![MailReply::SystemList {
+            to: *sid,
+            services: town_hall::system_list(),
+        }]),
+        MailRequest::Form(letter) => Some(town_hall::form(world, account, letter)),
+        _ => None,
+    };
+    if let Some(replies) = replies {
+        return replies.into_iter().map(HostMessage::Mail).collect();
+    }
     let reply = match world.store.assign_mailbox(account.id) {
         Ok(own) => PostOffice {
             world,
@@ -89,10 +103,7 @@ impl PostOffice<'_> {
             MailRequest::NewMail { sid, mailbox } => self.new_mail(*sid, *mailbox),
             MailRequest::List { sid, mailbox } => self.list(*sid, *mailbox),
             MailRequest::Send { sub, letter } => self.deliver(*sub, letter),
-            MailRequest::Form(letter) => {
-                info!(to = letter.to.0, "form for a service box dropped");
-                Ok(None)
-            }
+            MailRequest::Form(_) | MailRequest::SystemList { .. } => Ok(None),
             MailRequest::Read(wanted) => self.read(wanted.sid, wanted.mailbox, wanted.letter),
             MailRequest::Delete(wanted) => self.delete(wanted.mailbox, wanted.letter),
             MailRequest::Forward {
@@ -106,7 +117,6 @@ impl PostOffice<'_> {
                 mailbox: *mailbox,
                 letters: Vec::new(),
             })),
-            MailRequest::SystemList { sid } => Ok(Some(MailReply::EmptySystemList { to: *sid })),
         };
         outcome.unwrap_or_else(|fault| request.refused(fault))
     }
