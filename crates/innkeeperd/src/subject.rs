@@ -222,7 +222,7 @@ fn export_account(
         None => Vec::new(),
     };
     let sent = sent_letters_json(store, mailbox)?;
-    let posts = authored_posts_json(store, &record.persona)?;
+    let posts = authored_posts_json(store, id, &record.persona)?;
     let (money, money_deleted_at) = money_of(store, id)?;
     let saves = saves_json(store, id, with_saves)?;
     let identity = crate::signin::store::export_identity(store, id)?;
@@ -256,7 +256,7 @@ fn deletion_plan(store: &SqliteStore, id: AccountId) -> Result<DeletionPlan, Sub
         None => 0,
     };
     let sent_ids = sent_letter_ids(store, mailbox)?;
-    let post_ids = authored_post_ids(store, &record.persona)?;
+    let post_ids = authored_post_ids(store, id, &record.persona)?;
     let money = store.money(id)?.map(|amount| amount.0);
     let save_versions = count_saves(store, id)?;
     Ok(DeletionPlan {
@@ -431,11 +431,15 @@ fn letter_json(id: u32, mailbox: u32, body: &[u8], deleted_at: Option<i64>) -> V
     })
 }
 
-fn authored_posts_json(store: &SqliteStore, persona: &str) -> Result<Vec<Value>, StoreError> {
+fn authored_posts_json(
+    store: &SqliteStore,
+    account: AccountId,
+    persona: &str,
+) -> Result<Vec<Value>, StoreError> {
     Ok(all_posts(store)?
         .into_iter()
-        .filter(|(_, _, body, _)| post_is_by(body, persona))
-        .map(|(id, board, body, deleted_at)| {
+        .filter(|(_, _, body, _, by)| post_is_by(*by, body, account.0, persona))
+        .map(|(id, board, body, deleted_at, _)| {
             json!({
                 "id": id,
                 "board": board,
@@ -447,33 +451,60 @@ fn authored_posts_json(store: &SqliteStore, persona: &str) -> Result<Vec<Value>,
         .collect())
 }
 
-fn authored_post_ids(store: &SqliteStore, persona: &str) -> Result<Vec<u32>, StoreError> {
+fn authored_post_ids(
+    store: &SqliteStore,
+    account: AccountId,
+    persona: &str,
+) -> Result<Vec<u32>, StoreError> {
     Ok(all_posts(store)?
         .into_iter()
-        .filter(|(_, _, body, deleted_at)| deleted_at.is_none() && post_is_by(body, persona))
-        .map(|(id, _, _, _)| id)
+        .filter(|(_, _, body, deleted_at, by)| {
+            deleted_at.is_none() && post_is_by(*by, body, account.0, persona)
+        })
+        .map(|(id, _, _, _, _)| id)
         .collect())
 }
 
-fn all_posts(store: &SqliteStore) -> Result<Vec<HeldBody>, StoreError> {
+/// A stored post: id, board, body, `deleted_at` and the account that wrote it (NULL before the
+/// `posts.account` column existed).
+type HeldPost = (u32, u32, Vec<u8>, Option<i64>, Option<u32>);
+
+fn all_posts(store: &SqliteStore) -> Result<Vec<HeldPost>, StoreError> {
     let connection = store.connection();
     let mut statement = connection
-        .prepare("SELECT id, board, body, deleted_at FROM posts ORDER BY id")
+        .prepare("SELECT id, board, body, deleted_at, account FROM posts ORDER BY id")
         .map_err(StoreError::backend)?;
     let rows = statement
         .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })
         .map_err(StoreError::backend)?;
     rows.collect::<Result<_, _>>().map_err(StoreError::backend)
 }
 
-/// Posts are `author|text`. Session 40/4 names are not stored, so only the Login persona matches.
-pub(crate) fn post_is_by(body: &[u8], persona: &str) -> bool {
-    if persona.is_empty() {
-        return false;
+/// Whether `account` wrote a post. A post carries the account that wrote it (`posts.account`), and
+/// that alone decides, so two accounts with the same persona never see each other's posts. Only a
+/// post with no account (written before the column existed) falls back to the old rule: its
+/// `author|text` head names the account's stored persona, without regard to case.
+pub(crate) fn post_is_by(
+    post_account: Option<u32>,
+    body: &[u8],
+    account: u32,
+    persona: &str,
+) -> bool {
+    match post_account {
+        Some(by) => by == account,
+        None => {
+            !persona.is_empty()
+                && post_author(body).is_some_and(|author| author.eq_ignore_ascii_case(persona))
+        }
     }
-    post_author(body).is_some_and(|author| author.eq_ignore_ascii_case(persona))
 }
 
 pub(crate) fn post_author(body: &[u8]) -> Option<&str> {
@@ -591,7 +622,7 @@ fn print_plan(plan: &DeletionPlan, policy: RetentionPolicy) {
         plan.letters_sent
     );
     println!(
-        "  {} board posts matching the stored persona would be hidden",
+        "  {} board posts written by the account would be hidden (and old ones matching its persona)",
         plan.posts
     );
     match plan.money {
@@ -736,6 +767,88 @@ mod tests {
             .unwrap();
         assert_eq!(data, b"save-bytes");
         assert!(!serde_json::to_string(&document).unwrap().contains("070707"));
+    }
+
+    /// Two accounts that share the persona "twin", each with a post, and one post from before the
+    /// `posts.account` column (no account, matched by name).
+    fn twins() -> (TempDir, SqliteStore) {
+        let dir = TempDir::new("twins");
+        let store = dir.store();
+        for (id, password) in [(ALICE, 7), (BOB, 8)] {
+            store
+                .create_account(
+                    id,
+                    AccountRecord::new(EncodedPassword([password; 10]), "twin"),
+                )
+                .unwrap();
+        }
+        store
+            .post_as(BoardId(1), b"twin|alice's tale", Some(ALICE))
+            .unwrap();
+        store
+            .post_as(BoardId(1), b"twin|bob's tale", Some(BOB))
+            .unwrap();
+        store.post(BoardId(1), b"twin|legacy tale").unwrap();
+        (dir, store)
+    }
+
+    fn texts(document: &Value) -> Vec<String> {
+        let posts = document["posts"].as_array().unwrap();
+        posts
+            .iter()
+            .map(|post| post["body"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn posts_belong_to_the_writing_account_even_when_two_accounts_share_a_name() {
+        let (_dir, store) = twins();
+        let alice = export_account(&store, ALICE, false).unwrap();
+        assert_eq!(texts(&alice), ["twin|alice's tale", "twin|legacy tale"]);
+        let bob = export_account(&store, BOB, false).unwrap();
+        assert_eq!(texts(&bob), ["twin|bob's tale", "twin|legacy tale"]);
+        // The legacy row, with no account, is the only one the name still matches.
+        let plan = deletion_plan(&store, ALICE).unwrap();
+        assert_eq!(plan.posts, 2);
+    }
+
+    #[test]
+    fn deleting_one_of_two_same_named_accounts_hides_only_its_own_and_legacy_posts() {
+        let (_dir, store) = twins();
+        let plan = deletion_plan(&store, ALICE).unwrap();
+        apply_delete(&store, ALICE, &plan, RetentionPolicy::default()).unwrap();
+        let bodies: Vec<_> = store
+            .posts(BoardId(1))
+            .unwrap()
+            .into_iter()
+            .map(|post| String::from_utf8(post.body).unwrap())
+            .collect();
+        assert_eq!(
+            bodies,
+            ["twin|bob's tale"],
+            "alice's and the legacy row are hidden"
+        );
+        let bob = export_account(&store, BOB, false).unwrap();
+        assert!(bob["posts"][0]["deleted_at"].is_null());
+    }
+
+    #[test]
+    fn a_legacy_post_with_no_account_still_matches_by_name_and_only_that() {
+        let (_dir, store) = twins();
+        let carol = AccountId(100_003);
+        store
+            .create_account(carol, AccountRecord::new(EncodedPassword([9; 10]), "other"))
+            .unwrap();
+        store.post(BoardId(1), b"other|old news").unwrap();
+        store
+            .post_as(BoardId(1), b"other|new news", Some(carol))
+            .unwrap();
+        // A post recorded for someone else under carol's name is not hers.
+        store
+            .post_as(BoardId(1), b"other|forged", Some(BOB))
+            .unwrap();
+        let document = export_account(&store, carol, false).unwrap();
+        assert_eq!(texts(&document), ["other|old news", "other|new news"]);
     }
 
     #[test]

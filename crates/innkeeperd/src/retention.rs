@@ -203,7 +203,9 @@ pub(crate) fn restore_account(
         }
     }
     for post in post_rows(&tx)? {
-        if post.deleted_at == Some(stamp) && subject::post_is_by(&post.body, &persona) {
+        if post.deleted_at == Some(stamp)
+            && subject::post_is_by(post.account, &post.body, account, &persona)
+        {
             tx.execute(
                 "UPDATE posts SET deleted_at = NULL WHERE id = ?1 AND deleted_at = ?2",
                 params![post.id, stamp],
@@ -266,7 +268,7 @@ pub(crate) fn purge_now(
     }
     let mut posts = 0u64;
     for post in post_rows(&tx)? {
-        if subject::post_is_by(&post.body, &persona) {
+        if subject::post_is_by(post.account, &post.body, account, &persona) {
             posts += changed(
                 tx.execute("DELETE FROM posts WHERE id = ?1", [post.id])
                     .map_err(StoreError::backend)?,
@@ -460,32 +462,32 @@ fn purge_posts(
     let ordinary = {
         let mut statement = conn
             .prepare(
-                "SELECT id, body FROM posts
+                "SELECT id, body, account FROM posts
                  WHERE deleted_at IS NOT NULL AND deleted_at < ?1
                  AND ((board >> 8) & 65535) != ?2",
             )
             .map_err(StoreError::backend)?;
         let rows = statement
             .query_map(params![post_cutoff, location], |row| {
-                Ok((row.get::<_, u32>(0)?, row.get(1)?))
+                Ok((row.get::<_, u32>(0)?, row.get(1)?, row.get(2)?))
             })
             .map_err(StoreError::backend)?;
-        rows.collect::<Result<Vec<(u32, Vec<u8>)>, _>>()
+        rows.collect::<Result<Vec<PostToPurge>, _>>()
             .map_err(StoreError::backend)?
     };
     let complaints = {
         let mut statement = conn
             .prepare(
-                "SELECT id, body FROM posts
+                "SELECT id, body, account FROM posts
                  WHERE created_at < ?1 AND ((board >> 8) & 65535) = ?2",
             )
             .map_err(StoreError::backend)?;
         let rows = statement
             .query_map(params![complaint_cutoff, location], |row| {
-                Ok((row.get::<_, u32>(0)?, row.get(1)?))
+                Ok((row.get::<_, u32>(0)?, row.get(1)?, row.get(2)?))
             })
             .map_err(StoreError::backend)?;
-        rows.collect::<Result<Vec<(u32, Vec<u8>)>, _>>()
+        rows.collect::<Result<Vec<PostToPurge>, _>>()
             .map_err(StoreError::backend)?
     };
     let mut held_accounts = HashMap::new();
@@ -497,13 +499,13 @@ fn purge_posts(
 
 fn delete_unheld_posts(
     conn: &Connection,
-    posts: &[(u32, Vec<u8>)],
+    posts: &[PostToPurge],
     now: i64,
     held_accounts: &mut HashMap<u32, bool>,
 ) -> Result<u64, StoreError> {
     let mut removed = 0u64;
-    for (id, body) in posts {
-        if author_held(conn, body, now, held_accounts)? {
+    for (id, body, account) in posts {
+        if author_held(conn, *account, body, now, held_accounts)? {
             continue;
         }
         removed += changed(
@@ -514,12 +516,21 @@ fn delete_unheld_posts(
     Ok(removed)
 }
 
+/// A post due for erasure: id, body and the account that wrote it (NULL for an old post).
+type PostToPurge = (u32, Vec<u8>, Option<u32>);
+
+/// Whether the post's author is under a legal hold. The writing account decides; only a post with
+/// no account falls back to every account whose persona matches the name at the head of the body.
 fn author_held(
     conn: &Connection,
+    account: Option<u32>,
     body: &[u8],
     now: i64,
     held_accounts: &mut HashMap<u32, bool>,
 ) -> Result<bool, StoreError> {
+    if let Some(id) = account {
+        return account_is_held(conn, id, now, held_accounts);
+    }
     let Some(author) = post_author(body) else {
         return Ok(false);
     };
@@ -749,6 +760,7 @@ struct PostRow {
     id: u32,
     body: Vec<u8>,
     deleted_at: Option<i64>,
+    account: Option<u32>,
 }
 
 fn letter_rows(conn: &Connection) -> Result<Vec<LetterRow>, StoreError> {
@@ -771,7 +783,7 @@ fn letter_rows(conn: &Connection) -> Result<Vec<LetterRow>, StoreError> {
 
 fn post_rows(conn: &Connection) -> Result<Vec<PostRow>, StoreError> {
     let mut statement = conn
-        .prepare("SELECT id, body, deleted_at FROM posts")
+        .prepare("SELECT id, body, deleted_at, account FROM posts")
         .map_err(StoreError::backend)?;
     let rows = statement
         .query_map([], |row| {
@@ -779,6 +791,7 @@ fn post_rows(conn: &Connection) -> Result<Vec<PostRow>, StoreError> {
                 id: row.get(0)?,
                 body: row.get(1)?,
                 deleted_at: row.get(2)?,
+                account: row.get(3)?,
             })
         })
         .map_err(StoreError::backend)?;
@@ -935,6 +948,40 @@ mod tests {
         assert_eq!(second.accounts, 1);
         assert_eq!(second.mailboxes, 1);
         assert_eq!(count(&store, "SELECT COUNT(*) FROM accounts"), 0);
+    }
+
+    #[test]
+    fn a_hold_covers_the_posts_its_account_wrote_and_not_a_same_named_accounts() {
+        let store = memory();
+        let now = dates::unix_now();
+        add_account(&store, 8, "twin");
+        add_account(&store, 9, "twin");
+        let held = store
+            .post_as(BoardId(1), b"twin|held", Some(AccountId(8)))
+            .unwrap();
+        store
+            .post_as(BoardId(1), b"twin|free", Some(AccountId(9)))
+            .unwrap();
+        store.post(BoardId(1), b"twin|legacy").unwrap();
+        store
+            .connection()
+            .execute("UPDATE posts SET deleted_at = ?1", [now - 91 * 86_400])
+            .unwrap();
+        place_hold(&store, 8, now + 86_400).unwrap();
+        let counts = purge_expired(&store, policy(), now).unwrap();
+        // The free account's post goes; the held account's stays, and so does the legacy post
+        // that only the name ties to the held account.
+        assert_eq!(counts.posts, 1);
+        let left: Vec<u32> = store
+            .connection()
+            .prepare("SELECT id FROM posts ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(left.len(), 2);
+        assert!(left.contains(&held.0));
     }
 
     #[test]

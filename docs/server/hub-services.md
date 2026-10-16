@@ -37,8 +37,8 @@ Comments: <what the player typed>`, and the Sketch Pad's starts `<name>|Graffiti
 word at byte 6 is the literal 99, which is the complaint board's location (`0x63`). The host:
 
 - stores it as a post on board location `0x63`, land 0, section `COMPLAINT_SECTION_ASSUMED` (3), body
-  `persona|Complaint: text`. The client's own `Complaint|` prefix is dropped; the author is the stored
-  persona like every post, so the account's export and delete find it (privacy.md sections 1 and 6);
+  `persona|Complaint: text`. The client's own `Complaint|` prefix is dropped; the post records the writing
+  account (`posts.account`), so the account's export and delete find it (privacy.md sections 1 and 6);
 - keeps at most `COMPLAINT_TEXT_LIMIT_ASSUMED` (2000) bytes of the text;
 - is covered by the 365-day complaint retention (`--retain-complaint-days`) because the board location is
   `0x63`, and by a legal hold on the author's account;

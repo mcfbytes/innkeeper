@@ -405,9 +405,7 @@ impl Admin {
         {
             return self.failed(req, &error);
         }
-        let account = store::account_by_persona(&self.store, &complaint.author)
-            .ok()
-            .flatten();
+        let account = store::account_of_post(&self.store, complaint.account, &complaint.author);
         let action = if handled {
             "complaint.handled"
         } else {
@@ -456,11 +454,11 @@ impl Admin {
         if !removed {
             return self.not_found(req);
         }
-        let account = found.author.as_deref().and_then(|author| {
-            store::account_by_persona(&self.store, author)
-                .ok()
-                .flatten()
-        });
+        let account = store::account_of_post(
+            &self.store,
+            found.account,
+            found.author.as_deref().unwrap_or_default(),
+        );
         let target = format!("post {post} on {}", store::board_label(board));
         let reason = clean_reason(req.param("reason"));
         if let Err(error) = self.log_change(req, "post.remove", &target, reason.as_deref(), account)

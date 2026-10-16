@@ -89,22 +89,62 @@ const IN_A_LAND: &str = "
     A < land group SID | 08 00 00 01 00 00 00 01
 ";
 
+const BOARD_59_1: BoardId = BoardId(0x59 << 8 | 1 | 4 << 24);
+
 #[test]
 fn erase_removes_the_players_own_message_and_leaves_other_peoples() {
     let (mut table, store) = stored_table(0);
+    // Message 1 is another account's (the name at its head does not matter); message 2 is the player's.
+    store
+        .post_as(BOARD_59_1, b"Sir|hi\0", Some(AccountId(100_002)))
+        .unwrap();
     let steps = format!(
         "{IN_A_LAND}
-        A > 27/0 post by someone else | 1b 00 59 00 00 01 01 00 {}
         A > 27/0 post by me | 1b 00 59 00 00 01 01 00 {}
         A > 27/6 erase message 1 | 1b 06 59 00 00 01 01 00 01 00 00
         A > 27/6 erase message 2 | 1b 06 59 00 00 01 01 00 02 00 00
         A > 27/6 erase message 9 | 1b 06 59 00 00 01 01 00 09 00 00
         ",
-        hex(b"Sir|hi\0"),
         hex(b"Guybrush|mine\0"),
     );
     table.run(&steps);
-    assert_eq!(bodies(&store, 0x59, 1 | 4 << 24), ["Sir|hi"]);
+    assert_eq!(bodies(&store, 0x59, 1 | 4 << 24), ["Sir|hi\0"]);
+}
+
+#[test]
+fn a_player_erases_by_account_not_by_a_name_another_player_shares() {
+    let (mut table, store) = stored_table(0);
+    // Another account that shares the persona, and an old post that has no account.
+    store
+        .post_as(BOARD_59_1, b"Guybrush|twin\0", Some(AccountId(100_002)))
+        .unwrap();
+    store.post(BOARD_59_1, b"Guybrush|old\0").unwrap();
+    let steps = format!(
+        "{IN_A_LAND}
+        A > 27/6 erase the twin's message | 1b 06 59 00 00 01 01 00 01 00 00
+        A > 27/6 erase the old message | 1b 06 59 00 00 01 01 00 02 00 00
+        "
+    );
+    table.run(&steps);
+    assert_eq!(bodies(&store, 0x59, 1 | 4 << 24), ["Guybrush|twin\0"]);
+}
+
+#[test]
+fn board_posts_and_complaints_record_the_writing_account() {
+    let (mut table, store) = stored_table(0);
+    let steps = format!(
+        "{IN_A_LAND}
+        A > 27/0 post | 1b 00 59 00 00 01 01 00 {}
+        A > complaint | 1b 09 00 00 00 01 63 00 {}
+        ",
+        hex(b"Guybrush|mine\0"),
+        hex(b"Complaint|rude\0"),
+    );
+    table.run(&steps);
+    let writer = |board: BoardId| store.posts(board).unwrap()[0].account;
+    assert_eq!(writer(BOARD_59_1), Some(AccountId(100_001)));
+    let complaint = BoardId(u32::from(COMPLAINT_BOARD_LOCATION) << 8 | 3);
+    assert_eq!(writer(complaint), Some(AccountId(100_001)));
 }
 
 #[test]

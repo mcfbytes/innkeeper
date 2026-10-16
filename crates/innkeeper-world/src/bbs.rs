@@ -9,8 +9,8 @@ use crate::assumptions::{
 };
 use crate::message::Command;
 use crate::{
-    Account, BbsReply, BbsRequest, BoardId, BoardListing, BoardRef, HostMessage, LandType,
-    MessagePosition, Nak, Place, Post, ReadStep, Sid, StoreError, World,
+    Account, AccountId, BbsReply, BbsRequest, BoardId, BoardListing, BoardRef, HostMessage,
+    LandType, MessagePosition, Nak, Place, Post, ReadStep, Sid, StoreError, World,
 };
 
 /// Location of the operator-only Complaints board. Posts there are kept for a year
@@ -85,6 +85,7 @@ pub(crate) fn answer(
         privileged: account.user_flags & PRIVILEGED_USER_FLAGS != 0,
         moderator: account.user_flags & MODERATOR_USER_FLAGS != 0,
         persona: &account.persona,
+        account: account.id,
     };
     match boards.handle(request) {
         Ok(reply) => reply.into_iter().map(HostMessage::Bbs).collect(),
@@ -102,6 +103,7 @@ struct Boards<'w> {
     privileged: bool,
     moderator: bool,
     persona: &'w str,
+    account: AccountId,
 }
 
 impl Boards<'_> {
@@ -203,7 +205,10 @@ impl Boards<'_> {
             warn!(?board, "post to a board no directory lists: dropped");
             return Ok(());
         }
-        let id = self.world.store.post(self.board_id(board), body)?;
+        let id = self
+            .world
+            .store
+            .post_as(self.board_id(board), body, Some(self.account))?;
         info!(?board, post = id.0, "board post stored");
         Ok(())
     }
@@ -222,7 +227,7 @@ impl Boards<'_> {
         for old in self.world.store.posts(id)? {
             self.world.store.delete_post(id, old.id)?;
         }
-        let post = self.world.store.post(id, body)?;
+        let post = self.world.store.post_as(id, body, Some(self.account))?;
         info!(
             ?board,
             post = post.0,
@@ -230,6 +235,15 @@ impl Boards<'_> {
             "topic text stored"
         );
         Ok(())
+    }
+
+    /// Whether this reader wrote the post: the recorded account decides, and only a post with
+    /// none (kept before posts recorded one) falls back to the name at its head.
+    fn wrote(&self, post: &Post) -> bool {
+        match post.account {
+            Some(account) => account == self.account,
+            None => is_author(&post.body, self.persona),
+        }
     }
 
     /// Message `message` of a board goes when its author or a privileged reader asks.
@@ -245,9 +259,8 @@ impl Boards<'_> {
             );
             return Ok(());
         };
-        let allowed = !ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED
-            || self.privileged
-            || is_author(&post.body, self.persona);
+        let allowed =
+            !ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED || self.privileged || self.wrote(post);
         if !allowed {
             warn!(
                 ?board,
@@ -289,7 +302,7 @@ fn is_author(body: &[u8], persona: &str) -> bool {
 /// A complaint from the hub or the Sketch Pad. The client says "Your complaint has been forwarded"
 /// the moment it sends and waits for nothing, so nothing is answered. The text is kept as
 /// `persona|Complaint: text` on the complaint board, where the account's export and delete find it
-/// by persona, and only the account, the length and whether someone was named are logged.
+/// by the recorded account, and only the account, the length and whether someone was named are logged.
 fn complaint(world: &World, account: &Account, names_someone: bool, text: &[u8]) {
     if !COMPLAINTS_ARE_KEPT_ASSUMED {
         return;
@@ -309,7 +322,7 @@ fn complaint(world: &World, account: &Account, names_someone: bool, text: &[u8])
             section: COMPLAINT_SECTION_ASSUMED,
         },
     );
-    match world.store.post(board, &body) {
+    match world.store.post_as(board, &body, Some(account.id)) {
         Ok(post) => info!(
             account = account.id.0,
             post = post.0,

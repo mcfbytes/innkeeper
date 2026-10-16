@@ -747,7 +747,7 @@ impl Admin {
                 .ok()
                 .flatten(),
         };
-        let author = lookup(&c.author);
+        let author = c.account.or_else(|| lookup(&c.author));
         let offender_name = c.offender();
         let offender = offender_name.as_deref().and_then(lookup);
         let mut facts = format!(

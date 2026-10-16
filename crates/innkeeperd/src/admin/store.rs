@@ -355,6 +355,20 @@ fn escape_like(text: &str) -> String {
         .replace('_', "\\_")
 }
 
+/// The account behind a post or complaint: the one recorded on it, or, for a post from before
+/// posts recorded one, the first account whose persona matches the author name (see privacy.md).
+pub(crate) fn account_of_post(
+    store: &SqliteStore,
+    account: Option<u32>,
+    author: &str,
+) -> Option<u32> {
+    account.or_else(|| {
+        (!author.is_empty())
+            .then(|| account_by_persona(store, author).ok().flatten())
+            .flatten()
+    })
+}
+
 pub(crate) fn account_by_persona(
     store: &SqliteStore,
     persona: &str,
@@ -552,6 +566,8 @@ pub(crate) struct Complaint {
     pub(crate) text: String,
     pub(crate) created_at: i64,
     pub(crate) handled: Option<(i64, String)>,
+    /// The account that wrote it; none for a complaint from before posts recorded one.
+    pub(crate) account: Option<u32>,
 }
 
 impl Complaint {
@@ -580,6 +596,7 @@ fn complaint_from(
     body: &[u8],
     created_at: Option<i64>,
     handled: (Option<i64>, Option<String>),
+    account: Option<u32>,
 ) -> Complaint {
     let text = String::from_utf8_lossy(trim_nul(body)).into_owned();
     let (author, rest) = match text.split_once('|') {
@@ -597,11 +614,12 @@ fn complaint_from(
         text: rest,
         created_at: created_at.unwrap_or(0),
         handled: handled.0.zip(handled.1),
+        account,
     }
 }
 
 const COMPLAINT_COLUMNS: &str = "SELECT posts.id, posts.board, posts.body, posts.created_at,
-    complaint_handled.handled_at, complaint_handled.handle
+    complaint_handled.handled_at, complaint_handled.handle, posts.account
     FROM posts LEFT JOIN complaint_handled ON complaint_handled.post_id = posts.id";
 
 pub(crate) fn complaints(store: &SqliteStore, limit: u32) -> Result<Vec<Complaint>, StoreError> {
@@ -622,6 +640,7 @@ pub(crate) fn complaints(store: &SqliteStore, limit: u32) -> Result<Vec<Complain
                 &body,
                 row.get(3)?,
                 (row.get(4)?, row.get(5)?),
+                row.get(6)?,
             ))
         })
         .map_err(backend)?;
@@ -647,6 +666,7 @@ pub(crate) fn complaint(
                 &body,
                 row.get(3)?,
                 (row.get(4)?, row.get(5)?),
+                row.get(6)?,
             ))
         },
     )
@@ -729,6 +749,7 @@ pub(crate) struct PostView {
     pub(crate) author: Option<String>,
     pub(crate) text: String,
     pub(crate) created_at: i64,
+    pub(crate) account: Option<u32>,
 }
 
 pub(crate) fn board_posts(
@@ -739,20 +760,20 @@ pub(crate) fn board_posts(
     let conn = store.connection();
     let mut statement = conn
         .prepare(
-            "SELECT id, body, ifnull(created_at, 0) FROM posts
+            "SELECT id, body, ifnull(created_at, 0), account FROM posts
              WHERE board = ?1 AND deleted_at IS NULL ORDER BY id DESC LIMIT ?2",
         )
         .map_err(backend)?;
     let rows = statement
         .query_map(params![board, limit], |row| {
             let body: Vec<u8> = row.get(1)?;
-            Ok(post_view(row.get(0)?, &body, row.get(2)?))
+            Ok(post_view(row.get(0)?, &body, row.get(2)?, row.get(3)?))
         })
         .map_err(backend)?;
     rows.collect::<Result<_, _>>().map_err(backend)
 }
 
-fn post_view(id: u32, body: &[u8], created_at: i64) -> PostView {
+fn post_view(id: u32, body: &[u8], created_at: i64, account: Option<u32>) -> PostView {
     let author = post_author(body).map(str::to_owned);
     let text = String::from_utf8_lossy(trim_nul(body)).into_owned();
     let text = match text.split_once('|') {
@@ -764,6 +785,7 @@ fn post_view(id: u32, body: &[u8], created_at: i64) -> PostView {
         author,
         text,
         created_at,
+        account,
     }
 }
 
@@ -775,11 +797,11 @@ pub(crate) fn post_board(
     store
         .connection()
         .query_row(
-            "SELECT board, body, ifnull(created_at, 0) FROM posts WHERE id = ?1 AND deleted_at IS NULL",
+            "SELECT board, body, ifnull(created_at, 0), account FROM posts WHERE id = ?1 AND deleted_at IS NULL",
             [post],
             |row| {
                 let body: Vec<u8> = row.get(1)?;
-                Ok((row.get(0)?, post_view(post, &body, row.get(2)?)))
+                Ok((row.get(0)?, post_view(post, &body, row.get(2)?, row.get(3)?)))
             },
         )
         .optional()
@@ -1063,6 +1085,7 @@ mod tests {
             text: text.into(),
             created_at: 0,
             handled: None,
+            account: None,
         };
         let named = make("From: Anna in: Tavern; about: Bruno, who said \"x\" Comments: rude");
         assert_eq!(named.offender().as_deref(), Some("Bruno"));

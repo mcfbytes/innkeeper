@@ -40,7 +40,8 @@ const SCHEMA: &str = "
         board INTEGER NOT NULL,
         body BLOB NOT NULL,
         deleted_at INTEGER,
-        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+        account INTEGER
     );
     CREATE INDEX IF NOT EXISTS posts_by_board ON posts(board);
     /* No foreign key: a bankroll is a value under an account number, and an open book has no rows
@@ -188,7 +189,7 @@ fn backend(error: rusqlite::Error) -> StoreError {
 /// Version 1 added `deleted_at` and the audit tables, version 2 the sign-in tables, version 3 the
 /// operator portal's tables and `accounts.suspended_at`. Fresh files are
 /// created at this version; older files gain what they lack on open (docs/server/store.md).
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 
 fn migrate(connection: &Connection) -> Result<(), StoreError> {
     connection.execute_batch(SCHEMA).map_err(backend)?;
@@ -204,6 +205,14 @@ fn migrate(connection: &Connection) -> Result<(), StoreError> {
     }
     add_column(connection, "accounts", "suspended_at")?;
     add_column(connection, "posts", "created_at")?;
+    // The writing account; NULL for a post made before this column (matched by name, see privacy.md).
+    add_column(connection, "posts", "account")?;
+    connection
+        .execute(
+            "CREATE INDEX IF NOT EXISTS posts_by_account ON posts(account)",
+            [],
+        )
+        .map_err(backend)?;
     connection
         .execute(
             "UPDATE posts SET created_at = strftime('%s','now') WHERE created_at IS NULL",
@@ -227,6 +236,7 @@ fn add_column(connection: &Connection, table: &str, column: &str) -> Result<(), 
         ("letters", "deleted_at") => "ALTER TABLE letters ADD COLUMN deleted_at INTEGER",
         ("posts", "deleted_at") => "ALTER TABLE posts ADD COLUMN deleted_at INTEGER",
         ("posts", "created_at") => "ALTER TABLE posts ADD COLUMN created_at INTEGER",
+        ("posts", "account") => "ALTER TABLE posts ADD COLUMN account INTEGER",
         ("money", "deleted_at") => "ALTER TABLE money ADD COLUMN deleted_at INTEGER",
         ("saves", "deleted_at") => "ALTER TABLE saves ADD COLUMN deleted_at INTEGER",
         _ => {
@@ -475,12 +485,17 @@ impl Store for SqliteStore {
         Ok(deleted > 0)
     }
 
-    fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError> {
+    fn post_as(
+        &self,
+        board: BoardId,
+        body: &[u8],
+        account: Option<AccountId>,
+    ) -> Result<PostId, StoreError> {
         let connection = self.connection();
         connection
             .execute(
-                "INSERT INTO posts (board, body) VALUES (?1, ?2)",
-                params![board.0, body],
+                "INSERT INTO posts (board, body, account) VALUES (?1, ?2, ?3)",
+                params![board.0, body, account.map(|account| account.0)],
             )
             .map_err(backend)?;
         last_id(&connection).map(PostId)
@@ -490,7 +505,7 @@ impl Store for SqliteStore {
         let connection = self.connection();
         let mut statement = connection
             .prepare_cached(
-                "SELECT id, body FROM posts WHERE board = ?1 AND deleted_at IS NULL ORDER BY id",
+                "SELECT id, body, account FROM posts WHERE board = ?1 AND deleted_at IS NULL ORDER BY id",
             )
             .map_err(backend)?;
         let rows = statement
@@ -498,6 +513,7 @@ impl Store for SqliteStore {
                 Ok(Post {
                     id: PostId(row.get(0)?),
                     body: row.get(1)?,
+                    account: row.get::<_, Option<u32>>(2)?.map(AccountId),
                 })
             })
             .map_err(backend)?;
@@ -896,6 +912,21 @@ mod tests {
             .query_row("SELECT created_at FROM posts", [], |row| row.get(0))
             .unwrap();
         assert!(created > 0);
+        let writer: Option<u32> = store
+            .connection()
+            .query_row("SELECT account FROM posts", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(writer, None, "an old post has no recorded account");
+        store
+            .post_as(BoardId(1), b"x|y", Some(AccountId(1)))
+            .unwrap();
+        let writer: Option<u32> = store
+            .connection()
+            .query_row("SELECT account FROM posts WHERE id = 2", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(writer, Some(1));
     }
 
     #[test]

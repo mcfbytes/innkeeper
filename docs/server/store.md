@@ -15,7 +15,7 @@ Five families, each as narrow as its first users need.
 | accounts | `AccountId` | `account` (get), `create_account`, `update_password`, `set_persona` | account book, logon, command 44 |
 | money | `AccountId` | `money` (get), `set_money` | CasinoLand bankroll (commands 40/3 and 40/2) |
 | mailboxes | `MailboxNumber`, assigned per account | `assign_mailbox`, `append_letter`, `letters`, `delete_letter` | mail (`NewBoxHandler` 45, `EMMsg` 37) |
-| boards | `BoardId` | `post`, `posts` | the RPG bulletin board (command 27) |
+| boards | `BoardId` | `post`, `post_as`, `posts` | the RPG bulletin board (command 27) |
 | saves | `AccountId`, canonical path, version | `saves`, `save_versions`, `save_read`, `save_write` | the browser client's game files ([saves.md](saves.md)) |
 
 An `AccountRecord` holds the `EncodedPassword` exactly as the client sends it, the persona name, the
@@ -123,5 +123,10 @@ Mail is the first user of the mailbox family ([mail.md](mail.md)):
 Boards (`post`, `posts`) serve the RPG bulletin board (`innkeeper-world::bbs`): a post body is the client's
 `author|text`, and a `BoardId` is `landType << 24 | location << 8 | section`, so the two titles keep apart
 ([yserbius.md](../protocol/yserbius.md) section 3).
+`post_as(board, body, account)` records the writing account, which is what ownership means for a post (export,
+delete, holds, "erase my own message"); a `Post` read back carries `account`. `post` records none. A post with no
+account (every post before `posts.account` was added, in a migrated database) is attributed by the persona at the
+head of its body, case-insensitive, and only such a post; names are not unique, so an account never owns a post
+that names someone else's account (privacy.md section 1).
 A first-class delivery time on `Letter` would let the stored body be the envelope alone; that is a trait
 change for the owner of `store.rs`.

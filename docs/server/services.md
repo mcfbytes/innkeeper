@@ -73,7 +73,7 @@ An unknown box gets Nak fault 6 (`NoSuchBox`); a store failure on the Member Ser
 - **Member Services**: the question is the player's own message to the operator. It is kept as a post on
   the complaint board location (`0x63`, section 2, land 0), body `persona|Member Services: text`, up to
   `MEMBER_SERVICES_MESSAGE_LIMIT_ASSUMED` bytes, so it follows the 365-day complaint retention and the
-  account export and delete find it by persona (privacy.md sections 1 and 6). Section 2 is listed by no
+  account export and delete find it by the account recorded on the post (privacy.md sections 1 and 6). Section 2 is listed by no
   directory, so no game client reads it. `MEMBER_SERVICES_MESSAGES_ARE_KEPT_ASSUMED`.
 - **Accounting (Update Account Information)**: the form is free text about billing, so a player may type
   an address or a card number. It is acknowledged and thrown away unread; only the account number and the

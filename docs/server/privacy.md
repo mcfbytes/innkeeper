@@ -17,7 +17,7 @@ stays in the file until the retention job in section 6 hard-purges it. Schema:
 | `accounts` | `id`, encoded `password` (10 bytes as the client sent them), `persona` (the Login name), `user_flags`, `rating`, `status`, `password_expired`, `deleted_at` | Logon, command 44, signup. The password is reversible obfuscation, not a hash | Soft-deleted on `account delete`; hard-purged after the account window (section 6) |
 | `mailboxes` | `number` (stable from 1), `account`, `deleted_at` | Command 45 assigns one box per account | With the account. A box with letters still in it waits for those letters (section 6) |
 | `letters` | `id`, `mailbox`, `body` (six time bytes then the client's envelope: names, subject, text), `deleted_at` | Mail (command 37). The store does not look inside | Hidden at the player's delete; hard-purged after the mail window |
-| `posts` | `id`, `board`, `body` (`author\|text` as the RPG client wrote it), `deleted_at`, `created_at` | Bulletin board (command 27) | Hidden when deleted; hard-purged after the post window. Complaints use `created_at` (section 6) |
+| `posts` | `id`, `board`, `body` (`author\|text` as the RPG client wrote it), `deleted_at`, `created_at`, `account` (the account that wrote it; NULL for a post made before the column) | Bulletin board (command 27) | Hidden when deleted; hard-purged after the post window. Complaints use `created_at` (section 6) |
 | `posts` (Member Services) | as `posts`, on board location `0x63`, section 2, land 0: `persona\|Member Services: text` | A question a player types into Town Hall "Ask Member Services" is a message to the operator ([services.md](services.md) section 5) | Complaint retention, 365 days from arrival (section 6) |
 | `posts` (complaint) | as `posts`, on board location `0x63`, section 3, land 0: `persona\|Complaint: text` | The hub's "Complain" form and the Sketch Pad's complaint ([hub-services.md](hub-services.md) section 2) | Complaint retention, 365 days from arrival (section 6); in the export and the delete |
 | `posts` (topics) | as `posts`, land 0, board location 0 sections 67 and 84: the conference and trivia topic text a moderator wrote, with no author prefix | Not personal data; one message each, replaced on a write ([hub-services.md](hub-services.md) section 5) | Post window |
@@ -36,11 +36,18 @@ identity's HMAC, NULL for a line without a session.
 given when the account was opened); sign-in itself stores no name. It is empty for a web account until the
 client's first 40/4, which writes the name the player picked (the last one wins). The server keeps a name
 only when it is 1 to 16 printable ASCII characters with no `|`; it is part of the account's export and is
-erased with the account like the row. Names are not unique, as in the original, so an export or a delete that matches board posts by persona
-can also match a post by another player of the same name (known limit: a player could choose another's
-name to have those posts listed in their export, or hidden by their delete); the retention purge already
-keeps a post while any account with that persona is held (section 6). Board posts are attributed by
-matching the stored persona to the `author` prefix, case-insensitive. An empty persona matches no posts.
+erased with the account like the row. Names are not unique, as in the original, so posts are not attributed by name. Every new post records the
+account that wrote it (`posts.account`): board posts (27/0), the hub's complaints (27/9), Town Hall "Ask Member
+Services" messages (37/30) and the conference and trivia topic text. The account export, `account delete` and its
+restore, the retention purge and its legal holds, the operator portal's complaint-to-account link and the
+bulletin board's "erase your own message" all use that column, so two accounts that share a persona never see,
+hide, erase or hold each other's posts.
+
+**Legacy rows.** A post made before the column existed has `account` NULL. Only for those rows the old rule
+still applies: the `author` before the first `|` is compared, without regard to case, with the account's stored
+persona (an empty persona matches nothing). The fallback therefore can still tie a legacy post to a same-named
+account; it fades as legacy posts reach the post window. A name inside a complaint's text (`about: Name`) is
+what the client typed about someone, not an author, and the portal resolves it by name only to offer a link.
 
 `Envelope`'s `Debug` prints the text length and not the text, so a letter or a Town Hall form never appears in a log line, in any mode. (The raw hex line of the verbose default mode still carries message bytes; `--public` drops them.)
 
@@ -108,7 +115,7 @@ items are included and each carries `"deleted_at"` (null while the row is live):
   password bytes, plus `deleted_at`;
 - mailbox number, letters received (that mailbox) and letters sent (other mailboxes whose envelope
   `from` is this mailbox), each with `deleted_at`;
-- posts whose `author` matches the stored persona, each with `deleted_at`;
+- posts written by the account (`posts.account`), each with `deleted_at`, and the posts with no recorded account whose `author` matches the stored persona (the legacy rule, below);
 - `money` as a number, and `money_deleted_at` beside it;
 - save file list, sizes, hashes, versions and `deleted_at`; `--with-saves` adds `data_base64`;
 - `identity`, when the account was made through sign-in: the handle, `identity_key_hex`, provider id,
@@ -119,7 +126,7 @@ items are included and each carries `"deleted_at"` (null while the row is live):
 **Delete** without `--yes` prints the plan (live letters and posts only) and exits 1. With `--yes` the
 account is disabled at once: it cannot log on, and its number is not issued again. The same
 `deleted_at` is written on the account, its mailbox, letters in that box, letters it sent, posts
-attributed to its stored persona, its money and its saves. The command prints the UTC purge date
+written by the account (and legacy posts matched by persona), its money and its saves. The command prints the UTC purge date
 (`deleted_at` plus `--retain-account-days`). A second delete prints that date and leaves the stamp
 as it was. Sealed connection records are kept, held or not, and age out on their own clock.
 Someone who abuses the service and then deletes the account does not erase that trail. When the
@@ -278,9 +285,9 @@ Every number is a field of `RetentionPolicy` (`innkeeper-world`) and a flag. Def
 Players see a deleted letter or post as gone: every read skips `deleted_at`. The only user-facing
 delete in the protocol today is mail sub-command 26. Command 27 has a delete sub-command, 27/6, from the
 hub's bulletin board (own post or privileged reader only, no reply; [hub-services.md](hub-services.md) section 3). `Store::delete_post` is there for the operator path, and
-`account delete` soft-deletes posts whose `author` is the stored persona.
+`account delete` soft-deletes the posts the account wrote (and legacy posts, below).
 
-The Town Hall's "Update Account Information" form is free text about billing, so it may hold an address or a card number. It is acknowledged and discarded unread: nothing of it is stored, and only the account number and the fact that a form arrived are logged. The "Ask Member Services" text is kept as a complaint post (section 1) and is part of the account's export and delete (matched by persona).
+The Town Hall's "Update Account Information" form is free text about billing, so it may hold an address or a card number. It is acknowledged and discarded unread: nothing of it is stored, and only the account number and the fact that a form arrived are logged. The "Ask Member Services" text is kept as a complaint post (section 1) and is part of the account's export and delete (matched by the writing account).
 
 Complaints are posts on board location `0x63` (`COMPLAINT_BOARD_LOCATION`), any land. That is the
 operator-only complaint board the RPG client already lists. The hub's complaint form (27/9, or 27/0 with

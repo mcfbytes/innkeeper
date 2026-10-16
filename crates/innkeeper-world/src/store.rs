@@ -64,6 +64,8 @@ pub struct Letter {
 pub struct Post {
     pub id: PostId,
     pub body: Vec<u8>,
+    /// The account that wrote it; none for a post kept before posts recorded one.
+    pub account: Option<AccountId>,
 }
 
 #[derive(Debug, Error)]
@@ -111,7 +113,18 @@ pub trait Store: fmt::Debug + Send + Sync {
     /// True when the letter was in that mailbox and is now gone.
     fn delete_letter(&self, mailbox: MailboxNumber, letter: LetterId) -> Result<bool, StoreError>;
 
-    fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError>;
+    /// Adds a post that no account is recorded for (a system post, or a test's).
+    fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError> {
+        self.post_as(board, body, None)
+    }
+    /// Adds a post and records the account that wrote it. Attribution is by this account, never by
+    /// the name at the head of the body: names are not unique (docs/server/privacy.md section 1).
+    fn post_as(
+        &self,
+        board: BoardId,
+        body: &[u8],
+        account: Option<AccountId>,
+    ) -> Result<PostId, StoreError>;
     /// Oldest first; empty for a board nobody has posted to.
     fn posts(&self, board: BoardId) -> Result<Vec<Post>, StoreError>;
 
@@ -339,7 +352,12 @@ impl Store for MemoryStore {
         Ok(true)
     }
 
-    fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError> {
+    fn post_as(
+        &self,
+        board: BoardId,
+        body: &[u8],
+        account: Option<AccountId>,
+    ) -> Result<PostId, StoreError> {
         let mut tables = self.tables();
         let id = PostId(successor(tables.posts_written)?);
         tables.posts_written = id.0;
@@ -347,6 +365,7 @@ impl Store for MemoryStore {
             post: Post {
                 id,
                 body: body.to_vec(),
+                account,
             },
             deleted_at: None,
         });
