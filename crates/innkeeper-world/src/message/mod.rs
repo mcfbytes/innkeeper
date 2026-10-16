@@ -9,6 +9,7 @@ mod host;
 mod invoke_method;
 mod lock;
 mod mail;
+mod mall;
 mod multicast;
 mod notice;
 mod object_kind;
@@ -40,6 +41,7 @@ pub use mail::{
     MailboxRequest, OutgoingLetter,
 };
 pub(crate) use mail::{StoredLetter, FIELD_LEN};
+pub use mall::{MallHeader, MallReply, MallRequest};
 pub use multicast::Multicast;
 pub use notice::Notice;
 pub use object_kind::ObjectKind;

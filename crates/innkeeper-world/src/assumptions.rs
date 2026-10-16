@@ -101,6 +101,27 @@ pub(crate) const UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED: bool = true;
 /// the setInt answers name: the client stores it and compares it, nothing else reads it. Below the
 /// first allocated SID, like the RPG service (redbaron.md sections 5.2 and 10).
 pub(crate) const RED_BARON_SERVICE_SID_ASSUMED: Sid = Sid(0x0065);
+/// Word 2 of a Shoppers Advantage reply: an index into Shop's 4096-slot object table. Slot 5 is
+/// empty (`shopadv.md` section 7.2). A capture of a live host's word 2, or a registration into
+/// another slot, would settle it.
+pub(crate) const MALL_HEADER_SLOT_ASSUMED: u16 = 5;
+/// Kind byte of the `54/19` that starts Shop. LSCI ignores it; Shop acts only on `0x1A` and `0x1B`
+/// (`shopadv.md` section 7.2). A capture of that byte on a mall open would settle it.
+pub(crate) const MALL_OPEN_KIND_ASSUMED: u8 = 0;
+/// The one line Shop appends. The original mall was a store, so no capture has this sentence; a
+/// host that wanted a different notice would replace it (`shopadv.md` section 10).
+pub(crate) const MALL_CLOSED_TEXT_ASSUMED: &str = "The Shoppers Advantage mall is closed.\n";
+/// Bytes 13 and 14 of a `54/20`. The text the client shows starts at byte 15 and nothing reads the
+/// two bytes before it (`shopadv.md` section 7.2). A capture of those bytes would settle them.
+pub(crate) const MALL_NAK_UNREAD_BYTES_ASSUMED: [u8; 2] = [0, 0];
+/// The mall gate (`54/27`) starts Shop. Shop shows a `54/16` kind 1 with no catalog (`shopadv.md`
+/// sections 9 and 11), so a closed mall can be that notice. A client that ignored an unsolicited
+/// `54/16` would settle it the other way: answer the gate with `54/20` and never start Shop.
+pub(crate) const MALL_LAUNCHES_SHOP_ASSUMED: bool = true;
+/// The closed notice follows `54/17` without waiting for a typed line. Shop's idle state displays
+/// a `54/16` whenever the host has one (`shopadv.md` section 9 step 3). A capture whose first
+/// screen arrived only after a `54/24` would settle it the other way.
+pub(crate) const MALL_NOTICE_FOLLOWS_JOIN_ASSUMED: bool = true;
 /// Property 0xF of Red Baron's service: how long a game lasts, in minutes. The client accepts 5 to 30
 /// and scales it to timer ticks (redbaron.md section 6); 10 is a host choice.
 pub(crate) const RED_BARON_GAME_MINUTES_ASSUMED: u16 = 10;

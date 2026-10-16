@@ -11,6 +11,7 @@ mod ids;
 mod land;
 mod logon;
 mod mail;
+mod mall;
 mod message;
 mod money;
 mod objects;
@@ -36,9 +37,10 @@ pub use message::{
     EncodedPassword, Envelope, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest,
     HostInfoRequest, HostMessage, IntProperty, JoinNet, LandDirectory, LandEntry, LetterRef,
     ListedLetter, Login, LoginAck, LoginNakReason, LoginStatus, MailFault, MailReply, MailRequest,
-    MailboxAnswer, MailboxRequest, MessagePosition, MoneyReply, Multicast, Nak, Notice, ObjExists,
-    ObjectKind, ObjectLocated, Occupancy, OutgoingLetter, PasswordSource, PlayStatus, ReadMoney,
-    ReadStep, SaveMoney, SendMessage, SetInt, SetPersona, SetStr,
+    MailboxAnswer, MailboxRequest, MallHeader, MallReply, MallRequest, MessagePosition, MoneyReply,
+    Multicast, Nak, Notice, ObjExists, ObjectKind, ObjectLocated, Occupancy, OutgoingLetter,
+    PasswordSource, PlayStatus, ReadMoney, ReadStep, SaveMoney, SendMessage, SetInt, SetPersona,
+    SetStr,
 };
 pub use message::{
     InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,

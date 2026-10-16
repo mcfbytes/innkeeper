@@ -5,7 +5,7 @@ use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
     Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused, MailReply,
-    MailboxAnswer, MemberProperties, MoneyReply, Notice, ObjectLocated, PropertyValues,
+    MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjectLocated, PropertyValues,
     SendMessage, SetInt, SetStr,
 };
 use crate::{
@@ -55,6 +55,8 @@ pub enum HostMessage {
     MemberProperties(MemberProperties),
     /// The RPG bulletin board (27).
     Bbs(BbsReply),
+    /// Shoppers Advantage (54).
+    Mall(MallReply),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -211,6 +213,7 @@ impl HostMessage {
             HostMessage::Properties(values) => values.write(&mut writer),
             HostMessage::MemberProperties(table) => table.write(&mut writer),
             HostMessage::Bbs(reply) => reply.write(&mut writer),
+            HostMessage::Mall(reply) => reply.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -302,6 +305,7 @@ impl HostMessage {
                 HostMessage::MemberProperties(MemberProperties::parse(&mut reader)?)
             }
             Command::Bbs => HostMessage::Bbs(BbsReply::parse(&mut reader)?),
+            Command::Mall => HostMessage::Mall(MallReply::parse(&mut reader)?),
             Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
             Command::Lock
             | Command::ServiceProperties
