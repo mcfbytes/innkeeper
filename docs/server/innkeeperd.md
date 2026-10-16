@@ -57,6 +57,7 @@ events come out, and timers are a `next_deadline()` that the caller sleeps on. `
 cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures] [--no-capture]
                            [--public]
                            [--data-dir DIR]
+                           [--audit-public-key FILE --audit-key-id KID] [--audit-retention-days 90]
                            [--line auto|hayes|pad] [--connect-rate 2400]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
                            [--ws-bind 127.0.0.1:2316]
@@ -84,8 +85,11 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an
   unknown account from the password its first Login presents (INFERRED, `STORED_BOOK_ENROLS_ASSUMED`).
   Without it every account number and password is admitted and nothing is kept, which is what the DOSBox
-  scripts use. Offline, `innkeeperd account export` and `account delete` read and erase that file
-  ([privacy.md](privacy.md)).
+  scripts use. Offline, `innkeeperd account export` reads that file, including soft-deleted rows.
+  `account delete` disables the account until the retention purge; `account restore` undoes that
+  inside the window; `hold` and `release` cover the account's content and its sealed connection
+  records. `account delete` leaves those sealed records in place. The flags, the purge clocks and
+  the offline `audit` tools are in [privacy.md](privacy.md).
 - `--line` says what the client's serial port reaches (section 4). `--connect-rate` is the rate in the
   emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes);
   the transport's GetLineRate answers the same rate.

@@ -33,6 +33,7 @@ pub(crate) struct ConnectionSettings {
     pub(crate) switchboard: Switchboard,
     pub(crate) capture_dir: Option<PathBuf>,
     pub(crate) peers: PeerTokens,
+    pub(crate) audit: Option<Arc<crate::audit::AuditSeal>>,
     next_connection: AtomicU64,
 }
 
@@ -45,6 +46,7 @@ impl ConnectionSettings {
             switchboard: Switchboard::default(),
             capture_dir,
             peers: PeerTokens::new(),
+            audit: None,
             next_connection: AtomicU64::new(1),
             world,
         }
@@ -73,7 +75,7 @@ pub(crate) async fn serve_connection(
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
-    serve_line(stream, addr, settings, None).await;
+    serve_line(stream, addr, settings, "tcp", None).await;
 }
 
 /// Runs a legacy line session over any byte stream: a TCP socket or a WebSocket's bytes.
@@ -82,6 +84,7 @@ pub(crate) async fn serve_line<S>(
     stream: S,
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
+    transport: &'static str,
     logon: Option<LogonSignal>,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -91,7 +94,7 @@ pub(crate) async fn serve_line<S>(
     let span = info_span!("session", id = id.0, %peer);
     async move {
         info!("client connected");
-        match drive(stream, addr, id, &settings, logon).await {
+        match drive(stream, addr, id, &settings, transport, logon).await {
             Ok(()) => info!("client hung up"),
             Err(error) => warn!(%error, "connection failed"),
         }
@@ -105,6 +108,7 @@ async fn drive<S>(
     peer: SocketAddr,
     id: ConnectionId,
     settings: &ConnectionSettings,
+    transport: &'static str,
     logon: Option<LogonSignal>,
 ) -> std::io::Result<()>
 where
@@ -116,6 +120,11 @@ where
     if let Some(signal) = logon {
         host.announce_logon(signal);
     }
+    host.watch_audit(crate::audit::begin(
+        settings.audit.as_ref(),
+        peer,
+        transport,
+    ));
     let session = Session::new(settings.session);
     let result = pump(&mut stream, session, &mut host, &mut capture).await;
     host.hang_up();

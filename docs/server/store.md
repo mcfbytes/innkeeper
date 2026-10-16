@@ -109,8 +109,10 @@ Mail is the first user of the mailbox family ([mail.md](mail.md)):
   status 2 to the client.
 - `append_letter` stores a body of six bytes of delivery time followed by the client's envelope; the store still
   never looks inside. A delivery to a number nobody was assigned is `UnknownMailbox`.
-- `letters` serves the new-mail check, the listing and the read; `delete_letter` returns false for a letter
-  that is not in that mailbox, which the client sees as "that letter does not exist".
+- `letters` serves the new-mail check, the listing and the read, and skips rows with `deleted_at` set.
+  `delete_letter` sets `deleted_at` (the row stays until the retention purge in [privacy.md](privacy.md));
+  it returns false for a letter that is not in that mailbox or is already hidden, which the client sees
+  as "that letter does not exist".
 
 Boards (`post`, `posts`) serve the RPG bulletin board (`innkeeper-world::bbs`): a post body is the client's
 `author|text`, and a `BoardId` is `landType << 24 | location << 8 | section`, so the two titles keep apart

@@ -9,7 +9,7 @@ use innkeeper_world::{
     MailboxNumber, Money, Post, PostId, Store, StoreError,
 };
 use rusqlite::types::Type;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row};
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS accounts (
@@ -19,22 +19,27 @@ const SCHEMA: &str = "
         user_flags INTEGER NOT NULL,
         rating INTEGER NOT NULL,
         status INTEGER NOT NULL,
-        password_expired INTEGER NOT NULL
+        password_expired INTEGER NOT NULL,
+        deleted_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS mailboxes (
         number INTEGER PRIMARY KEY AUTOINCREMENT,
-        account INTEGER NOT NULL UNIQUE REFERENCES accounts(id)
+        account INTEGER NOT NULL UNIQUE REFERENCES accounts(id),
+        deleted_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS letters (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mailbox INTEGER NOT NULL REFERENCES mailboxes(number),
-        body BLOB NOT NULL
+        body BLOB NOT NULL,
+        deleted_at INTEGER
     );
     CREATE INDEX IF NOT EXISTS letters_by_mailbox ON letters(mailbox);
     CREATE TABLE IF NOT EXISTS posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         board INTEGER NOT NULL,
-        body BLOB NOT NULL
+        body BLOB NOT NULL,
+        deleted_at INTEGER,
+        created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );
     CREATE INDEX IF NOT EXISTS posts_by_board ON posts(board);
     /* No foreign key: a bankroll is a value under an account number, and an open book has no rows
@@ -42,7 +47,8 @@ const SCHEMA: &str = "
        it on the next open. */
     CREATE TABLE IF NOT EXISTS money (
         account INTEGER PRIMARY KEY,
-        amount INTEGER NOT NULL
+        amount INTEGER NOT NULL,
+        deleted_at INTEGER
     );
     /* Game save files per account (docs/server/saves.md). No foreign key, like money. The row with
        current = 1 is what a download returns; the others are kept history. A version number is
@@ -55,9 +61,26 @@ const SCHEMA: &str = "
         data BLOB NOT NULL,
         updated_at INTEGER NOT NULL,
         current INTEGER NOT NULL,
+        deleted_at INTEGER,
         PRIMARY KEY (account, path, version)
     );
     CREATE UNIQUE INDEX IF NOT EXISTS saves_one_current ON saves(account, path) WHERE current = 1;
+    /* Sealed connection records (docs/server/privacy.md). identity_key is reserved for the
+       sign-in HMAC and is written NULL until that table exists. */
+    CREATE TABLE IF NOT EXISTS audit_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        account_id INTEGER,
+        identity_key BLOB,
+        hold_until INTEGER,
+        sealed BLOB NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS audit_by_account ON audit_sessions(account_id, started_at);
+    CREATE TABLE IF NOT EXISTS holds (
+        account INTEGER PRIMARY KEY,
+        hold_until INTEGER NOT NULL
+    );
 ";
 
 /// `Store` over a SQLite file or an in-memory database; one connection behind a mutex.
@@ -81,7 +104,7 @@ impl SqliteStore {
         connection
             .pragma_update(None, "foreign_keys", true)
             .map_err(backend)?;
-        connection.execute_batch(SCHEMA).map_err(backend)?;
+        migrate(&connection)?;
         Ok(SqliteStore {
             connection: Mutex::new(connection),
         })
@@ -97,6 +120,95 @@ impl SqliteStore {
 
 fn backend(error: rusqlite::Error) -> StoreError {
     StoreError::backend(error)
+}
+
+/// The first schema that alters an existing table. Fresh files are created at this version;
+/// older files gain the new columns on open (docs/server/store.md).
+const SCHEMA_VERSION: i32 = 1;
+
+fn migrate(connection: &Connection) -> Result<(), StoreError> {
+    connection.execute_batch(SCHEMA).map_err(backend)?;
+    for table in [
+        "accounts",
+        "mailboxes",
+        "letters",
+        "posts",
+        "money",
+        "saves",
+    ] {
+        add_column(connection, table, "deleted_at")?;
+    }
+    add_column(connection, "posts", "created_at")?;
+    connection
+        .execute(
+            "UPDATE posts SET created_at = strftime('%s','now') WHERE created_at IS NULL",
+            [],
+        )
+        .map_err(backend)?;
+    connection
+        .pragma_update(None, "user_version", SCHEMA_VERSION)
+        .map_err(backend)?;
+    Ok(())
+}
+
+fn add_column(connection: &Connection, table: &str, column: &str) -> Result<(), StoreError> {
+    if column_exists(connection, table, column)? {
+        return Ok(());
+    }
+    let sql = match (table, column) {
+        ("accounts", "deleted_at") => "ALTER TABLE accounts ADD COLUMN deleted_at INTEGER",
+        ("mailboxes", "deleted_at") => "ALTER TABLE mailboxes ADD COLUMN deleted_at INTEGER",
+        ("letters", "deleted_at") => "ALTER TABLE letters ADD COLUMN deleted_at INTEGER",
+        ("posts", "deleted_at") => "ALTER TABLE posts ADD COLUMN deleted_at INTEGER",
+        ("posts", "created_at") => "ALTER TABLE posts ADD COLUMN created_at INTEGER",
+        ("money", "deleted_at") => "ALTER TABLE money ADD COLUMN deleted_at INTEGER",
+        ("saves", "deleted_at") => "ALTER TABLE saves ADD COLUMN deleted_at INTEGER",
+        _ => {
+            return Err(StoreError::backend(std::io::Error::other(format!(
+                "no migration for {table}.{column}"
+            ))))
+        }
+    };
+    connection.execute(sql, []).map_err(backend)?;
+    Ok(())
+}
+
+fn column_exists(connection: &Connection, table: &str, column: &str) -> Result<bool, StoreError> {
+    let sql = match table {
+        "accounts" => "PRAGMA table_info(accounts)",
+        "mailboxes" => "PRAGMA table_info(mailboxes)",
+        "letters" => "PRAGMA table_info(letters)",
+        "posts" => "PRAGMA table_info(posts)",
+        "money" => "PRAGMA table_info(money)",
+        "saves" => "PRAGMA table_info(saves)",
+        _ => return Ok(false),
+    };
+    let mut statement = connection.prepare(sql).map_err(backend)?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(backend)?;
+    for name in names {
+        if name.map_err(backend)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn unix_now() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX)
+        })
+}
+
+/// An account row including one the player can no longer see.
+#[derive(Clone, Debug)]
+pub(crate) struct AccountRow {
+    pub(crate) record: AccountRecord,
+    pub(crate) deleted_at: Option<i64>,
 }
 
 fn account_record(row: &Row<'_>) -> rusqlite::Result<AccountRecord> {
@@ -115,23 +227,40 @@ fn account_record(row: &Row<'_>) -> rusqlite::Result<AccountRecord> {
     })
 }
 
-impl Store for SqliteStore {
-    fn account(&self, id: AccountId) -> Result<Option<AccountRecord>, StoreError> {
+fn account_row(row: &Row<'_>) -> rusqlite::Result<AccountRow> {
+    Ok(AccountRow {
+        record: account_record(row)?,
+        deleted_at: row.get("deleted_at")?,
+    })
+}
+
+impl SqliteStore {
+    /// The account row even when it has been retired. Export uses this; players use `account`.
+    pub(crate) fn account_any(&self, id: AccountId) -> Result<Option<AccountRow>, StoreError> {
         let connection = self.connection();
         let mut statement = connection
             .prepare_cached("SELECT * FROM accounts WHERE id = ?1")
             .map_err(backend)?;
-        let mut rows = statement
-            .query_map([id.0], account_record)
-            .map_err(backend)?;
+        let mut rows = statement.query_map([id.0], account_row).map_err(backend)?;
         rows.next().transpose().map_err(backend)
+    }
+}
+
+impl Store for SqliteStore {
+    fn account(&self, id: AccountId) -> Result<Option<AccountRecord>, StoreError> {
+        Ok(self
+            .account_any(id)?
+            .filter(|row| row.deleted_at.is_none())
+            .map(|row| row.record))
     }
 
     fn create_account(&self, id: AccountId, record: AccountRecord) -> Result<(), StoreError> {
         let inserted = self
             .connection()
             .execute(
-                "INSERT OR IGNORE INTO accounts VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT OR IGNORE INTO accounts
+                 (id, password, persona, user_flags, rating, status, password_expired)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     id.0,
                     record.password.0,
@@ -166,7 +295,8 @@ impl Store for SqliteStore {
         let updated = self
             .connection()
             .execute(
-                "UPDATE accounts SET password = ?2, password_expired = 0 WHERE id = ?1",
+                "UPDATE accounts SET password = ?2, password_expired = 0
+                 WHERE id = ?1 AND deleted_at IS NULL",
                 params![id.0, password.0],
             )
             .map_err(backend)?;
@@ -179,7 +309,7 @@ impl Store for SqliteStore {
     fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError> {
         let connection = self.connection();
         let mut statement = connection
-            .prepare_cached("SELECT amount FROM money WHERE account = ?1")
+            .prepare_cached("SELECT amount FROM money WHERE account = ?1 AND deleted_at IS NULL")
             .map_err(backend)?;
         let mut rows = statement
             .query_map([id.0], |row| Ok(Money(row.get(0)?)))
@@ -201,13 +331,16 @@ impl Store for SqliteStore {
         let connection = self.connection();
         connection
             .execute(
-                "INSERT INTO mailboxes (account) SELECT id FROM accounts WHERE id = ?1
-                 AND NOT EXISTS (SELECT 1 FROM mailboxes WHERE account = ?1)",
+                "INSERT INTO mailboxes (account) SELECT id FROM accounts
+                 WHERE id = ?1 AND deleted_at IS NULL
+                 AND NOT EXISTS (
+                     SELECT 1 FROM mailboxes WHERE account = ?1 AND deleted_at IS NULL
+                 )",
                 [id.0],
             )
             .map_err(backend)?;
         let number = connection.query_row(
-            "SELECT number FROM mailboxes WHERE account = ?1",
+            "SELECT number FROM mailboxes WHERE account = ?1 AND deleted_at IS NULL",
             [id.0],
             |row| row.get(0),
         );
@@ -235,7 +368,9 @@ impl Store for SqliteStore {
     fn letters(&self, mailbox: MailboxNumber) -> Result<Vec<Letter>, StoreError> {
         let connection = self.connection();
         let mut statement = connection
-            .prepare_cached("SELECT id, body FROM letters WHERE mailbox = ?1 ORDER BY id")
+            .prepare_cached(
+                "SELECT id, body FROM letters WHERE mailbox = ?1 AND deleted_at IS NULL ORDER BY id",
+            )
             .map_err(backend)?;
         let rows = statement
             .query_map([mailbox.0], |row| {
@@ -252,8 +387,9 @@ impl Store for SqliteStore {
         let deleted = self
             .connection()
             .execute(
-                "DELETE FROM letters WHERE id = ?1 AND mailbox = ?2",
-                [letter.0, mailbox.0],
+                "UPDATE letters SET deleted_at = ?3
+                 WHERE id = ?1 AND mailbox = ?2 AND deleted_at IS NULL",
+                params![letter.0, mailbox.0, unix_now()],
             )
             .map_err(backend)?;
         Ok(deleted > 0)
@@ -273,7 +409,9 @@ impl Store for SqliteStore {
     fn posts(&self, board: BoardId) -> Result<Vec<Post>, StoreError> {
         let connection = self.connection();
         let mut statement = connection
-            .prepare_cached("SELECT id, body FROM posts WHERE board = ?1 ORDER BY id")
+            .prepare_cached(
+                "SELECT id, body FROM posts WHERE board = ?1 AND deleted_at IS NULL ORDER BY id",
+            )
             .map_err(backend)?;
         let rows = statement
             .query_map([board.0], |row| {
@@ -286,11 +424,62 @@ impl Store for SqliteStore {
         rows.collect::<Result<_, _>>().map_err(backend)
     }
 
+    fn delete_post(&self, board: BoardId, post: PostId) -> Result<bool, StoreError> {
+        let deleted = self
+            .connection()
+            .execute(
+                "UPDATE posts SET deleted_at = ?3
+                 WHERE id = ?1 AND board = ?2 AND deleted_at IS NULL",
+                params![post.0, board.0, unix_now()],
+            )
+            .map_err(backend)?;
+        Ok(deleted > 0)
+    }
+
+    fn retire_account(&self, id: AccountId) -> Result<(), StoreError> {
+        let connection = self.connection();
+        let updated = connection
+            .execute(
+                "UPDATE accounts SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+                params![id.0, unix_now()],
+            )
+            .map_err(backend)?;
+        if updated > 0 {
+            return Ok(());
+        }
+        let exists: bool = connection
+            .query_row("SELECT 1 FROM accounts WHERE id = ?1", [id.0], |_| Ok(true))
+            .optional()
+            .map_err(backend)?
+            .unwrap_or(false);
+        if exists {
+            Ok(())
+        } else {
+            Err(StoreError::UnknownAccount(id))
+        }
+    }
+
+    fn restore_account(&self, id: AccountId) -> Result<(), StoreError> {
+        let updated = self
+            .connection()
+            .execute(
+                "UPDATE accounts SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL",
+                [id.0],
+            )
+            .map_err(backend)?;
+        if updated > 0 {
+            Ok(())
+        } else {
+            Err(StoreError::UnknownAccount(id))
+        }
+    }
+
     fn saves(&self, id: AccountId) -> Result<Vec<SaveMeta>, StoreError> {
         let connection = self.connection();
         let mut statement = connection
             .prepare_cached(&format!(
-                "SELECT {SAVE_COLUMNS} FROM saves WHERE account = ?1 AND current = 1 ORDER BY path"
+                "SELECT {SAVE_COLUMNS} FROM saves WHERE account = ?1 AND current = 1 \
+                 AND deleted_at IS NULL ORDER BY path"
             ))
             .map_err(backend)?;
         let rows = statement.query_map([id.0], save_meta).map_err(backend)?;
@@ -302,7 +491,7 @@ impl Store for SqliteStore {
         let mut statement = connection
             .prepare_cached(&format!(
                 "SELECT {SAVE_COLUMNS} FROM saves WHERE account = ?1 AND path = ?2 \
-                 ORDER BY version DESC"
+                 AND deleted_at IS NULL ORDER BY version DESC"
             ))
             .map_err(backend)?;
         let rows = statement
@@ -321,7 +510,7 @@ impl Store for SqliteStore {
         let mut statement = connection
             .prepare_cached(&format!(
                 "SELECT {SAVE_COLUMNS}, data FROM saves WHERE account = ?1 AND path = ?2 \
-                 AND (version = ?3 OR (?3 IS NULL AND current = 1))"
+                 AND deleted_at IS NULL AND (version = ?3 OR (?3 IS NULL AND current = 1))"
             ))
             .map_err(backend)?;
         let mut rows = statement
@@ -516,7 +705,8 @@ mod tests {
         let old = Connection::open(&file.0).unwrap();
         old.execute_batch(before_money).unwrap();
         old.execute(
-            "INSERT INTO accounts VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
+            "INSERT INTO accounts (id, password, persona, user_flags, rating, status, password_expired)
+             VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
             [],
         )
         .unwrap();
@@ -537,10 +727,11 @@ mod tests {
         let before_saves = SCHEMA.split("/* Game save files").next().unwrap();
         let old = Connection::open(&file.0).unwrap();
         old.execute_batch(before_saves).unwrap();
-        old.execute("INSERT INTO money VALUES (1, 247)", [])
+        old.execute("INSERT INTO money (account, amount) VALUES (1, 247)", [])
             .unwrap();
         old.execute(
-            "INSERT INTO accounts VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
+            "INSERT INTO accounts (id, password, persona, user_flags, rating, status, password_expired)
+             VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
             [],
         )
         .unwrap();
@@ -563,5 +754,54 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!((meta.version, data.as_slice()), (1, &b"dir"[..]));
+    }
+
+    #[test]
+    fn a_database_from_before_deleted_at_gains_the_columns() {
+        let file = TempDatabase::new();
+        let old = Connection::open(&file.0).unwrap();
+        old.execute_batch(
+            "CREATE TABLE accounts (
+                id INTEGER PRIMARY KEY,
+                password BLOB NOT NULL,
+                persona TEXT NOT NULL,
+                user_flags INTEGER NOT NULL,
+                rating INTEGER NOT NULL,
+                status INTEGER NOT NULL,
+                password_expired INTEGER NOT NULL
+            );
+            CREATE TABLE posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                board INTEGER NOT NULL,
+                body BLOB NOT NULL
+            );",
+        )
+        .unwrap();
+        old.execute(
+            "INSERT INTO accounts (id, password, persona, user_flags, rating, status, password_expired)
+             VALUES (1, x'09090909090909090909', 'guybrush', 0, 0, 0, 0)",
+            [],
+        )
+        .unwrap();
+        old.execute("INSERT INTO posts (board, body) VALUES (1, x'616263')", [])
+            .unwrap();
+        drop(old);
+
+        let store = file.open();
+        assert_eq!(
+            store.account(AccountId(1)).unwrap().unwrap().persona,
+            "guybrush"
+        );
+        assert_eq!(store.posts(BoardId(1)).unwrap().len(), 1);
+        let version: i32 = store
+            .connection()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 1);
+        let created: i64 = store
+            .connection()
+            .query_row("SELECT created_at FROM posts", [], |row| row.get(0))
+            .unwrap();
+        assert!(created > 0);
     }
 }

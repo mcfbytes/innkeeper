@@ -21,6 +21,7 @@ mod objects;
 mod player;
 mod presence;
 mod red_baron;
+mod retention;
 pub mod router;
 mod rpg;
 pub mod saves;
@@ -30,6 +31,7 @@ mod user_find;
 mod world;
 
 pub use account::{Account, AccountBook, Enrolment, Refusal};
+pub use bbs::{is_complaint_board, COMPLAINT_BOARD_LOCATION};
 pub use error::MessageError;
 pub use host_time::{Clock, FixedClock, HostTime, SystemClock};
 pub use ids::{
@@ -58,6 +60,7 @@ pub use objects::{
     Place,
 };
 pub use player::PlayerSession;
+pub use retention::RetentionPolicy;
 #[cfg(feature = "test-support")]
 pub use store::conformance;
 pub use store::{

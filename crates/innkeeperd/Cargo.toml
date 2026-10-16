@@ -23,6 +23,8 @@ tokio-tungstenite.workspace = true
 futures-util.workspace = true
 serde_json.workspace = true
 base64.workspace = true
+aes-gcm.workspace = true
+rsa.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 

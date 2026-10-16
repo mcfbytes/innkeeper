@@ -64,7 +64,7 @@ pub(crate) async fn serve_websocket(
     let saves = SaveChannel::new(Arc::clone(&settings.world.store));
     let (relayed, ()) = tokio::join!(
         relay(socket, line, saves, signed_on),
-        serve_line(session_end, addr, settings, Some(logon))
+        serve_line(session_end, addr, settings, "websocket", Some(logon))
     );
     if let Err(error) = relayed {
         warn!(%error, %peer, "websocket relay stopped");

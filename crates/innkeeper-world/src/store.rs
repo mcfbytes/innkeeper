@@ -136,6 +136,16 @@ pub trait Store: fmt::Debug + Send + Sync {
         modified: u64,
         current: bool,
     ) -> Result<SaveMeta, StoreError>;
+
+    /// Hides `post` from readers. The row stays until the retention purge.
+    fn delete_post(&self, board: BoardId, post: PostId) -> Result<bool, StoreError>;
+
+    /// Marks the account deleted so it cannot log on and its number is not reused.
+    /// Owned mail and posts are retired by the operator command (docs/server/privacy.md).
+    fn retire_account(&self, id: AccountId) -> Result<(), StoreError>;
+
+    /// Clears a retirement, so the account can log on again.
+    fn restore_account(&self, id: AccountId) -> Result<(), StoreError>;
 }
 
 /// A store that forgets everything at exit: the default for tests and a host without a data dir.
@@ -146,15 +156,36 @@ pub struct MemoryStore {
 
 #[derive(Debug, Default)]
 struct Tables {
-    accounts: HashMap<AccountId, AccountRecord>,
+    accounts: HashMap<AccountId, AccountRow>,
     money: HashMap<AccountId, Money>,
     mailbox_of: HashMap<AccountId, MailboxNumber>,
-    letters: BTreeMap<MailboxNumber, Vec<Letter>>,
-    boards: HashMap<BoardId, Vec<Post>>,
+    letters: BTreeMap<MailboxNumber, Vec<HeldLetter>>,
+    boards: HashMap<BoardId, Vec<HeldPost>>,
     saves: BTreeMap<(AccountId, String), SavedFile>,
     mailboxes_assigned: u32,
     letters_written: u32,
     posts_written: u32,
+}
+
+/// An account row. A retired row stays so its number is never issued again.
+#[derive(Clone, Debug)]
+struct AccountRow {
+    record: AccountRecord,
+    deleted_at: Option<u64>,
+}
+
+/// A letter kept after the player deletes it, hidden from readers.
+#[derive(Clone, Debug)]
+struct HeldLetter {
+    letter: Letter,
+    deleted_at: Option<u64>,
+}
+
+/// A board post kept after it is deleted, hidden from readers.
+#[derive(Clone, Debug)]
+struct HeldPost {
+    post: Post,
+    deleted_at: Option<u64>,
 }
 
 /// The versions kept of one file, oldest first, and the last version number handed out.
@@ -177,7 +208,12 @@ impl MemoryStore {
 
 impl Store for MemoryStore {
     fn account(&self, id: AccountId) -> Result<Option<AccountRecord>, StoreError> {
-        Ok(self.tables().accounts.get(&id).cloned())
+        let tables = self.tables();
+        let row = tables
+            .accounts
+            .get(&id)
+            .filter(|row| row.deleted_at.is_none());
+        Ok(row.map(|row| row.record.clone()))
     }
 
     fn create_account(&self, id: AccountId, record: AccountRecord) -> Result<(), StoreError> {
@@ -185,7 +221,13 @@ impl Store for MemoryStore {
         if tables.accounts.contains_key(&id) {
             return Err(StoreError::AccountExists(id));
         }
-        tables.accounts.insert(id, record);
+        tables.accounts.insert(
+            id,
+            AccountRow {
+                record,
+                deleted_at: None,
+            },
+        );
         Ok(())
     }
 
@@ -195,12 +237,13 @@ impl Store for MemoryStore {
 
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError> {
         let mut tables = self.tables();
-        let record = tables
+        let row = tables
             .accounts
             .get_mut(&id)
+            .filter(|row| row.deleted_at.is_none())
             .ok_or(StoreError::UnknownAccount(id))?;
-        record.password = password;
-        record.password_expired = false;
+        row.record.password = password;
+        row.record.password_expired = false;
         Ok(())
     }
 
@@ -215,7 +258,11 @@ impl Store for MemoryStore {
 
     fn assign_mailbox(&self, id: AccountId) -> Result<MailboxNumber, StoreError> {
         let mut tables = self.tables();
-        if !tables.accounts.contains_key(&id) {
+        let live = tables
+            .accounts
+            .get(&id)
+            .is_some_and(|row| row.deleted_at.is_none());
+        if !live {
             return Err(StoreError::UnknownAccount(id));
         }
         if let Some(&number) = tables.mailbox_of.get(&id) {
@@ -235,21 +282,26 @@ impl Store for MemoryStore {
             .letters
             .get_mut(&mailbox)
             .ok_or(StoreError::UnknownMailbox(mailbox))?;
-        letters.push(Letter {
-            id,
-            body: body.to_vec(),
+        letters.push(HeldLetter {
+            letter: Letter {
+                id,
+                body: body.to_vec(),
+            },
+            deleted_at: None,
         });
         tables.letters_written = id.0;
         Ok(id)
     }
 
     fn letters(&self, mailbox: MailboxNumber) -> Result<Vec<Letter>, StoreError> {
-        Ok(self
-            .tables()
-            .letters
-            .get(&mailbox)
-            .cloned()
-            .unwrap_or_default())
+        let tables = self.tables();
+        let letters = tables.letters.get(&mailbox).map(Vec::as_slice);
+        Ok(letters
+            .unwrap_or(&[])
+            .iter()
+            .filter(|held| held.deleted_at.is_none())
+            .map(|held| held.letter.clone())
+            .collect())
     }
 
     fn delete_letter(&self, mailbox: MailboxNumber, letter: LetterId) -> Result<bool, StoreError> {
@@ -257,29 +309,77 @@ impl Store for MemoryStore {
         let Some(letters) = tables.letters.get_mut(&mailbox) else {
             return Ok(false);
         };
-        let before = letters.len();
-        letters.retain(|held| held.id != letter);
-        Ok(letters.len() != before)
+        let Some(held) = letters
+            .iter_mut()
+            .find(|held| held.letter.id == letter && held.deleted_at.is_none())
+        else {
+            return Ok(false);
+        };
+        held.deleted_at = Some(unix_now());
+        Ok(true)
     }
 
     fn post(&self, board: BoardId, body: &[u8]) -> Result<PostId, StoreError> {
         let mut tables = self.tables();
         let id = PostId(successor(tables.posts_written)?);
         tables.posts_written = id.0;
-        tables.boards.entry(board).or_default().push(Post {
-            id,
-            body: body.to_vec(),
+        tables.boards.entry(board).or_default().push(HeldPost {
+            post: Post {
+                id,
+                body: body.to_vec(),
+            },
+            deleted_at: None,
         });
         Ok(id)
     }
 
     fn posts(&self, board: BoardId) -> Result<Vec<Post>, StoreError> {
-        Ok(self
-            .tables()
-            .boards
-            .get(&board)
-            .cloned()
-            .unwrap_or_default())
+        let tables = self.tables();
+        let posts = tables.boards.get(&board).map(Vec::as_slice);
+        Ok(posts
+            .unwrap_or(&[])
+            .iter()
+            .filter(|held| held.deleted_at.is_none())
+            .map(|held| held.post.clone())
+            .collect())
+    }
+
+    fn delete_post(&self, board: BoardId, post: PostId) -> Result<bool, StoreError> {
+        let mut tables = self.tables();
+        let Some(posts) = tables.boards.get_mut(&board) else {
+            return Ok(false);
+        };
+        let Some(held) = posts
+            .iter_mut()
+            .find(|held| held.post.id == post && held.deleted_at.is_none())
+        else {
+            return Ok(false);
+        };
+        held.deleted_at = Some(unix_now());
+        Ok(true)
+    }
+
+    fn retire_account(&self, id: AccountId) -> Result<(), StoreError> {
+        let mut tables = self.tables();
+        let row = tables
+            .accounts
+            .get_mut(&id)
+            .ok_or(StoreError::UnknownAccount(id))?;
+        if row.deleted_at.is_none() {
+            row.deleted_at = Some(unix_now());
+        }
+        Ok(())
+    }
+
+    fn restore_account(&self, id: AccountId) -> Result<(), StoreError> {
+        let mut tables = self.tables();
+        let row = tables
+            .accounts
+            .get_mut(&id)
+            .filter(|row| row.deleted_at.is_some())
+            .ok_or(StoreError::UnknownAccount(id))?;
+        row.deleted_at = None;
+        Ok(())
     }
 
     fn saves(&self, id: AccountId) -> Result<Vec<SaveMeta>, StoreError> {
@@ -360,6 +460,13 @@ impl Store for MemoryStore {
         file.versions = keep;
         Ok(meta)
     }
+}
+
+fn unix_now() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 /// The number after `last`, counting from 1; a used-up 32-bit space is a backend fault.
@@ -670,6 +777,29 @@ mod tests {
     #[test]
     fn memory_store_passes_the_conformance_suite() {
         conformance::run_all(MemoryStore::new);
+    }
+
+    #[test]
+    fn a_deleted_letter_and_post_leave_the_readers_view_and_the_number_stays_taken() {
+        let store = MemoryStore::new();
+        let id = AccountId(7);
+        store
+            .create_account(id, AccountRecord::new(EncodedPassword([1; 10]), "a"))
+            .unwrap();
+        let mailbox = store.assign_mailbox(id).unwrap();
+        let letter = store.append_letter(mailbox, b"hi").unwrap();
+        assert!(store.delete_letter(mailbox, letter).unwrap());
+        assert!(store.letters(mailbox).unwrap().is_empty());
+        assert!(!store.delete_letter(mailbox, letter).unwrap());
+        let post = store.post(BoardId(1), b"a|text").unwrap();
+        assert!(store.delete_post(BoardId(1), post).unwrap());
+        assert!(store.posts(BoardId(1)).unwrap().is_empty());
+        store.retire_account(id).unwrap();
+        store.retire_account(id).unwrap();
+        assert!(store.account(id).unwrap().is_none());
+        assert_eq!(store.highest_account_id().unwrap(), Some(id));
+        store.restore_account(id).unwrap();
+        assert_eq!(store.account(id).unwrap().unwrap().persona, "a");
     }
 
     #[test]

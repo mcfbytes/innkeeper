@@ -9,6 +9,15 @@ use crate::{
     MessagePosition, Nak, Place, Post, ReadStep, Sid, StoreError, World,
 };
 
+/// Location of the operator-only Complaints board. Posts there are kept for a year
+/// (docs/server/privacy.md). The RPG client reaches it as a command 27 post, not as 27/9.
+pub const COMPLAINT_BOARD_LOCATION: u16 = 0x63;
+
+/// True for a post on the Complaints board of any land.
+pub fn is_complaint_board(board: BoardId) -> bool {
+    ((board.0 >> 8) & 0xFFFF) == u32::from(COMPLAINT_BOARD_LOCATION)
+}
+
 /// User-flag bits that make the client read a message's text 4 bytes later (`userFlags` & 2 or 4).
 const PRIVILEGED_USER_FLAGS: u16 = 0x0006;
 /// The client keeps one byte per indexed message in a 120-byte buffer.
@@ -37,7 +46,7 @@ const SECTIONS: [Section; 3] = [
         readable: true,
     },
     Section {
-        location: 0x63,
+        location: COMPLAINT_BOARD_LOCATION,
         number: 1,
         name: "Complaints",
         readable: false,
@@ -180,10 +189,14 @@ impl Boards<'_> {
 
     /// The land type in the top byte keeps Yserbius and Twinion boards of one location apart.
     fn board_id(&self, board: BoardRef) -> BoardId {
-        let section = u32::from(board.section & 0xFF);
-        let location = u32::from(board.location) << 8;
-        BoardId(u32::from(self.land.0) << 24 | location | section)
+        board_id(self.land, board)
     }
+}
+
+pub(crate) fn board_id(land: LandType, board: BoardRef) -> BoardId {
+    let section = u32::from(board.section & 0xFF);
+    let location = u32::from(board.location) << 8;
+    BoardId(u32::from(land.0) << 24 | location | section)
 }
 
 /// The message a step lands on, kept within 1..=total; 0 for an empty board.

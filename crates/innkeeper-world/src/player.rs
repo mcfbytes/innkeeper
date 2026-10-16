@@ -314,10 +314,12 @@ fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
     use crate::{
-        AccountBook, AccountId, ClientVersion, Cookie, EncodedPassword, IntProperty, JoinNet,
-        LandCatalog, LandType, LoginNakReason, ObjectKind, PasswordSource, SendMessage, SetInt,
-        Sid,
+        AccountBook, AccountId, AccountRecord, ClientVersion, Cookie, EncodedPassword, Enrolment,
+        IntProperty, JoinNet, LandCatalog, LandType, LoginNakReason, MemoryStore, ObjectKind,
+        PasswordSource, SendMessage, SetInt, Sid, Store, StoreError,
     };
 
     const ME: ConnectionId = ConnectionId(1);
@@ -377,6 +379,36 @@ mod tests {
         assert!(matches!(
             messages(player.handle(&world, &mut objects, ME, &login(7))).as_slice(),
             [HostMessage::LoginAccepted(_)]
+        ));
+    }
+
+    #[test]
+    fn a_deleted_account_is_refused_like_an_unknown_one() {
+        let store = Arc::new(MemoryStore::new());
+        let id = AccountId(100_001);
+        store
+            .create_account(id, AccountRecord::new(EncodedPassword([7; 10]), "guybrush"))
+            .unwrap();
+        store.retire_account(id).unwrap();
+        let world = World {
+            accounts: AccountBook::stored(store.clone(), Enrolment::Open),
+            store: store.clone(),
+            ..World::stock()
+        };
+        let mut objects = ObjectStore::new();
+        let mut player = PlayerSession::new();
+        let replies = messages(player.handle(&world, &mut objects, ME, &login(7)));
+        let [HostMessage::Nak(nak)] = replies.as_slice() else {
+            panic!("expected one Nak, got {replies:?}");
+        };
+        assert_eq!(nak.which_sub, LoginNakReason::UnknownAccount as u8);
+        assert_eq!(nak.text, "This account is not known here.");
+        assert!(player.account().is_none());
+        assert!(store.account(id).unwrap().is_none());
+        let again = AccountRecord::new(EncodedPassword([7; 10]), "guybrush");
+        assert!(matches!(
+            store.create_account(id, again),
+            Err(StoreError::AccountExists(_))
         ));
     }
 

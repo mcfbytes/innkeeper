@@ -156,33 +156,49 @@ fn admit_stored(
     enrolment: Enrolment,
     login: &Login,
 ) -> Result<Account, Failure> {
-    match store.account(login.account)? {
-        Some(record) if record.password == login.password => {
-            Ok(Account::from_record(login, &record))
-        }
-        Some(record) if is_placeholder(&record.password) => {
-            store.update_password(login.account, login.password)?;
-            let record = AccountRecord {
-                password: login.password,
-                password_expired: false,
-                ..record
-            };
-            Ok(Account::from_record(login, &record))
-        }
-        Some(_) => Err(Failure::Refused(Refusal::WrongPassword)),
-        None if enrolment == Enrolment::Open => {
-            let record = AccountRecord::new(login.password, login.name.as_str());
-            store.create_account(login.account, record.clone())?;
-            Ok(Account::from_record(login, &record))
-        }
-        None => Err(Failure::Refused(Refusal::UnknownAccount)),
+    if let Some(record) = store.account(login.account)? {
+        return admit_record(store, login, record);
     }
+    if enrolment != Enrolment::Open {
+        return Err(Failure::Refused(Refusal::UnknownAccount));
+    }
+    let record = AccountRecord::new(login.password, login.name.as_str());
+    match store.create_account(login.account, record.clone()) {
+        Ok(()) => Ok(Account::from_record(login, &record)),
+        // A retired row still occupies the number. account() hides it, so a second
+        // read that is still empty is a deleted account, not a fresh enrolment.
+        Err(StoreError::AccountExists(_)) => match store.account(login.account)? {
+            Some(existing) => admit_record(store, login, existing),
+            None => Err(Failure::Refused(Refusal::UnknownAccount)),
+        },
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn admit_record(
+    store: &dyn Store,
+    login: &Login,
+    record: AccountRecord,
+) -> Result<Account, Failure> {
+    if record.password == login.password {
+        return Ok(Account::from_record(login, &record));
+    }
+    if is_placeholder(&record.password) {
+        store.update_password(login.account, login.password)?;
+        let record = AccountRecord {
+            password: login.password,
+            password_expired: false,
+            ..record
+        };
+        return Ok(Account::from_record(login, &record));
+    }
+    Err(Failure::Refused(Refusal::WrongPassword))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ClientVersion, LandType, MemoryStore, PasswordSource};
+    use crate::{ClientVersion, LandType, MemoryStore, PasswordSource, StoreError};
 
     fn login(account: u32, password: u8) -> Login {
         Login {
@@ -236,6 +252,21 @@ mod tests {
         assert_eq!(account.persona, "guybrush");
         assert_eq!(book.admit(&login(100_001, 8)), Err(Refusal::WrongPassword));
         assert_eq!(book.admit(&login(100_002, 7)), Err(Refusal::UnknownAccount));
+    }
+
+    #[test]
+    fn a_deleted_account_stays_unknown_and_open_enrolment_does_not_recreate_it() {
+        let (book, store) = stored_book(Enrolment::Open);
+        let id = AccountId(100_001);
+        store.retire_account(id).unwrap();
+        assert_eq!(book.admit(&login(100_001, 7)), Err(Refusal::UnknownAccount));
+        assert!(store.account(id).unwrap().is_none());
+        assert_eq!(store.highest_account_id().unwrap(), Some(id));
+        let again = AccountRecord::new(EncodedPassword([9; 10]), "other");
+        assert!(matches!(
+            store.create_account(id, again),
+            Err(StoreError::AccountExists(_))
+        ));
     }
 
     #[test]

@@ -82,7 +82,7 @@ mod tests {
     use crate::{
         AccountBook, AccountId, AccountRecord, ClientMessage, ClientVersion, ConnectionId,
         EncodedPassword, Enrolment, HostMessage, LandType, Login, MemoryStore, ObjectStore,
-        PasswordSource, PlayerSession, Sid, Signup, Store, World,
+        PasswordSource, PlayerSession, Sid, Signup, Store, StoreError, World,
     };
 
     const ME: ConnectionId = ConnectionId(1);
@@ -178,6 +178,32 @@ mod tests {
         assert_eq!(ack_id(&first[0].message), AccountId(100_001));
         let second = player.handle(&world, &mut objects, ME, &signup(b""));
         assert_eq!(ack_id(&second[0].message), AccountId(100_002));
+    }
+
+    #[test]
+    fn signup_skips_a_deleted_account_number() {
+        let (world, store) = closed_world();
+        let retired = AccountId(SIGNUP_FIRST_ACCOUNT_ASSUMED);
+        store
+            .create_account(
+                retired,
+                AccountRecord::new(EncodedPassword([1; 10]), "gone"),
+            )
+            .unwrap();
+        store.retire_account(retired).unwrap();
+        let mut objects = ObjectStore::new();
+        let mut player = PlayerSession::new();
+        let replies = player.handle(&world, &mut objects, ME, &signup(b""));
+        let id = ack_id(&replies[0].message);
+        assert_eq!(id, AccountId(SIGNUP_FIRST_ACCOUNT_ASSUMED + 1));
+        assert!(store.account(retired).unwrap().is_none());
+        assert!(matches!(
+            store.create_account(
+                retired,
+                AccountRecord::new(EncodedPassword([1; 10]), "gone"),
+            ),
+            Err(StoreError::AccountExists(_))
+        ));
     }
 
     #[test]

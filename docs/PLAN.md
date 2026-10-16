@@ -241,11 +241,34 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
     endpoints (`/auth/login`, `/auth/callback`, `/auth/logout`) next to the WebSocket. An identity
     broker (Keycloak, Authentik, Auth0) can stand in for the provider list as one issuer.
   - **Identity key.** The `identities` table stores `identity_key = HMAC-SHA256(server_secret, issuer
-    || 0x00 || subject)`. The raw `sub` is never stored. The secret is configuration, outside the
-    database. Rotating the secret orphans every linked identity: those players must sign in again and
-    get a new account unless the operator keeps the old secret long enough to re-HMAC. This is
-    pseudonymous, not anonymous: no email, name or profile is kept. First sign-in creates the account;
-    one identity may own several accounts.
+    || 0x00 || subject)`, and the key version that produced it. Routine lookups use only the HMAC.
+    The raw `issuer||subject` is also kept sealed with the same envelope and audit public key as a
+    connection record, in `identities.subject_sealed`, so the operator can name the provider account
+    for one account under legal process. No email, name or profile is kept. First sign-in creates the
+    account; one identity may own several accounts. The HMAC secret and its rotation are in Secrets.
+  - **Secrets.** Two Azure Key Vaults, described with the sealed-record format in
+    [privacy.md](server/privacy.md) sections 5 and 7. Not built yet. The **server vault** is the only
+    vault innkeeperd's managed identity (or a self-hosted service principal) can read, and only as
+    Key Vault Secrets User: the identity HMAC key, each provider's OIDC client secret, future
+    server-side keys, and a copy of the audit public key with its key identifier (`audit-public-key`,
+    `audit-key-id`). The **escrow vault** holds the audit private key as a non-exportable RSA key
+    (RSA-HSM when the SKU allows, 3072-bit or larger). The server identity has no role assignment
+    there. Only the operator's own Entra account may unwrap, ideally with PIM, and Key Vault
+    diagnostic logs record every unwrap. IaC (Bicep or Terraform) creates both vaults and generates
+    the RSA key inside the escrow vault, so the private key never exists in IaC state. The deployment
+    copies that key's public JWK and version URL into the server vault, then
+    `tools/audit_roundtrip.sh` seals a probe and unwraps it with the operator's `az` login.
+    innkeeperd will use `azure_identity` and `azure_security_keyvault_secrets` (MIT), or the Key
+    Vault REST API, with `--key-vault` and those secret names. Secrets are fetched at startup, held
+    in memory only, and never logged or written to disk. Rotation is a restart or a refresh of the
+    latest versions. Identity HMAC rotation tries the current secret version, then older enabled
+    versions, and rewrites a row that matched an old version. Audit records take the new `kid` when
+    the RSA key version changes; older versions stay enabled until those records age out. Local
+    development uses no vault: `dev-identity.key` (mode 0600, generated in `--data-dir` when sign-in
+    exists) and `innkeeperd audit dev-keygen`. Either file logs `DEVELOPMENT KEY`. When the vault
+    client lands, `--public` refuses to start without `--key-vault`. Both vaults have soft delete and
+    purge protection. The envelope uses `aes-gcm` 0.10 and `rsa` 0.9 (each MIT OR Apache-2.0); the
+    server only encrypts with `rsa`.
   - **Attestation.** Columns `adult_attested_at` (date) and `terms_version`, set from the page's
     `attest=<age>+v<version>` login parameter. The session response exposes `{attested: {age, terms}}`
     and a pseudonymous `handle`, never a name.
@@ -257,7 +280,9 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   - **Connection session:** sign-in issues a session token (a `sessions` table: token hash,
     `identity_key`, expiry). The page opens the WebSocket with it; `innkeeperd` binds that connection
     to the identity and accepts a Login on it only for an account the identity owns. A stolen INN
-    password then opens nothing over the web.
+    password then opens nothing over the web. Expired rows are hard-purged 30 days after `expiry`
+    (`--retain-session-days`) unless that account is held. The table is not created yet; the purge
+    job deletes from it once it has both `expiry` and `account_id`.
   - Enrolment modes (configuration): open (today: an unknown account is created at its first Login),
     web-only (new accounts only through sign-in; TCP clients log on to existing accounts), closed.
     Account creation is rate-limited per identity.

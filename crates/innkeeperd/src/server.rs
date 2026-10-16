@@ -5,14 +5,18 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use innkeeper_world::{LogPolicy, StoreError, World};
+use innkeeper_world::{LogPolicy, RetentionPolicy, Store, StoreError, World};
 use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{info, warn};
 
+use crate::audit::AuditSeal;
 use crate::config::Config;
 use crate::connection::{serve_connection, ConnectionSettings};
+use crate::dates;
 use crate::int14h_listener::serve_transport;
+use crate::retention;
+use crate::seal::{self, Recipient};
 use crate::sqlite_store::SqliteStore;
 use crate::websocket::serve_websocket;
 
@@ -34,24 +38,38 @@ pub(crate) enum ServerError {
     AlreadyRunning { pid: u32 },
     #[error("cannot write the data-dir lock {path}: {source}")]
     Lock { path: String, source: io::Error },
+    #[error("the audit public key cannot be used: {0}")]
+    AuditKey(String),
+}
+
+struct Opened {
+    world: World,
+    store: Option<Arc<SqliteStore>>,
 }
 
 /// The stock world, with its accounts kept under `data_dir` when one is given.
-fn open_world(data_dir: Option<&Path>) -> Result<World, ServerError> {
+fn open_world(data_dir: Option<&Path>) -> Result<Opened, ServerError> {
     let Some(dir) = data_dir else {
-        return Ok(World::stock());
+        return Ok(Opened {
+            world: World::stock(),
+            store: None,
+        });
     };
     std::fs::create_dir_all(dir).map_err(|source| ServerError::DataDir {
         dir: dir.display().to_string(),
         source,
     })?;
-    let store = SqliteStore::open(&dir.join(DATABASE_FILE))?;
-    Ok(World::stored(Arc::new(store)))
+    let store = Arc::new(SqliteStore::open(&dir.join(DATABASE_FILE))?);
+    let world = World::stored(Arc::clone(&store) as Arc<dyn Store>);
+    Ok(Opened {
+        world,
+        store: Some(store),
+    })
 }
 
 pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
-    let mut world = open_world(config.data_dir.as_deref())?;
-    world.log = if config.public {
+    let mut opened = open_world(config.data_dir.as_deref())?;
+    opened.world.log = if config.public {
         LogPolicy::Public
     } else {
         LogPolicy::Verbose
@@ -60,10 +78,28 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
         Some(dir) => Some(crate::subject::DataDirLock::acquire(dir)?),
         None => None,
     };
+    let policy = config.retention();
+    if let Some(store) = &opened.store {
+        run_purge(store, policy);
+    }
+    let audit = load_audit(&config, opened.store.as_ref())?;
+    if let Some(store) = opened.store.clone() {
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(3600));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                run_purge(&store, policy);
+            }
+        });
+    }
     let legacy = listen(config.bind).await?;
     let transport = listen_if(config.int14h_bind()).await?;
     let websocket = listen_if(config.ws_bind).await?;
-    let settings = ConnectionSettings::new(config.session_config(), world, config.capture_dir());
+    let mut settings =
+        ConnectionSettings::new(config.session_config(), opened.world, config.capture_dir());
+    settings.audit = audit;
     let settings = Arc::new(settings);
     info!(bind = %config.bind, captures = ?settings.capture_dir, "{STARTUP_LINE}");
     let transport = accept_if(
@@ -80,6 +116,47 @@ pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
         _ = tokio::signal::ctrl_c() => info!("shutting down"),
     }
     Ok(())
+}
+
+fn run_purge(store: &SqliteStore, policy: RetentionPolicy) {
+    match retention::purge_expired(store, policy, dates::unix_now()) {
+        Ok(counts) => retention::log_counts(&counts),
+        Err(error) => warn!(%error, "retention purge failed"),
+    }
+}
+
+fn load_audit(
+    config: &Config,
+    store: Option<&Arc<SqliteStore>>,
+) -> Result<Option<Arc<AuditSeal>>, ServerError> {
+    let (Some(path), Some(kid)) = (&config.audit_public_key, &config.audit_key_id) else {
+        if config.public {
+            warn!(
+                "no sealed connection records are kept: --public was set without --audit-public-key"
+            );
+        }
+        return Ok(None);
+    };
+    let Some(store) = store else {
+        warn!("no sealed connection records are kept: --audit-public-key needs --data-dir");
+        return Ok(None);
+    };
+    let key =
+        seal::load_public_key(path).map_err(|error| ServerError::AuditKey(error.to_string()))?;
+    let bits = seal::key_bits(&key);
+    if bits < seal::RECOMMENDED_KEY_BITS {
+        warn!(bits, "the audit public key is shorter than 3072 bits");
+    }
+    warn!(
+        "DEVELOPMENT KEY: the audit public key was loaded from a file; \
+         production reads it from the server vault and the private key stays in the escrow vault"
+    );
+    let recipient = Recipient {
+        key,
+        kid: kid.clone(),
+    };
+    info!(kid = %kid, "sealed connection records are on");
+    Ok(Some(Arc::new(AuditSeal::new(Arc::clone(store), recipient))))
 }
 
 async fn listen_if(bind: Option<SocketAddr>) -> Result<Option<TcpListener>, ServerError> {
@@ -177,14 +254,14 @@ pub(crate) mod tests {
     fn a_data_dir_opens_a_database_that_enrols_and_remembers_accounts() {
         let dir = std::env::temp_dir().join(format!("innkeeperd-data-{}", std::process::id()));
         let id = AccountId(100_001);
-        let world = open_world(Some(&dir)).unwrap();
+        let world = open_world(Some(&dir)).unwrap().world;
         assert!(world.store.account(id).unwrap().is_none());
         world
             .store
             .create_account(id, AccountRecord::new(EncodedPassword([7; 10]), "kept"))
             .unwrap();
         drop(world);
-        let reopened = open_world(Some(&dir)).unwrap();
+        let reopened = open_world(Some(&dir)).unwrap().world;
         let kept = reopened.store.account(id).unwrap().unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(kept.persona, "kept");

@@ -78,7 +78,9 @@ async fn drive(
         log: settings.world.log,
     };
     wire.greet().await?;
-    let mut executive = Executive::new(Host::new(settings, id), line_rate(settings));
+    let mut host = Host::new(settings, id);
+    host.watch_audit(crate::audit::begin(settings.audit.as_ref(), peer, "tcp"));
+    let mut executive = Executive::new(host, line_rate(settings));
     let result = serve_calls(&mut wire, &mut executive).await;
     executive.hang_up();
     record(&mut wire.capture, Capture::finish_run);

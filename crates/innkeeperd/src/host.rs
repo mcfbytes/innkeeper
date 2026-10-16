@@ -25,6 +25,7 @@ pub(crate) struct Host<'s> {
     inbox: Inbox<'s>,
     player: PlayerSession,
     logon: Option<LogonSignal>,
+    audit: Option<crate::audit::AuditTicket>,
 }
 
 /// Tells the connection's other tasks which account its line session is signed on as.
@@ -67,7 +68,13 @@ impl<'s> Host<'s> {
             inbox: settings.switchboard.register(connection),
             player: PlayerSession::with_log(settings.world.log),
             logon: None,
+            audit: None,
         }
+    }
+
+    /// Keeps the sealed connection record for this line, when a recipient is configured.
+    pub(crate) fn watch_audit(&mut self, ticket: Option<crate::audit::AuditTicket>) {
+        self.audit = ticket;
     }
 
     pub(crate) fn log_policy(&self) -> LogPolicy {
@@ -109,6 +116,7 @@ impl<'s> Host<'s> {
         outgoing.extend(self.dispatch(caused));
         drop(objects);
         self.publish_logon();
+        self.note_audit();
         Answer {
             exchange: vec![Exchange::Received(received)],
             outgoing,
@@ -129,6 +137,18 @@ impl<'s> Host<'s> {
             .for_each(|delivery| self.switchboard.deliver(delivery));
         if let Some(signal) = &self.logon {
             signal.send_replace(None);
+        }
+        if let Some(ticket) = &mut self.audit {
+            ticket.close_now();
+        }
+    }
+
+    fn note_audit(&mut self) {
+        let Some(account) = self.player.account() else {
+            return;
+        };
+        if let Some(ticket) = &mut self.audit {
+            ticket.note_account(account.0);
         }
     }
 

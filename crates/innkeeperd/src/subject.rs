@@ -1,4 +1,4 @@
-//! Offline account export and deletion against `--data-dir` (docs/server/privacy.md).
+//! Offline account export, deletion and restore against `--data-dir` (docs/server/privacy.md).
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -6,11 +6,15 @@ use std::process::ExitCode;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use innkeeper_world::{AccountId, Envelope, HostTime, MailboxNumber, Store, StoreError};
+use innkeeper_world::{
+    AccountId, Envelope, HostTime, MailboxNumber, RetentionPolicy, Store, StoreError,
+};
 use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::config::AccountAction;
+use crate::dates;
+use crate::retention::{self, Disable, OwnedRows, PurgeNow, Restored};
 use crate::server::{ServerError, DATABASE_FILE, LOCK_FILE};
 use crate::sqlite_store::SqliteStore;
 
@@ -22,6 +26,12 @@ enum SubjectError {
     Unknown(u32),
     #[error("cannot open the account database: {0}")]
     Database(#[from] StoreError),
+    #[error("account {0} is under a legal hold")]
+    Held(u32),
+    #[error("account {0} is not deleted")]
+    NotDeleted(u32),
+    #[error("account {id} was disabled on {deleted} and the retention window has closed")]
+    WindowClosed { id: u32, deleted: String },
     #[error("{0}")]
     Io(#[from] io::Error),
 }
@@ -64,8 +74,8 @@ fn pid_alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
 }
 
-pub(crate) fn run(action: AccountAction) -> ExitCode {
-    match run_action(action) {
+pub(crate) fn run(action: AccountAction, policy: RetentionPolicy) -> ExitCode {
+    match run_action(action, policy) {
         Ok(code) => code,
         Err(error) => {
             eprintln!("{error}");
@@ -74,7 +84,7 @@ pub(crate) fn run(action: AccountAction) -> ExitCode {
     }
 }
 
-fn run_action(action: AccountAction) -> Result<ExitCode, SubjectError> {
+fn run_action(action: AccountAction, policy: RetentionPolicy) -> Result<ExitCode, SubjectError> {
     match action {
         AccountAction::Export {
             id,
@@ -87,27 +97,87 @@ fn run_action(action: AccountAction) -> Result<ExitCode, SubjectError> {
             println!("{}", serde_json::to_string_pretty(&document)?);
             Ok(ExitCode::SUCCESS)
         }
-        AccountAction::Delete { id, data_dir, yes } => {
-            refuse_if_running(&data_dir)?;
-            let store = open_store(&data_dir)?;
-            let plan = deletion_plan(&store, AccountId(id))?;
-            if !yes {
-                print_plan(&plan);
-                eprintln!("Pass --yes to delete.");
-                return Ok(ExitCode::FAILURE);
+        AccountAction::Restore { id, data_dir } => restore_cmd(id, &data_dir, policy),
+        AccountAction::Delete {
+            id,
+            data_dir,
+            yes,
+            purge_now,
+        } => delete_cmd(id, &data_dir, yes, purge_now, policy),
+    }
+}
+
+fn delete_cmd(
+    id: u32,
+    data_dir: &Path,
+    yes: bool,
+    purge_now: bool,
+    policy: RetentionPolicy,
+) -> Result<ExitCode, SubjectError> {
+    refuse_if_running(data_dir)?;
+    let store = open_store(data_dir)?;
+    let row = store
+        .account_any(AccountId(id))?
+        .ok_or(SubjectError::Unknown(id))?;
+    let now = dates::unix_now();
+    if purge_now {
+        if retention::account_held(&store, id, now)? {
+            return Err(SubjectError::Held(id));
+        }
+        if !yes {
+            println!("Would hard-delete account {id} and everything it owns.");
+            println!("Sealed connection records are kept.");
+            eprintln!("Pass --yes to purge.");
+            return Ok(ExitCode::FAILURE);
+        }
+        return match retention::purge_now(&store, id, now)? {
+            PurgeNow::Held => Err(SubjectError::Held(id)),
+            PurgeNow::Missing => Err(SubjectError::Unknown(id)),
+            PurgeNow::Done {
+                letters,
+                posts,
+                saves,
+            } => {
+                println!(
+                    "Purged account {id} ({letters} letters, {posts} posts, {saves} save versions). \
+                     Sealed connection records are kept."
+                );
+                Ok(ExitCode::SUCCESS)
             }
-            apply_delete(&store, AccountId(id), &plan)?;
-            println!(
-                "Deleted account {} (mailbox {}, {} received, {} sent, {} posts, {} save versions).",
-                plan.id.0,
-                plan.mailbox.map(|box_no| box_no.0.to_string()).unwrap_or_else(|| "none".into()),
-                plan.letters_in_box,
-                plan.letters_sent,
-                plan.posts,
-                plan.save_versions
-            );
+        };
+    }
+    if let Some(deleted_at) = row.deleted_at {
+        let purge = dates::format_date(dates::add_days(deleted_at, policy.account_days));
+        println!("Account {id} is already disabled. Purge date {purge} (UTC).");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let plan = deletion_plan(&store, AccountId(id))?;
+    if !yes {
+        print_plan(&plan, policy);
+        eprintln!("Pass --yes to disable the account.");
+        return Ok(ExitCode::FAILURE);
+    }
+    apply_delete(&store, AccountId(id), &plan, policy)
+}
+
+fn restore_cmd(
+    id: u32,
+    data_dir: &Path,
+    policy: RetentionPolicy,
+) -> Result<ExitCode, SubjectError> {
+    refuse_if_running(data_dir)?;
+    let store = open_store(data_dir)?;
+    match retention::restore_account(&store, id, policy, dates::unix_now())? {
+        Restored::Ok => {
+            println!("Restored account {id}.");
             Ok(ExitCode::SUCCESS)
         }
+        Restored::Missing => Err(SubjectError::Unknown(id)),
+        Restored::NotDeleted => Err(SubjectError::NotDeleted(id)),
+        Restored::WindowClosed { deleted_at } => Err(SubjectError::WindowClosed {
+            id,
+            deleted: dates::format_date(deleted_at),
+        }),
     }
 }
 
@@ -144,7 +214,8 @@ fn export_account(
     id: AccountId,
     with_saves: bool,
 ) -> Result<Value, SubjectError> {
-    let record = store.account(id)?.ok_or(SubjectError::Unknown(id.0))?;
+    let row = store.account_any(id)?.ok_or(SubjectError::Unknown(id.0))?;
+    let record = &row.record;
     let mailbox = mailbox_of(store, id)?;
     let received = match mailbox {
         Some(number) => letters_json(store, number)?,
@@ -152,7 +223,7 @@ fn export_account(
     };
     let sent = sent_letters_json(store, mailbox)?;
     let posts = authored_posts_json(store, &record.persona)?;
-    let money = store.money(id)?.map(|amount| amount.0);
+    let (money, money_deleted_at) = money_of(store, id)?;
     let saves = saves_json(store, id, with_saves)?;
     Ok(json!({
         "encoded_password": "omitted: the encoded password is not exported",
@@ -163,12 +234,14 @@ fn export_account(
             "rating": record.rating,
             "status": record.status.0,
             "password_expired": record.password_expired,
+            "deleted_at": row.deleted_at,
         },
         "mailbox": mailbox.map(|number| number.0),
         "letters_received": received,
         "letters_sent": sent,
         "posts": posts,
         "money": money,
+        "money_deleted_at": money_deleted_at,
         "saves": saves,
     }))
 }
@@ -202,35 +275,23 @@ fn apply_delete(
     store: &SqliteStore,
     id: AccountId,
     plan: &DeletionPlan,
-) -> Result<(), SubjectError> {
-    let connection = store.connection();
-    let tx = connection
-        .unchecked_transaction()
-        .map_err(StoreError::backend)?;
-    if let Some(mailbox) = plan.mailbox {
-        tx.execute("DELETE FROM letters WHERE mailbox = ?1", [mailbox.0])
-            .map_err(StoreError::backend)?;
-    }
-    for letter in &plan.sent_ids {
-        tx.execute("DELETE FROM letters WHERE id = ?1", [*letter])
-            .map_err(StoreError::backend)?;
-    }
-    for post in &plan.post_ids {
-        tx.execute("DELETE FROM posts WHERE id = ?1", [*post])
-            .map_err(StoreError::backend)?;
-    }
-    tx.execute("DELETE FROM money WHERE account = ?1", [id.0])
-        .map_err(StoreError::backend)?;
-    tx.execute("DELETE FROM saves WHERE account = ?1", [id.0])
-        .map_err(StoreError::backend)?;
-    if plan.mailbox.is_some() {
-        tx.execute("DELETE FROM mailboxes WHERE account = ?1", [id.0])
-            .map_err(StoreError::backend)?;
-    }
-    tx.execute("DELETE FROM accounts WHERE id = ?1", [id.0])
-        .map_err(StoreError::backend)?;
-    tx.commit().map_err(StoreError::backend)?;
-    Ok(())
+    policy: RetentionPolicy,
+) -> Result<ExitCode, SubjectError> {
+    let owned = OwnedRows {
+        mailbox: plan.mailbox.map(|number| number.0),
+        sent: plan.sent_ids.clone(),
+        posts: plan.post_ids.clone(),
+    };
+    let stamp = match retention::disable_account(store, id.0, &owned)? {
+        Disable::Missing => return Err(SubjectError::Unknown(id.0)),
+        Disable::Fresh(stamp) | Disable::Already(stamp) => stamp,
+    };
+    let purge = dates::format_date(dates::add_days(stamp, policy.account_days));
+    println!(
+        "Disabled account {}. Purge date {purge} (UTC). Sealed connection records are kept.",
+        id.0
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn mailbox_of(store: &SqliteStore, id: AccountId) -> Result<Option<MailboxNumber>, StoreError> {
@@ -249,10 +310,10 @@ fn mailbox_of(store: &SqliteStore, id: AccountId) -> Result<Option<MailboxNumber
 }
 
 fn letters_json(store: &SqliteStore, mailbox: MailboxNumber) -> Result<Vec<Value>, StoreError> {
-    let letters = store.letters(mailbox)?;
-    Ok(letters
+    Ok(all_letters(store)?
         .into_iter()
-        .map(|letter| letter_json(letter.id.0, mailbox.0, &letter.body))
+        .filter(|(_, number, _, _)| *number == mailbox.0)
+        .map(|(id, number, body, deleted_at)| letter_json(id, number, &body, deleted_at))
         .collect())
 }
 
@@ -266,8 +327,8 @@ fn sent_letters_json(
     let rows = all_letters(store)?;
     Ok(rows
         .into_iter()
-        .filter(|(_id, mailbox, body)| *mailbox != own.0 && sender_mailbox(body) == Some(own))
-        .map(|(id, mailbox, body)| letter_json(id, mailbox, &body))
+        .filter(|(_, mailbox, body, _)| *mailbox != own.0 && sender_mailbox(body) == Some(own))
+        .map(|(id, mailbox, body, deleted_at)| letter_json(id, mailbox, &body, deleted_at))
         .collect())
 }
 
@@ -281,27 +342,34 @@ fn sent_letter_ids(
     let rows = all_letters(store)?;
     Ok(rows
         .into_iter()
-        .filter(|(_, mailbox, body)| *mailbox != own.0 && sender_mailbox(body) == Some(own))
-        .map(|(id, _, _)| id)
+        .filter(|(_, mailbox, body, deleted_at)| {
+            deleted_at.is_none() && *mailbox != own.0 && sender_mailbox(body) == Some(own)
+        })
+        .map(|(id, _, _, _)| id)
         .collect())
 }
 
-fn all_letters(store: &SqliteStore) -> Result<Vec<(u32, u32, Vec<u8>)>, StoreError> {
+/// One stored letter or post: id, mailbox or board, body, and `deleted_at`.
+type HeldBody = (u32, u32, Vec<u8>, Option<i64>);
+
+fn all_letters(store: &SqliteStore) -> Result<Vec<HeldBody>, StoreError> {
     let connection = store.connection();
     let mut statement = connection
-        .prepare("SELECT id, mailbox, body FROM letters ORDER BY id")
+        .prepare("SELECT id, mailbox, body, deleted_at FROM letters ORDER BY id")
         .map_err(StoreError::backend)?;
     let rows = statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
         .map_err(StoreError::backend)?;
     rows.collect::<Result<_, _>>().map_err(StoreError::backend)
 }
 
-fn sender_mailbox(body: &[u8]) -> Option<MailboxNumber> {
+pub(crate) fn sender_mailbox(body: &[u8]) -> Option<MailboxNumber> {
     Envelope::from_stored_body(body).map(|(_, envelope)| envelope.from)
 }
 
-fn letter_json(id: u32, mailbox: u32, body: &[u8]) -> Value {
+fn letter_json(id: u32, mailbox: u32, body: &[u8], deleted_at: Option<i64>) -> Value {
     let parsed = Envelope::from_stored_body(body);
     json!({
         "id": id,
@@ -312,6 +380,7 @@ fn letter_json(id: u32, mailbox: u32, body: &[u8]) -> Value {
         "subject": parsed.as_ref().map(|(_, envelope)| c_string(&envelope.subject)),
         "text": parsed.as_ref().map(|(_, envelope)| c_string(envelope.text.as_slice())),
         "received": parsed.as_ref().map(|(time, _)| time_json(*time)),
+        "deleted_at": deleted_at,
         "body_base64": BASE64.encode(body),
     })
 }
@@ -319,12 +388,13 @@ fn letter_json(id: u32, mailbox: u32, body: &[u8]) -> Value {
 fn authored_posts_json(store: &SqliteStore, persona: &str) -> Result<Vec<Value>, StoreError> {
     Ok(all_posts(store)?
         .into_iter()
-        .filter(|(_, _, body)| post_is_by(body, persona))
-        .map(|(id, board, body)| {
+        .filter(|(_, _, body, _)| post_is_by(body, persona))
+        .map(|(id, board, body, deleted_at)| {
             json!({
                 "id": id,
                 "board": board,
                 "body": String::from_utf8_lossy(trim_nul(&body)).into_owned(),
+                "deleted_at": deleted_at,
                 "body_base64": BASE64.encode(&body),
             })
         })
@@ -334,31 +404,33 @@ fn authored_posts_json(store: &SqliteStore, persona: &str) -> Result<Vec<Value>,
 fn authored_post_ids(store: &SqliteStore, persona: &str) -> Result<Vec<u32>, StoreError> {
     Ok(all_posts(store)?
         .into_iter()
-        .filter(|(_, _, body)| post_is_by(body, persona))
-        .map(|(id, _, _)| id)
+        .filter(|(_, _, body, deleted_at)| deleted_at.is_none() && post_is_by(body, persona))
+        .map(|(id, _, _, _)| id)
         .collect())
 }
 
-fn all_posts(store: &SqliteStore) -> Result<Vec<(u32, u32, Vec<u8>)>, StoreError> {
+fn all_posts(store: &SqliteStore) -> Result<Vec<HeldBody>, StoreError> {
     let connection = store.connection();
     let mut statement = connection
-        .prepare("SELECT id, board, body FROM posts ORDER BY id")
+        .prepare("SELECT id, board, body, deleted_at FROM posts ORDER BY id")
         .map_err(StoreError::backend)?;
     let rows = statement
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
         .map_err(StoreError::backend)?;
     rows.collect::<Result<_, _>>().map_err(StoreError::backend)
 }
 
 /// Posts are `author|text`. Session 40/4 names are not stored, so only the Login persona matches.
-fn post_is_by(body: &[u8], persona: &str) -> bool {
+pub(crate) fn post_is_by(body: &[u8], persona: &str) -> bool {
     if persona.is_empty() {
         return false;
     }
     post_author(body).is_some_and(|author| author.eq_ignore_ascii_case(persona))
 }
 
-fn post_author(body: &[u8]) -> Option<&str> {
+pub(crate) fn post_author(body: &[u8]) -> Option<&str> {
     let text = std::str::from_utf8(trim_nul(body)).ok()?;
     let author = text.split('|').next()?.trim();
     (!author.is_empty()).then_some(author)
@@ -394,10 +466,10 @@ fn saves_json(
 ) -> Result<Vec<Value>, StoreError> {
     let connection = store.connection();
     let sql = if with_saves {
-        "SELECT path, version, hash, length(data), updated_at, current, data FROM saves \
-         WHERE account = ?1 ORDER BY path, version"
+        "SELECT path, version, hash, length(data), updated_at, current, deleted_at, data \
+         FROM saves WHERE account = ?1 ORDER BY path, version"
     } else {
-        "SELECT path, version, hash, length(data), updated_at, current FROM saves \
+        "SELECT path, version, hash, length(data), updated_at, current, deleted_at FROM saves \
          WHERE account = ?1 ORDER BY path, version"
     };
     let mut statement = connection.prepare(sql).map_err(StoreError::backend)?;
@@ -410,9 +482,10 @@ fn saves_json(
                 "size": unsigned(row.get(3)?),
                 "modified": unsigned(row.get(4)?),
                 "current": row.get::<_, bool>(5)?,
+                "deleted_at": row.get::<_, Option<i64>>(6)?,
             });
             if with_saves {
-                let data: Vec<u8> = row.get(6)?;
+                let data: Vec<u8> = row.get(7)?;
                 if let Value::Object(map) = &mut value {
                     map.insert("data_base64".into(), Value::String(BASE64.encode(data)));
                 }
@@ -439,9 +512,25 @@ fn unsigned(stored: i64) -> u64 {
     u64::try_from(stored).unwrap_or(0)
 }
 
-fn print_plan(plan: &DeletionPlan) {
+fn money_of(store: &SqliteStore, id: AccountId) -> Result<(Option<i64>, Option<i64>), StoreError> {
+    let connection = store.connection();
+    let mut statement = connection
+        .prepare("SELECT amount, deleted_at FROM money WHERE account = ?1")
+        .map_err(StoreError::backend)?;
+    let mut rows = statement
+        .query_map([id.0], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(StoreError::backend)?;
+    match rows.next() {
+        Some(Ok(pair)) => Ok((Some(pair.0), pair.1)),
+        Some(Err(error)) => Err(StoreError::backend(error)),
+        None => Ok((None, None)),
+    }
+}
+
+fn print_plan(plan: &DeletionPlan, policy: RetentionPolicy) {
+    let purge = dates::format_date(dates::add_days(dates::unix_now(), policy.account_days));
     println!(
-        "Would delete account {} (persona {}):",
+        "Would disable account {} (persona {}) until purge date {purge} (UTC):",
         plan.id.0, plan.persona
     );
     match plan.mailbox {
@@ -452,11 +541,11 @@ fn print_plan(plan: &DeletionPlan) {
         None => println!("  no mailbox"),
     }
     println!(
-        "  {} letters sent to other mailboxes (deleted, not kept as \"(deleted)\")",
+        "  {} letters sent to other mailboxes would be hidden",
         plan.letters_sent
     );
     println!(
-        "  {} board posts matching the stored persona (deleted, not anonymised)",
+        "  {} board posts matching the stored persona would be hidden",
         plan.posts
     );
     match plan.money {
@@ -464,6 +553,7 @@ fn print_plan(plan: &DeletionPlan) {
         None => println!("  no bankroll"),
     }
     println!("  {} save file versions", plan.save_versions);
+    println!("  sealed connection records are kept");
 }
 
 impl From<serde_json::Error> for SubjectError {
@@ -619,8 +709,20 @@ mod tests {
         assert_eq!(plan.posts, 1);
         assert_eq!(plan.money, Some(247));
         assert_eq!(plan.save_versions, 1);
-        apply_delete(&store, ALICE, &plan).unwrap();
+        apply_delete(&store, ALICE, &plan, RetentionPolicy::default()).unwrap();
         assert!(store.account(ALICE).unwrap().is_none());
+        assert!(store
+            .account_any(ALICE)
+            .unwrap()
+            .unwrap()
+            .deleted_at
+            .is_some());
+        let document = export_account(&store, ALICE, false).unwrap();
+        assert!(document["account"]["deleted_at"].is_number());
+        assert!(document["letters_received"][0]["deleted_at"].is_number());
+        assert!(document["posts"][0]["deleted_at"].is_number());
+        assert!(document["money_deleted_at"].is_number());
+        assert_eq!(document["money"], 247);
         assert_eq!(store.money(ALICE).unwrap(), None);
         assert!(store.saves(ALICE).unwrap().is_empty());
         let bob_letters = store.letters(bob_box).unwrap();
