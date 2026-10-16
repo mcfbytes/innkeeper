@@ -24,6 +24,10 @@ const SERVICES: u8 = 31;
 const SYSTEM_LIST: u8 = 32;
 const ASSIGN_MAILBOX: u8 = 1;
 
+/// The bytes of an envelope before its text: reserved, own box, subject, flags, addressee, sender.
+/// A send with fewer after the addressee's box is the short form.
+const ENVELOPE_MIN_LEN: usize = 46;
+
 /// The fixed text fields of an envelope are ten bytes; a shorter string is followed by heap bytes.
 pub(crate) const FIELD_LEN: usize = 10;
 
@@ -196,6 +200,15 @@ pub enum MailRequest {
         sub: u8,
         letter: OutgoingLetter,
     },
+    /// 20 or 21 without an envelope: the short `"bbw+"` form of `script.145` exports 8 and 7, whose
+    /// words after the box are unexplained (`sub` 20 ends with 0x7530 and 0, a 30 s wait). Nothing
+    /// in the hub, SL or LL calls them.
+    Page {
+        sub: u8,
+        sid: Sid,
+        mailbox: MailboxNumber,
+        words: Vec<u16>,
+    },
     /// 30: a form for a service box, such as `AcctUpdate`.
     Form(OutgoingLetter),
     Read(LetterRef),
@@ -234,6 +247,19 @@ impl MailRequest {
                 sid,
                 mailbox: read_box(reader)?,
             }),
+            SEND_TO_BOX | SEND_CLAIMED if reader.remaining() < ENVELOPE_MIN_LEN => {
+                let mailbox = read_box(reader)?;
+                let mut words = Vec::new();
+                while !reader.is_empty() {
+                    words.push(reader.word("word")?);
+                }
+                Ok(MailRequest::Page {
+                    sub,
+                    sid,
+                    mailbox,
+                    words,
+                })
+            }
             SEND_TO_BOX | SEND_CLAIMED | SEND => Ok(MailRequest::Send {
                 sub,
                 letter: OutgoingLetter::parse(reader, sid)?,
@@ -278,6 +304,9 @@ impl MailRequest {
             MailRequest::NewMail { sid, mailbox } => Some(refusal(NEW_MAIL, *sid, *mailbox)),
             MailRequest::List { sid, mailbox } => Some(refusal(LIST, *sid, *mailbox)),
             MailRequest::Send { sub, letter } => Some(refusal(*sub, letter.sid, letter.to)),
+            MailRequest::Page {
+                sub, sid, mailbox, ..
+            } => Some(refusal(*sub, *sid, *mailbox)),
             MailRequest::Form(letter) => Some(refusal(FORM, letter.sid, letter.to)),
             MailRequest::Read(letter) => Some(refusal(READ, letter.sid, letter.mailbox)),
             MailRequest::Delete(letter) => Some(refusal(DELETE, letter.sid, letter.mailbox)),
@@ -305,6 +334,18 @@ impl MailRequest {
                 write_box(writer, *mailbox);
             }
             MailRequest::Send { sub, letter } => letter.write(writer, *sub),
+            MailRequest::Page {
+                sub,
+                sid,
+                mailbox,
+                words,
+            } => {
+                writer.byte(*sub).word(sid.0);
+                write_box(writer, *mailbox);
+                words.iter().for_each(|&word| {
+                    writer.word(word);
+                });
+            }
             MailRequest::Form(letter) => letter.write(writer, FORM),
             MailRequest::Read(letter) => letter.write(writer, READ),
             MailRequest::Delete(letter) => letter.write(writer, DELETE),
@@ -820,9 +861,36 @@ mod tests {
     }
 
     #[test]
-    fn a_short_sysop_form_of_sub_20_is_not_an_envelope() {
-        let bytes = [20, 0, 1, 1, 0, 0, 0, 0x30, 0x75];
-        let mut reader = WireReader::new(&bytes);
+    fn the_short_sysop_forms_of_sub_20_and_21_are_pages_not_envelopes() {
+        // `script.145` export 8 (sub 20): sid, box, two words, 0x7530 and 0.
+        let long = [20, 2, 1, 5, 0, 0, 0, 7, 0, 8, 0, 0x30, 0x75, 0, 0];
+        // Export 7 (sub 21): sid, box and two words.
+        let claimed = [21, 2, 1, 5, 0, 0, 0, 7, 0, 8, 0];
+        for (bytes, tail) in [
+            (&long[..], vec![7, 8, 0x7530, 0]),
+            (&claimed[..], vec![7, 8]),
+        ] {
+            let mut reader = WireReader::new(bytes);
+            let parsed = MailRequest::parse(&mut reader).unwrap();
+            assert_eq!(
+                parsed,
+                MailRequest::Page {
+                    sub: bytes[0],
+                    sid: Sid(0x0102),
+                    mailbox: MailboxNumber(5),
+                    words: tail,
+                }
+            );
+            assert_eq!(reader.finish(), Ok(()));
+            let mut writer = WireWriter::default();
+            parsed.write(&mut writer);
+            assert_eq!(writer.into_bytes()[1..], *bytes);
+        }
+    }
+
+    #[test]
+    fn a_short_form_with_half_a_word_is_truncated() {
+        let mut reader = WireReader::new(&[21, 2, 1, 5, 0, 0, 0, 7]);
         assert!(matches!(
             MailRequest::parse(&mut reader),
             Err(MessageError::Truncated { .. })

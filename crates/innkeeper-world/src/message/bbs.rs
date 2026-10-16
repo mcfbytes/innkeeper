@@ -5,8 +5,13 @@ use crate::{MessageError, Sid};
 
 const POST: u8 = 0;
 const MESSAGE_REPLY: u8 = 1;
+const ERASE: u8 = 6;
+const COMPLAINT: u8 = 9;
 const DIRECTORY: u8 = 13;
 const INDEX: u8 = 14;
+/// The word at byte 6 of both complaint forms. The LSCI hub and Sketch Pad scripts send a literal
+/// 99 there, which is the complaint board's location number (`0x63`), and 0 at byte 2.
+const COMPLAINT_CODE: u16 = 99;
 /// The post builder always sends this many bytes; the rest after the NUL is whatever was in the buffer.
 const POST_LENGTH: usize = 0x135;
 /// The index request is 27 bytes: 8 zero bytes after the header, then 11 the client never fills.
@@ -65,6 +70,33 @@ pub enum BbsRequest {
         board: BoardRef,
         body: Vec<u8>,
     },
+    /// Sub 6, the bulletin board's "erase" (`BBS::erase`, `hub/script.199`): remove message
+    /// `message` of a board. Bytes: `w location @2, w fromSID @4, w section @6, w message @8, b 0`.
+    Erase {
+        from: Sid,
+        board: BoardRef,
+        message: u16,
+    },
+    /// The complaint form of the hub and the Sketch Pad (`hub/script.005`, `SL/script.530`).
+    /// Sub 9 names the player complained about by SID; sub 0 with 0 at byte 2 and 99 at byte 6 is
+    /// the same form with nobody named. Bytes: `w 0 @2, w fromSID @4, w 99 @6`, then for sub 9 `w
+    /// about @8`, then the text and its NUL.
+    Complaint {
+        from: Sid,
+        about: Option<Sid>,
+        text: ComplaintText,
+    },
+}
+
+/// The text of a complaint as the player wrote it. `Debug` prints the length and not the text, so
+/// no log line carries a complaint (docs/server/privacy.md section 2).
+#[derive(Clone, PartialEq, Eq)]
+pub struct ComplaintText(pub Vec<u8>);
+
+impl std::fmt::Debug for ComplaintText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ComplaintText(len {})", self.0.len())
+    }
 }
 
 /// One row of the directory reply.
@@ -138,6 +170,9 @@ impl BbsRequest {
             BbsRequest::Index { .. } => INDEX,
             BbsRequest::Read { step, .. } => *step as u8,
             BbsRequest::Post { .. } => POST,
+            BbsRequest::Erase { .. } => ERASE,
+            BbsRequest::Complaint { about: None, .. } => POST,
+            BbsRequest::Complaint { .. } => COMPLAINT,
         }
     }
 
@@ -159,10 +194,44 @@ impl BbsRequest {
                 reader.rest();
                 BbsRequest::Index { from, board }
             }
+            POST if first == 0 && second == COMPLAINT_CODE => {
+                let text = ComplaintText(reader.until_nul("complaint")?);
+                reader.rest();
+                BbsRequest::Complaint {
+                    from,
+                    about: None,
+                    text,
+                }
+            }
             POST => {
                 let body = reader.until_nul("post")?;
                 reader.rest();
                 BbsRequest::Post { from, board, body }
+            }
+            ERASE => {
+                let message = reader.word("message")?;
+                reader.byte("flag")?;
+                BbsRequest::Erase {
+                    from,
+                    board,
+                    message,
+                }
+            }
+            COMPLAINT => {
+                if first != 0 || second != COMPLAINT_CODE {
+                    return Err(MessageError::UnknownValue {
+                        field: "complaint board",
+                        value: second,
+                    });
+                }
+                let about = Sid(reader.word("about")?);
+                let text = ComplaintText(reader.until_nul("complaint")?);
+                reader.rest();
+                BbsRequest::Complaint {
+                    from,
+                    about: Some(about),
+                    text,
+                }
             }
             step => BbsRequest::Read {
                 from,
@@ -198,6 +267,27 @@ impl BbsRequest {
                 let body: Vec<u8> = body.iter().copied().take_while(|&b| b != 0).collect();
                 let padding = POST_LENGTH.saturating_sub(body.len() + 8);
                 writer.array(&body).array(&vec![0; padding.max(1)]);
+            }
+            BbsRequest::Erase {
+                from,
+                board,
+                message,
+            } => {
+                write_header(writer, ERASE, *board, *from);
+                writer.word(*message).byte(0);
+            }
+            BbsRequest::Complaint { from, about, text } => {
+                let sub = if about.is_some() { COMPLAINT } else { POST };
+                let board = BoardRef {
+                    location: 0,
+                    section: COMPLAINT_CODE,
+                };
+                write_header(writer, sub, board, *from);
+                if let Some(about) = about {
+                    writer.word(about.0);
+                }
+                let text: Vec<u8> = text.0.iter().copied().take_while(|&b| b != 0).collect();
+                writer.array(&text).byte(0);
             }
         }
     }
@@ -415,11 +505,80 @@ mod tests {
     #[test]
     fn steps_past_five_are_unknown_sub_commands() {
         assert_eq!(
-            ClientMessage::parse(&[27, 6, 0x59, 0, 2, 1, 1, 0, 1, 0]),
+            ClientMessage::parse(&[27, 7, 0x59, 0, 2, 1, 1, 0, 1, 0]),
             Err(MessageError::UnsupportedSub {
                 command: 27,
-                sub: 6
+                sub: 7
             })
+        );
+    }
+
+    #[test]
+    fn erase_is_a_board_a_message_number_and_a_zero_byte() {
+        let bytes = [27, 6, 0x59, 0, 2, 1, 1, 0, 3, 0, 0];
+        let parsed = ClientMessage::parse(&bytes);
+        assert_eq!(
+            parsed,
+            Ok(ClientMessage::Bbs(BbsRequest::Erase {
+                from: Sid(0x0102),
+                board: TAVERN,
+                message: 3,
+            }))
+        );
+        assert_eq!(parsed.map(|message| message.encode()), Ok(bytes.to_vec()));
+    }
+
+    #[test]
+    fn a_complaint_with_nobody_named_is_a_post_to_board_0_99() {
+        let mut bytes = vec![27, 0, 0, 0, 2, 1, 99, 0];
+        bytes.extend(b"Complaint|From: Bo\0");
+        let parsed = ClientMessage::parse(&bytes);
+        assert_eq!(
+            parsed,
+            Ok(ClientMessage::Bbs(BbsRequest::Complaint {
+                from: Sid(0x0102),
+                about: None,
+                text: ComplaintText(b"Complaint|From: Bo".to_vec()),
+            }))
+        );
+        assert_eq!(parsed.map(|message| message.encode()), Ok(bytes));
+    }
+
+    #[test]
+    fn a_complaint_about_someone_carries_their_sid_before_the_text() {
+        let mut bytes = vec![27, 9, 0, 0, 2, 1, 99, 0, 0x34, 0x12];
+        bytes.extend(b"rude\0");
+        let parsed = ClientMessage::parse(&bytes);
+        assert_eq!(
+            parsed,
+            Ok(ClientMessage::Bbs(BbsRequest::Complaint {
+                from: Sid(0x0102),
+                about: Some(Sid(0x1234)),
+                text: ComplaintText(b"rude".to_vec()),
+            }))
+        );
+        assert_eq!(parsed.map(|message| message.encode()), Ok(bytes));
+        // Sub 9 with another board number is not the complaint form.
+        assert_eq!(
+            ClientMessage::parse(&[27, 9, 0, 0, 2, 1, 5, 0, 0, 0, 0]),
+            Err(MessageError::UnknownValue {
+                field: "complaint board",
+                value: 5
+            })
+        );
+    }
+
+    #[test]
+    fn a_complaint_never_prints_its_text() {
+        let request = BbsRequest::Complaint {
+            from: Sid(1),
+            about: None,
+            text: ComplaintText(b"secret words".to_vec()),
+        };
+        let shown = format!("{request:?}");
+        assert!(
+            !shown.contains("secret") && shown.contains("len 12"),
+            "{shown}"
         );
     }
 

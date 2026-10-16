@@ -1,0 +1,15 @@
+# The Hint Board room (command 38), from hub/script.135 (HintRoom, hintScript, proc_155 "bbwbbbb") and the
+# reply class_77. Requests are b 38, b step, w sid, b x4 (the choices made so far). Replies are b 38, b kind,
+# w toSID, b which, then the text and its NUL (kind 0 series menu, 1 games, 2 areas, 3 problem, 4 answer).
+# A refusal is an ordinary Nak naming command 38 with reason 5 (menu unavailable) or 6 (no more hints).
+# docs/server/hub-services.md.
+> first menu 38/0 | 26 00 03 01 00 00 00 00
+> games of series 2 38/1 | 26 01 03 01 02 00 00 00
+> areas of game 1 38/2 | 26 02 03 01 02 01 00 00
+> second hint of an area 38/3 | 26 03 03 01 02 01 01 02
+< series menu | 26 00 03 01 00 47 65 74 74 69 6e 67 20 41 72 6f 75 6e 64 0a 4d 65 65 74 69 6e 67 20 46 6f 6c 6b 73 00
+< games of series 2 | 26 01 03 01 02 54 61 6c 6b 69 6e 67 0a 54 68 65 20 50 68 6f 6e 65 20 42 6f 6f 6b 00
+< areas of game 1 | 26 02 03 01 01 43 68 61 74 20 42 61 73 69 63 73 00
+< problem of hint 2 | 26 03 03 01 02 49 73 20 74 68 65 72 65 20 6d 61 69 6c 3f 00
+< answer of hint 2 | 26 04 03 01 02 4c 6f 6f 6b 20 66 6f 72 20 74 68 65 20 69 63 6f 6e 2e 00
+< no more hints, Nak 38/6 | 01 00 03 01 26 06 00 00 00

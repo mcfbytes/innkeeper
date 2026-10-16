@@ -733,6 +733,48 @@ mod tests {
         assert!(store.account(BOB).unwrap().is_some());
     }
 
+    /// A complaint filed from the hub (27/0 board 0/99 and 27/9) is a post by the account's
+    /// persona, so the export lists it and the delete removes it (privacy.md sections 1 and 6).
+    #[test]
+    fn complaints_filed_in_a_session_are_in_the_export_and_the_delete() {
+        use innkeeper_world::{ClientMessage, ConnectionId, ObjectStore, PlayerSession, World};
+
+        let dir = TempDir::new("complaint");
+        let store = std::sync::Arc::new(dir.store());
+        let password = [0x1d, 0x7a, 0x01, 0x66, 0x16, 0x66, 0x18, 0x73, 0x03, 0x00];
+        store
+            .create_account(
+                ALICE,
+                AccountRecord::new(EncodedPassword(password), "guybrush"),
+            )
+            .unwrap();
+        let world = World::stored(store.clone());
+        let (mut objects, mut player) = (ObjectStore::new(), PlayerSession::new());
+        let mut say = |bytes: &[u8]| {
+            let message = ClientMessage::parse(bytes).unwrap();
+            player.handle(&world, &mut objects, ConnectionId(1), &message)
+        };
+        let mut login = vec![0x35, 0, 0, 0, 1, 2, 3, 0x12, 0xa1, 0x86, 1, 0, 1];
+        login.extend(password);
+        login.extend(b"\0guybrush\0");
+        assert_eq!(say(&login).len(), 1);
+        let mut plain = vec![27, 0, 0, 0, 0, 1, 99, 0];
+        plain.extend(b"Complaint|From: guybrush about: Mo\0");
+        let mut named = vec![27, 9, 0, 0, 0, 1, 99, 0, 0x34, 0x12];
+        named.extend(b"Complaint|From: guybrush about: Mo, rude\0");
+        assert!(say(&plain).is_empty() && say(&named).is_empty());
+
+        let document = export_account(&store, ALICE, false).unwrap();
+        let posts = document["posts"].as_array().unwrap();
+        assert_eq!(posts.len(), 2);
+        assert_eq!(
+            posts[0]["body"],
+            "guybrush|Complaint: From: guybrush about: Mo"
+        );
+        let plan = deletion_plan(&store, ALICE).unwrap();
+        assert_eq!(plan.posts, 2);
+    }
+
     #[test]
     fn export_of_an_unknown_account_fails() {
         let (_dir, store, _, _) = seeded();

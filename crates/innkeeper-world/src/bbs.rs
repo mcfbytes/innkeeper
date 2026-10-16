@@ -3,6 +3,10 @@
 
 use tracing::{info, warn};
 
+use crate::assumptions::{
+    COMPLAINTS_ARE_KEPT_ASSUMED, COMPLAINT_SECTION_ASSUMED, COMPLAINT_TEXT_LIMIT_ASSUMED,
+    ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED,
+};
 use crate::message::Command;
 use crate::{
     Account, BbsReply, BbsRequest, BoardId, BoardListing, BoardRef, HostMessage, LandType,
@@ -20,6 +24,13 @@ pub fn is_complaint_board(board: BoardId) -> bool {
 
 /// User-flag bits that make the client read a message's text 4 bytes later (`userFlags` & 2 or 4).
 const PRIVILEGED_USER_FLAGS: u16 = 0x0006;
+/// The user flag the client's own sysop level 3 needs (`RoomZeroHandler`, `hub/script.011`), which is
+/// what shows its "Maintain Conferences" dialog.
+const MODERATOR_USER_FLAGS: u16 = 0x0004;
+/// Sections of location 0 that hold the conference (67) and trivia (84) topic texts: the hub's
+/// conference list and SL's trivia list read message 1 of them, and a moderator's "Change Topics"
+/// replaces it (`hub/script.120`, `SL/script.120`). No directory lists them.
+const TOPIC_SECTIONS: [u16; 2] = [67, 84];
 /// The client keeps one byte per indexed message in a 120-byte buffer.
 const INDEX_LIMIT: usize = 120;
 
@@ -60,6 +71,10 @@ pub(crate) fn answer(
     place: Option<Place>,
     request: &BbsRequest,
 ) -> Vec<HostMessage> {
+    if let BbsRequest::Complaint { about, text, .. } = request {
+        complaint(world, account, about.is_some(), &text.0);
+        return Vec::new();
+    }
     let Some(place) = place else {
         warn!(request = %world.log.debug(request), "bulletin board request outside any land: offline");
         return offline(request);
@@ -68,6 +83,8 @@ pub(crate) fn answer(
         world,
         land: place.land_type,
         privileged: account.user_flags & PRIVILEGED_USER_FLAGS != 0,
+        moderator: account.user_flags & MODERATOR_USER_FLAGS != 0,
+        persona: &account.persona,
     };
     match boards.handle(request) {
         Ok(reply) => reply.into_iter().map(HostMessage::Bbs).collect(),
@@ -83,6 +100,8 @@ struct Boards<'w> {
     world: &'w World,
     land: LandType,
     privileged: bool,
+    moderator: bool,
+    persona: &'w str,
 }
 
 impl Boards<'_> {
@@ -102,6 +121,12 @@ impl Boards<'_> {
                 self.post(board, body)?;
                 None
             }
+            BbsRequest::Erase { board, message, .. } => {
+                self.erase(board, message)?;
+                None
+            }
+            // `answer` keeps a complaint away from the boards of a land.
+            BbsRequest::Complaint { .. } => None,
         };
         Ok(reply)
     }
@@ -171,6 +196,9 @@ impl Boards<'_> {
     }
 
     fn post(&self, board: BoardRef, body: &[u8]) -> Result<(), StoreError> {
+        if is_topic_board(board) {
+            return self.set_topics(board, body);
+        }
         if !is_listed(board) {
             warn!(?board, "post to a board no directory lists: dropped");
             return Ok(());
@@ -180,8 +208,63 @@ impl Boards<'_> {
         Ok(())
     }
 
+    /// A moderator's conference or trivia topic text replaces the current one: the boards hold one
+    /// message, which every reader's first read returns. Others' writes are dropped.
+    fn set_topics(&self, board: BoardRef, body: &[u8]) -> Result<(), StoreError> {
+        if !self.moderator {
+            warn!(
+                ?board,
+                "topic text from a reader without moderator rights: dropped"
+            );
+            return Ok(());
+        }
+        let id = self.board_id(board);
+        for old in self.world.store.posts(id)? {
+            self.world.store.delete_post(id, old.id)?;
+        }
+        let post = self.world.store.post(id, body)?;
+        info!(
+            ?board,
+            post = post.0,
+            length = body.len(),
+            "topic text stored"
+        );
+        Ok(())
+    }
+
+    /// Message `message` of a board goes when its author or a privileged reader asks.
+    fn erase(&self, board: BoardRef, message: u16) -> Result<(), StoreError> {
+        let posts = self.posts(board)?;
+        let post = usize::from(message)
+            .checked_sub(1)
+            .and_then(|index| posts.get(index));
+        let Some(post) = post else {
+            info!(
+                ?board,
+                message, "erase of a message that is not there: ignored"
+            );
+            return Ok(());
+        };
+        let allowed = !ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED
+            || self.privileged
+            || is_author(&post.body, self.persona);
+        if !allowed {
+            warn!(
+                ?board,
+                message, "erase by a reader who is neither author nor privileged: ignored"
+            );
+            return Ok(());
+        }
+        let erased = self
+            .world
+            .store
+            .delete_post(self.board_id(board), post.id)?;
+        info!(?board, message, erased, "board message erased");
+        Ok(())
+    }
+
     fn posts(&self, board: BoardRef) -> Result<Vec<Post>, StoreError> {
-        if !is_listed(board) {
+        if !is_listed(board) && !is_topic_board(board) {
             return Ok(Vec::new());
         }
         self.world.store.posts(self.board_id(board))
@@ -189,7 +272,57 @@ impl Boards<'_> {
 
     /// The land type in the top byte keeps Yserbius and Twinion boards of one location apart.
     fn board_id(&self, board: BoardRef) -> BoardId {
-        board_id(self.land, board)
+        match is_topic_board(board) {
+            true => board_id(LandType(0), board),
+            false => board_id(self.land, board),
+        }
+    }
+}
+
+/// True when a post's `author|text` names `persona` as its author (case-insensitive).
+fn is_author(body: &[u8], persona: &str) -> bool {
+    let persona = persona.trim();
+    let author = body.split(|&byte| byte == b'|').next().unwrap_or_default();
+    !persona.is_empty() && author.trim_ascii().eq_ignore_ascii_case(persona.as_bytes())
+}
+
+/// A complaint from the hub or the Sketch Pad. The client says "Your complaint has been forwarded"
+/// the moment it sends and waits for nothing, so nothing is answered. The text is kept as
+/// `persona|Complaint: text` on the complaint board, where the account's export and delete find it
+/// by persona, and only the account, the length and whether someone was named are logged.
+fn complaint(world: &World, account: &Account, names_someone: bool, text: &[u8]) {
+    if !COMPLAINTS_ARE_KEPT_ASSUMED {
+        return;
+    }
+    let text = text.get(..COMPLAINT_TEXT_LIMIT_ASSUMED).unwrap_or(text);
+    let text = text.strip_prefix(b"Complaint|").unwrap_or(text);
+    let author = match account.persona.trim() {
+        "" => format!("account {}", account.id.0),
+        persona => persona.replace('|', "_"),
+    };
+    let mut body = format!("{author}|Complaint: ").into_bytes();
+    body.extend_from_slice(text);
+    let board = board_id(
+        LandType(0),
+        BoardRef {
+            location: COMPLAINT_BOARD_LOCATION,
+            section: COMPLAINT_SECTION_ASSUMED,
+        },
+    );
+    match world.store.post(board, &body) {
+        Ok(post) => info!(
+            account = account.id.0,
+            post = post.0,
+            length = text.len(),
+            names_someone,
+            "complaint kept"
+        ),
+        Err(error) => warn!(
+            account = account.id.0,
+            length = text.len(),
+            %error,
+            "complaint could not be kept"
+        ),
     }
 }
 
@@ -209,6 +342,10 @@ fn step_to(step: ReadStep, message: u16, total: u16) -> u16 {
         ReadStep::Last => total,
     };
     wanted.clamp(total.min(1), total)
+}
+
+fn is_topic_board(board: BoardRef) -> bool {
+    board.location == 0 && TOPIC_SECTIONS.contains(&board.section)
 }
 
 fn is_listed(board: BoardRef) -> bool {

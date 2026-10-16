@@ -17,6 +17,8 @@ stays in the file until the retention job in section 6 hard-purges it. Schema:
 | `letters` | `id`, `mailbox`, `body` (six time bytes then the client's envelope: names, subject, text), `deleted_at` | Mail (command 37). The store does not look inside | Hidden at the player's delete; hard-purged after the mail window |
 | `posts` | `id`, `board`, `body` (`author\|text` as the RPG client wrote it), `deleted_at`, `created_at` | Bulletin board (command 27) | Hidden when deleted; hard-purged after the post window. Complaints use `created_at` (section 6) |
 | `posts` (Member Services) | as `posts`, on board location `0x63`, section 2, land 0: `persona\|Member Services: text` | A question a player types into Town Hall "Ask Member Services" is a message to the operator ([services.md](services.md) section 5) | Complaint retention, 365 days from arrival (section 6) |
+| `posts` (complaint) | as `posts`, on board location `0x63`, section 3, land 0: `persona\|Complaint: text` | The hub's "Complain" form and the Sketch Pad's complaint ([hub-services.md](hub-services.md) section 2) | Complaint retention, 365 days from arrival (section 6); in the export and the delete |
+| `posts` (topics) | as `posts`, land 0, board location 0 sections 67 and 84: the conference and trivia topic text a moderator wrote, with no author prefix | Not personal data; one message each, replaced on a write ([hub-services.md](hub-services.md) section 5) | Post window |
 | `money` | `account`, `amount`, `deleted_at` | CasinoLand bankroll (command 40) | With the account |
 | `saves` | `account`, `path`, `version`, `hash`, `data`, `updated_at`, `current`, `deleted_at` | Browser game files ([saves.md](saves.md)) | With the account. The channel still keeps three versions per path and drops older versions at once |
 | `audit_sessions` | `id`, `started_at`, `ended_at`, `account_id`, `identity_key`, `hold_until`, `sealed` | Lawful-request record of a connection (section 5) | From creation, for `--audit-retention-days` (default 90) |
@@ -230,15 +232,18 @@ Every number is a field of `RetentionPolicy` (`innkeeper-world`) and a flag. Def
 | Anything under a legal hold | never while held | when the hold ends, if the clock above has already run out | `hold` / `release` | preservation requests. The clock is counted from the delete or from creation and is not restarted when the hold ends |
 
 Players see a deleted letter or post as gone: every read skips `deleted_at`. The only user-facing
-delete in the protocol today is mail sub-command 26. Command 27 has no delete sub-command on this
-host (27/6, 27/8 and 27/9 are unsupported). `Store::delete_post` is there for the operator path, and
+delete in the protocol today is mail sub-command 26. Command 27 has a delete sub-command, 27/6, from the
+hub's bulletin board (own post or privileged reader only, no reply; [hub-services.md](hub-services.md) section 3). `Store::delete_post` is there for the operator path, and
 `account delete` soft-deletes posts whose `author` is the stored persona.
 
 The Town Hall's "Update Account Information" form is free text about billing, so it may hold an address or a card number. It is acknowledged and discarded unread: nothing of it is stored, and only the account number and the fact that a form arrived are logged. The "Ask Member Services" text is kept as a complaint post (section 1) and is part of the account's export and delete (matched by persona).
 
 Complaints are posts on board location `0x63` (`COMPLAINT_BOARD_LOCATION`), any land. That is the
-operator-only complaint board the RPG client already lists. LSCI 27/9 is not a stored complaint
-command. Those posts are purged from `created_at` even while they are still visible, and they are
+operator-only complaint board the RPG client already lists. The hub's complaint form (27/9, or 27/0 with
+board 0/99) is stored there too, as `persona|Complaint: text` on section 3, land 0, 2000 bytes at most, and
+the log carries only the account, the post id, the length and whether a player was named; the debug print of
+the request shows the length, never the text. The player complained about is not stored (the client sends a
+connection-local number; the client's own text names them). Those posts are purged from `created_at` even while they are still visible, and they are
 left out of the 90-day deleted-post purge. A hold on the author's account keeps them.
 
 The account window and the letter window are different lengths, and `letters.mailbox` references

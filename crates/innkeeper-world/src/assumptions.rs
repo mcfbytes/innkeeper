@@ -204,3 +204,21 @@ pub(crate) const MEMBER_SERVICES_SECTION_ASSUMED: u16 = 2;
 /// failure text for Nak 44 with sub 1 or 2 only, and a Nak with any other sub leaves the client
 /// waiting for the previous password to come back (`hub/script.011`, `hub/script.050`).
 pub(crate) const PASSWORD_REFUSED_SUB_ASSUMED: u8 = 1;
+/// A complaint from the hub or the Sketch Pad (27/9, or the 27/0 form with board 0/99) is kept as a
+/// post on the complaint board, under the complaint retention (docs/server/privacy.md section 6).
+/// The original host forwarded it to staff; this one keeps it for the operator.
+pub(crate) const COMPLAINTS_ARE_KEPT_ASSUMED: bool = true;
+/// Section of the complaint board that holds those complaints. No directory lists it, so no client
+/// can read it back; the retention job finds it by the board's location, like every complaint.
+pub(crate) const COMPLAINT_SECTION_ASSUMED: u16 = 3;
+/// The longest complaint kept, in bytes. The client's input box holds far less.
+pub(crate) const COMPLAINT_TEXT_LIMIT_ASSUMED: usize = 2000;
+/// The bulletin board's erase (27/6) removes a message only for its author or a privileged reader
+/// (user flags 2 or 4, the same flags that change how the client reads a message). The client
+/// refuses the button itself when the board is read only; the original host's rule is unknown.
+pub(crate) const ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED: bool = true;
+/// The short forms of 37/20 and 37/21 (`script.145` exports 7 and 8, sysop screens that nothing in
+/// the hub, SL or LL calls) are refused with fault 12, "you do not have rights to do that": this
+/// host gives nobody sysop powers over mailboxes, and a refusal ends the 30 s wait the 37/20 form
+/// sets (the word 0x7530 it carries).
+pub(crate) const SHORT_MAIL_FORM_IS_REFUSED_ASSUMED: bool = true;
