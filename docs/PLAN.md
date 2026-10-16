@@ -228,13 +228,15 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   change to a logged-on account reaches the live session or is refused while it is online. Before that the
   schema needs: a schema version and migrations, the address books and mailing lists, per-game records
   (character rosters if they move server-side, ratings and standings), and an audit log of portal edits.
-- **Sign-in with common providers** (ledgered 2026-10-14, deferred): an optional OAuth 2.0 / OpenID Connect
-  landing page in the web client, before the INN sign-on, where a player creates or claims an account with
-  a common provider (Google, Microsoft, GitHub, Apple, Discord) instead of the original enrolment. The
-  provider identity maps to an account record (`accounts` gains linked identities); the page then hands
-  the client its INN id and password (written into the drive's `LSCI.CFG` and password file) so the
-  original logon runs unchanged. Local accounts keep working; the provider list is configuration.
-  The server half is not implemented yet. Design (2026-10-16, PII-free 2026-10-16):
+- **Sign-in with common providers** (ledgered 2026-10-14; server half built 2026-10-16): an optional OAuth
+  2.0 / OpenID Connect landing page in the web client, before the INN sign-on, where a player creates or
+  claims an account with a common provider (Google, Microsoft, GitHub, Apple, Discord) instead of the
+  original enrolment. The provider identity maps to an account record (`accounts` gains linked identities);
+  the page then hands the client its INN id and password (written into the drive's `LSCI.CFG` and password
+  file) so the original logon runs unchanged. Local accounts keep working; the provider list is
+  configuration. The server half is built: [innkeeperd.md](server/innkeeperd.md) section 8 has the flags,
+  the auth file, the Key Vault client and the contract interpretations. Design (2026-10-16, PII-free
+  2026-10-16), as built:
   - **Scope.** Request only the `openid` scope, never `email` or `profile`. For plain-OAuth providers
     (Discord), use only the stable user id from the profile response and discard the rest in memory.
   - `innkeeperd` is an OIDC relying party (the `openidconnect` crate, MIT/Apache) with its own HTTP
@@ -247,26 +249,25 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
     for one account under legal process. No email, name or profile is kept. First sign-in creates the
     account; one identity may own several accounts. The HMAC secret and its rotation are in Secrets.
   - **Secrets.** Two Azure Key Vaults, described with the sealed-record format in
-    [privacy.md](server/privacy.md) sections 5 and 7. Not built yet. The **server vault** is the only
-    vault innkeeperd's managed identity (or a self-hosted service principal) can read, and only as
-    Key Vault Secrets User: the identity HMAC key, each provider's OIDC client secret, future
-    server-side keys, and a copy of the audit public key with its key identifier (`audit-public-key`,
-    `audit-key-id`). The **escrow vault** holds the audit private key as a non-exportable RSA key
-    (RSA-HSM when the SKU allows, 3072-bit or larger). The server identity has no role assignment
-    there. Only the operator's own Entra account may unwrap, ideally with PIM, and Key Vault
-    diagnostic logs record every unwrap. IaC (Bicep or Terraform) creates both vaults and generates
-    the RSA key inside the escrow vault, so the private key never exists in IaC state. The deployment
-    copies that key's public JWK and version URL into the server vault, then
-    `tools/audit_roundtrip.sh` seals a probe and unwraps it with the operator's `az` login.
-    innkeeperd will use `azure_identity` and `azure_security_keyvault_secrets` (MIT), or the Key
-    Vault REST API, with `--key-vault` and those secret names. Secrets are fetched at startup, held
-    in memory only, and never logged or written to disk. Rotation is a restart or a refresh of the
-    latest versions. Identity HMAC rotation tries the current secret version, then older enabled
-    versions, and rewrites a row that matched an old version. Audit records take the new `kid` when
-    the RSA key version changes; older versions stay enabled until those records age out. Local
-    development uses no vault: `dev-identity.key` (mode 0600, generated in `--data-dir` when sign-in
-    exists) and `innkeeperd audit dev-keygen`. Either file logs `DEVELOPMENT KEY`. When the vault
-    client lands, `--public` refuses to start without `--key-vault`. Both vaults have soft delete and
+    [privacy.md](server/privacy.md) sections 5 and 7. The **server vault** is the only vault
+    innkeeperd's managed identity (or a self-hosted service principal) can read, and only as Key Vault
+    Secrets User: the identity HMAC key, each provider's OIDC client secret, future server-side keys,
+    and a copy of the audit public key with its key identifier (`audit-public-key`, `audit-key-id`). The
+    **escrow vault** holds the audit private key as a non-exportable RSA key (RSA-HSM when the SKU
+    allows, 3072-bit or larger). The server identity has no role assignment there. Only the operator's
+    own Entra account may unwrap, ideally with PIM, and Key Vault diagnostic logs record every unwrap.
+    IaC (Bicep or Terraform) creates both vaults and generates the RSA key inside the escrow vault, so
+    the private key never exists in IaC state. The deployment copies that key's public JWK and version
+    URL into the server vault, then `tools/audit_roundtrip.sh` seals a probe and unwraps it with the
+    operator's `az` login. innkeeperd uses the Key Vault REST API over `reqwest` and rustls (not the
+    Azure SDK crates), with `--key-vault` and those secret names. Secrets are fetched at startup, held
+    in memory only, and never logged or written to disk. Rotation is a restart; there is no periodic
+    refresh yet. Identity HMAC rotation tries the current secret version, then older enabled versions,
+    and rewrites a row that matched an old version. Audit records take the new `kid` when the RSA key
+    version changes; older versions stay enabled until those records age out. Local development uses no
+    vault: `dev-identity.key` (mode 0600, generated in `--data-dir`) and `innkeeperd audit dev-keygen`.
+    Either file logs `DEVELOPMENT KEY`. `--public` refuses to start without `--key-vault`, unless
+    `--insecure-dev-keys` is given and every page origin is loopback. Both vaults have soft delete and
     purge protection. The envelope uses `aes-gcm` 0.10 and `rsa` 0.9 (each MIT OR Apache-2.0); the
     server only encrypts with `rsa`.
   - **Attestation.** Columns `adult_attested_at` (date) and `terms_version`, set from the page's
@@ -281,16 +282,19 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
     `identity_key`, expiry). The page opens the WebSocket with it; `innkeeperd` binds that connection
     to the identity and accepts a Login on it only for an account the identity owns. A stolen INN
     password then opens nothing over the web. Expired rows are hard-purged 30 days after `expiry`
-    (`--retain-session-days`) unless that account is held. The table is not created yet; the purge
-    job deletes from it once it has both `expiry` and `account_id`.
+    (`--retain-session-days`) unless that account is held.
   - Enrolment modes (configuration): open (today: an unknown account is created at its first Login),
     web-only (new accounts only through sign-in; TCP clients log on to existing accounts), closed.
-    Account creation is rate-limited per identity.
+    Account creation is rate-limited per identity (`--accounts-per-day`, default 3).
+  - **Still open:** Apple (its client secret is a signed JWT), the admin portal's use of the
+    reserved `/admin/auth/callback`, a periodic vault refresh, and the infra unit's new flags
+    (`--auth-config`, `--page-origin`, `--key-vault`).
   - **Public mode.** Public deployments run with `--public` ([privacy.md](server/privacy.md)).
   - Development works on `http://localhost` redirect URIs, which Google, Microsoft and GitHub accept. A
     public host needs HTTPS: a free host subdomain or a tunnel works, and a custom domain becomes useful
     when Google's consent screen leaves testing mode (homepage, privacy policy, verified domain).
-  - The admin portal uses the same sign-in, with an operator role on the identity.
+  - The admin portal uses the same sign-in, with an operator role on the identity. The relying party
+    already takes an audience, so the portal reuses it on its own callback.
 
 ### Deferred
 - **Red Baron and 3-D Golf:** DOSBox only, through the same server, whenever we get to them. Their server needs are game-channel relay plus host time.

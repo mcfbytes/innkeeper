@@ -123,6 +123,17 @@ fn open_session(
 }
 
 impl AuditTicket {
+    /// The line presented a session token: the row names the identity's HMAC in the clear.
+    pub(crate) fn note_identity(&mut self, identity: &[u8; 32]) {
+        let result = self.seal.store.connection().execute(
+            "UPDATE audit_sessions SET identity_key = ?2 WHERE id = ?1",
+            params![self.id, identity.as_slice()],
+        );
+        if let Err(error) = result {
+            warn!(%error, "sealed record was not linked to its identity");
+        }
+    }
+
     /// Login was accepted. A repeat of the same account does not reseal.
     pub(crate) fn note_account(&mut self, account: u32) {
         if self.closed || self.account_id == Some(account) {
@@ -448,7 +459,39 @@ pub(crate) fn export_rows(
             "sealed_b64": BASE64.encode(sealed),
         }));
     }
+    drop(statement);
+    lines.extend(identity_rows(&conn, account)?);
     Ok(lines)
+}
+
+/// The sealed provider subject of the identity that owns the account, with `"record":
+/// "identity"` and a null `id`; `audit open` matches its data key by the wrapped key.
+fn identity_rows(conn: &rusqlite::Connection, account: u32) -> Result<Vec<Value>, AuditError> {
+    let found: Option<(Vec<u8>, String, i64)> = conn
+        .query_row(
+            "SELECT identities.subject_sealed, identities.provider, identities.created_at
+             FROM identity_accounts JOIN identities USING (identity_key)
+             WHERE identity_accounts.account_id = ?1 AND identities.subject_sealed IS NOT NULL",
+            [account],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(StoreError::backend)?;
+    let Some((sealed, provider, created_at)) = found else {
+        return Ok(Vec::new());
+    };
+    let view = seal::view(&sealed)?;
+    Ok(vec![json!({
+        "id": Value::Null,
+        "record": "identity",
+        "provider": provider,
+        "started_at": created_at,
+        "ended_at": Value::Null,
+        "account_id": account,
+        "kid": view.kid,
+        "wrapped_key_b64": BASE64.encode(view.wrapped_key),
+        "sealed_b64": BASE64.encode(sealed),
+    })])
 }
 
 enum KeySource {

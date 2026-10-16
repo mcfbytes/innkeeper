@@ -7,14 +7,18 @@ mod config;
 mod connection;
 mod connection_gate;
 mod dates;
+mod dev_oidc;
 mod host;
+mod http;
 mod int14h_listener;
+mod keyvault;
 mod peer;
 mod retention;
 mod sandbox;
 mod save_channel;
 mod seal;
 mod server;
+mod signin;
 mod sqlite_store;
 mod subject;
 mod switchboard;
@@ -40,6 +44,7 @@ fn main() -> ExitCode {
         Some(config::Command::Release { account, data_dir }) => {
             return audit::run_release(account, &data_dir)
         }
+        Some(config::Command::DevOidc { bind, issuer }) => return dev_oidc::run(bind, issuer),
         None => {}
     }
     let probe = config.sandbox_probe.clone();

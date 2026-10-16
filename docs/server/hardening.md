@@ -13,8 +13,8 @@ the INT 14h listener still comes up unless `--no-int14h`, and `--line` still say
 existing connection are read. There is no `--private` flag.
 
 `--public` is the hosted shape. Players arrive only on the WebSocket, which sits behind a TLS
-proxy on the same machine (Caddy). A raw TCP connection cannot be tied to the future sign-in, so
-none is opened.
+proxy on the same machine (Caddy). A raw TCP connection cannot be tied to a sign-in, so none is
+opened.
 
 - An explicit `--bind` is an error (`public mode accepts players only over the WebSocket, so there
   is no raw TCP listener`). The default address is not bound.
@@ -26,15 +26,21 @@ none is opened.
 - `--allow-root` is an error, including together with `--no-sandbox`.
 - `--capture-dir` is still an error ([privacy.md](privacy.md) section 2).
 
-Until sign-in exists, startup logs this warning once:
+`connection_gate::admit` (`crates/innkeeperd/src/connection_gate.rs`) runs on the upgrade request,
+before the WebSocket handshake. In public mode it requires `?session=<token>` naming a live sign-in
+session ([innkeeperd.md](innkeeperd.md) section 8). A missing, unknown or expired token is an HTTP
+401 with no upgrade, and the refusal is logged without the token. The line is then bound to that
+identity: a Login is accepted only for an account the identity owns. The same listener serves
+`/healthz` and `/auth/*` over plain HTTP; nothing else is answered.
+
+With `--public` and no `--auth-config`, startup logs this warning once, and the server still starts:
 
 ```
-public mode: sign-in is not implemented yet, so WebSocket connections are not authenticated; do not expose this server publicly until it is
+public mode: no sign-in providers are configured (--auth-config), so every WebSocket is refused
 ```
 
-`connection_gate::admit` (`crates/innkeeperd/src/connection_gate.rs`) runs when a WebSocket is
-accepted, before the HTTP upgrade. It admits every socket today. Sign-in will require and validate
-the session token there, and a refusal is logged and the socket is dropped.
+`--public` also requires `--key-vault`. `--insecure-dev-keys` replaces it only when every
+`--page-origin` is loopback, so development keys cannot back a page other machines can reach.
 
 `--public` turns the sandbox in section 3 on. `--no-sandbox` turns it off.
 
@@ -51,14 +57,16 @@ and does not name its path. Weakening it does not remove section 3.
 hidden probe. `--no-sandbox` wins over `--public` and conflicts with the other three.
 
 The jail is installed only after startup has finished the work that needs a wider process: the
-config is parsed, `--data-dir` and the database are open, listening sockets are bound, and (when
-the vault client exists) secrets have been fetched. The accept loop starts after that. Tokio's
-worker threads are created then, so they inherit the jail. Landlock before ABI v8 restricts the
-calling thread only; `all_threads` is requested and best effort drops it on older kernels.
+config is parsed, `--data-dir` and the database are open, listening sockets are bound, and the
+server vault's secrets have been fetched. The accept loop starts after that. Tokio's worker
+threads are created then, so they inherit the jail. Landlock before ABI v8 restricts the calling
+thread only; `all_threads` is requested and best effort drops it on older kernels.
 Inheritance is why the runtime is built after `confine`.
 
 Offline commands return first and stay unrestricted: `account` (including `account export`),
-`audit`, `hold` and `release`. They read a database the server has already closed.
+`audit`, `hold` and `release`. They read a database the server has already closed. The
+development provider `dev-oidc` also returns first; it is a loopback test tool, not part of a
+public host.
 
 Order inside the jail:
 
@@ -105,7 +113,7 @@ denied. Public mode writes no captures.
 
 TCP bind is handled on ABI v4 and later, and only for the ports the process actually bound. Port
 0 is not listed, so an explicit bind of an ephemeral port is denied. `connect` is not handled:
-outbound TCP for Key Vault and IMDS stays allowed. On a Landlock ABI 7 kernel, a connect to a
+outbound TCP to the sign-in providers stays allowed. On a Landlock ABI 7 kernel, a connect to a
 closed port still failed with `ECONNREFUSED`, while a bind of a port that was not listed failed
 with `EACCES`. If a later kernel starts denying the implicit bind inside `connect`, the fix is a
 port-0 rule, and it has to be retested before it is added.
@@ -114,9 +122,28 @@ A kernel with no Landlock logs one warning and continues, in public mode as well
 `sandbox: this kernel has no Landlock; filesystem and TCP bind stay unrestricted`. The summary
 then says `abi=unsupported fs=open net=unrestricted`. That is a warning, not a startup error.
 
-`localhost` is resolved once before the jail so glibc's files resolver is already mapped. An
-external name is not resolved here. A later `dlopen` of a DNS module would need a new executable
-mapping, which section 5 refuses. The vault client is not built, so that lookup does not happen yet.
+`localhost` is resolved once before the jail so glibc's files resolver is already mapped. A later
+`dlopen` of a DNS module would need a new executable mapping, which section 5 refuses, so outbound
+HTTP does not use glibc's resolver: `reqwest` is built with the pure-Rust `hickory` resolver, which
+reads `/etc/resolv.conf` and `/etc/hosts` (granted above) and asks the name servers over UDP and TCP
+itself. TLS is rustls with the system CA store, read from the paths in the table.
+
+**Outbound connections.** Before the jail, with `--key-vault`:
+
+- the managed identity endpoint, `http://169.254.169.254` (IMDS), or for a service principal
+  `https://login.microsoftonline.com`;
+- the server vault, `https://NAME.vault.azure.net`.
+
+After the jail, only while a player signs in:
+
+- each OIDC provider's issuer: discovery (`/.well-known/openid-configuration`), its JWKS, and its
+  token endpoint. Discovery and keys are cached for an hour;
+- a plain-OAuth provider's token and profile endpoints;
+- the name servers in `/etc/resolv.conf`, for those names.
+
+No client follows redirects, and each request has a 15-second timeout. Nothing else connects out.
+Landlock does not restrict `connect`, so the outer unit's network rules are where the destinations
+can be pinned.
 
 ## 5. seccomp
 
@@ -154,6 +181,12 @@ allowlist is 104 numbers. On aarch64 it is the same calls without those six lega
 `open`, `stat` and `dup2` are on neither list: both architectures allow `openat`, `newfstatat` and
 `dup3`.
 
+Sign-in added no syscall. The HTTP endpoints share the WebSocket listener, the outbound calls in
+section 4 use `socket`, `connect`, `sendto` and `recvfrom` that the list already had, and the
+vault is read before the filter exists. `crates/innkeeperd/tests/signin.rs` runs the whole sign-in
+contract against a sandboxed `--public` server in kill mode, and a public provider was reached
+through DNS and TLS from a jailed process without a `SIGSYS`.
+
 ## 6. Debugging
 
 `--sandbox-log` is the way to extend the list. Run a session, then read the audit log (or
@@ -176,4 +209,6 @@ Landlock or when seccomp fails to install, so `cargo test --workspace` stays gre
 
 Direct dependencies of the Linux build, also recorded in [privacy.md](privacy.md) section 5:
 `landlock` 0.4 (MIT OR Apache-2.0), `seccompiler` 0.5 (Apache-2.0 OR BSD-3-Clause), `prctl` 1
-(MIT), `libc` 0.2 (MIT OR Apache-2.0). `prctl` pulls `nix`; the server does not call it.
+(MIT), `libc` 0.2 (MIT OR Apache-2.0). `prctl` pulls `nix`; the server does not call it. The
+crates sign-in and the vault client add, with their licences, are listed in the same section of
+privacy.md.

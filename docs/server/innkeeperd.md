@@ -17,13 +17,15 @@ innkeeperd           bin: command line, tokio runtime, TCP and WebSocket, captur
   └ int14h             the 17 INT 14h exports and the transport codec (int14h-transport.md), no I/O
 ```
 
-`innkeeperd` has up to three listeners on one world. The legacy one (`--bind`, `src/connection.rs`) answers the
-stock DOS client through the modem, PAD and link layer. The WebSocket one (`--ws-bind`, `src/websocket.rs`)
-runs the same legacy session for a browser client: each WebSocket is one serial line and its binary
-messages are the line's raw bytes (section 2). The transport one (`--int14h-bind`,
-`src/int14h_listener/`) answers a client that implements TSNEXEC's exports itself and sends each call as an
-envelope ([int14h-transport.md](../protocol/int14h-transport.md) section 7); its `Executive` holds one
-connection's export state. Both draw their `ConnectionId`s from one counter in `ConnectionSettings`.
+`innkeeperd` has up to three listeners on one world. The legacy one (`--bind`, `src/connection.rs`) answers
+the stock DOS client through the modem, PAD and link layer. The WebSocket one (`--ws-bind`,
+`src/websocket.rs`) runs the same legacy session for a browser client: each WebSocket is one serial line and
+its binary messages are the line's raw bytes (section 2). That listener is an HTTP server (`src/http.rs`), so
+it also serves `/healthz` and sign-in (`src/signin/`, with the vault client in `src/keyvault/`; section 8).
+The transport one (`--int14h-bind`, `src/int14h_listener/`) answers a client that implements TSNEXEC's exports
+itself and sends each call as an envelope ([int14h-transport.md](../protocol/int14h-transport.md) section 7);
+its `Executive` holds one connection's export state. Both draw their `ConnectionId`s from one counter in
+`ConnectionSettings`.
 
 `innkeeper-world` does not depend on the session crates: it turns message bodies into deliveries, and
 `innkeeperd` (`src/host.rs`, `Host`) carries them between the world and either transport. `Host::answer`
@@ -61,6 +63,11 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
                            [--line auto|hayes|pad] [--connect-rate 2400]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
                            [--ws-bind 127.0.0.1:2316]
+                           [--auth-config FILE] [--page-origin ORIGIN ...]
+                           [--enrolment open|web-only|closed] [--session-hours 12]
+                           [--accounts-per-day 3]
+                           [--key-vault https://NAME.vault.azure.net | --insecure-dev-keys]
+cargo run -p innkeeperd -- dev-oidc [--bind 127.0.0.1:2902] [--issuer URL]
 ```
 
 - On a successful bind it logs `INT 14h hooked. Please wait while ImagiNation loads...`, then `serving the
@@ -74,18 +81,23 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
   auto-detect, Hayes modem, PAD, link layer and a capture file. Binary messages carry raw bytes in both
   directions, split anywhere; text messages are the save channel's JSON control messages once the line has
   logged on ([saves.md](saves.md)); a binary message over 64 KiB (a text message over 2 MiB) or a handshake that
-  takes over 10 s closes the connection. Closing the WebSocket is a TCP hang-up. Any `Origin` is accepted.
+  takes over 10 s closes the connection. Closing the WebSocket is a TCP hang-up. Any `Origin` is accepted
+  on the upgrade; the session token is the check (section 8). The same listener answers plain HTTP:
+  `GET /healthz` is 200 `ok`, and `/auth/*` is sign-in when `--auth-config` is given (section 8). Any
+  other request that is not an upgrade gets 404.
 - `--public` is for a host that should process as little personal data as possible: it refuses
   `--capture-dir`, writes no capture files, logs message kinds without fields, and replaces peer
   addresses with a per-process HMAC token. Persona names in other info lines become the account
-  number. See [privacy.md](privacy.md). It also accepts players only over a loopback WebSocket:
-  an explicit `--bind` or `--int14h-bind` is an error, `--ws-bind` is required and must be
-  `127.0.0.0/8` or `::1`, and the INT 14h listener stays off. `--line` does not open a socket, so
-  it stays available. There is no `--private` flag; without `--public` the listeners are as above.
-  Startup warns once that sign-in is not implemented and WebSocket connections are not
-  authenticated. The check that will require a session token is `connection_gate::admit`, called
-  before the upgrade. Development tools that parse verbose logs keep working: the default format
-  is unchanged. The in-process jail that `--public` turns on is [hardening.md](hardening.md).
+  number. See [privacy.md](privacy.md). It also accepts players only over a loopback WebSocket: an
+  explicit `--bind` or `--int14h-bind` is an error, `--ws-bind` is required and must be
+  `127.0.0.0/8` or `::1`, and the INT 14h listener stays off. `--line` does not open a socket, so it
+  stays available. There is no `--private` flag; without `--public` the listeners are as above.
+  Every WebSocket must carry a live sign-in session (`?session=<token>`); without one the upgrade is
+  an HTTP 401 (`connection_gate::admit`, section 8). With no `--auth-config`, startup warns that
+  every WebSocket is refused. `--public` needs `--key-vault`; `--insecure-dev-keys` replaces it only
+  when every `--page-origin` is loopback (section 8). Development tools that parse verbose logs keep
+  working: the default format is unchanged. The in-process jail that `--public` turns on is
+  [hardening.md](hardening.md).
 - `--sandbox` applies Landlock, seccomp and `no_new_privs` after the sockets are bound and before
   the accept loop. It is on by default with `--public`. `--no-sandbox` leaves the process
   unrestricted. `--allow-root` is only for a local DOSBox setup and is refused with `--public`.
@@ -265,3 +277,203 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 - On the INT 14h transport, SwitchHost and Connect accept any address and keep the client on this host; a
   land switch between hosts is not modelled. No client speaks the transport yet (ScummVM's online executive
   is the first one planned).
+- Sign-in (section 8): Apple, the admin portal on `/admin/auth/callback`, and a periodic vault
+  refresh. The age and terms answer is stored but is not required before an account is created.
+
+## 8. Sign-in
+
+The browser page signs a player in with a common provider, receives a session token, and opens the
+WebSocket with it. The page side and the JSON are the contract in the sibling repo `INN-Decomp`,
+`docs/web.md` section "Sign-in (server contract)". This section is the server half. What is stored
+is [privacy.md](privacy.md) sections 1 and 6; the sandbox and outbound connections are
+[hardening.md](hardening.md).
+
+### 8.1 Flags
+
+- `--auth-config FILE` turns sign-in on. It needs `--data-dir` (identities and sessions are rows in
+  `innkeeper.db`) and `--ws-bind` (the `/auth/*` endpoints share that listener).
+- `--page-origin ORIGIN`, repeatable: the exact origin of a page allowed to sign in, such as
+  `https://inn.example.net` or `http://127.0.0.1:8080`. It is the CORS allow list, the check on the
+  login's `return` address and the `postMessage` target. No origin means no page can sign in, and
+  startup warns.
+- `--enrolment open|web-only|closed`. `open` is the old behaviour: a Login for an unknown number
+  creates the account, and sign-in also creates accounts. `web-only` creates accounts only through
+  `POST /auth/accounts`; a Login never does. `closed` creates none. The default is `open`, or
+  `web-only` with `--public`.
+- `--session-hours 12`: how long a session token lives. Logout ends it at once.
+- `--accounts-per-day 3`: accounts one identity may open in any 24 hours. `canCreate` is false and
+  `POST /auth/accounts` is 429 `rate_limited` beyond that.
+- `--key-vault https://NAME.vault.azure.net`: read the identity HMAC key, the client secrets and the
+  audit key from the server vault (8.3). It cannot be combined with `--audit-public-key`.
+- `--insecure-dev-keys`: no vault. The identity key is `dev-identity.key` in `--data-dir` and the
+  client secrets come from the auth file or the environment (8.2). Every one of those logs
+  `DEVELOPMENT KEY`.
+
+**`--public` and the vault.** `--public` refuses to start without `--key-vault`. The one exception
+is `--insecure-dev-keys` when every `--page-origin` is a loopback origin (`127.0.0.0/8`, `::1` or
+`localhost`). Refusing `--insecure-dev-keys` with `--public` outright would leave no way to run the
+public shape, jail included, on one machine without Azure. Accepting it with any origin would let a
+public page sign players in against a key on disk. A loopback-only page cannot be reached from
+another machine, so the dev keys can never back a public deployment.
+
+Without `--public`, sign-in is optional. A WebSocket with `?session=` is bound the same way, an
+unknown or expired token is a 401, and one with no token behaves as before. With no
+`--auth-config`, a token on the upgrade is ignored.
+
+### 8.2 The auth file
+
+TOML. `public_url` is the auth origin as the provider sees it, and the callbacks are
+`<public_url>/auth/callback` (players) and `<public_url>/admin/auth/callback` (reserved for the
+admin portal). It defaults to `http://<--ws-bind>`. Register the player callback with each
+provider.
+
+```toml
+public_url = "https://inn.example.net"
+
+# OpenID Connect: discovery from the issuer, scope openid only.
+[[provider]]
+id = "google"
+name = "Google"
+issuer = "https://accounts.google.com"
+client_id = "1234.apps.googleusercontent.com"
+client_secret_name = "oidc-google"
+
+# Plain OAuth 2.0: the stable user id from the profile endpoint, nothing else.
+[[provider]]
+id = "discord"
+name = "Discord"
+kind = "oauth2"
+issuer = "https://discord.com"
+authorize_url = "https://discord.com/oauth2/authorize"
+token_url = "https://discord.com/api/oauth2/token"
+userinfo_url = "https://discord.com/api/users/@me"
+id_field = "id"
+scopes = ["identify"]
+client_id = "5678"
+client_secret_name = "oauth-discord"
+
+# Development only; refused with --key-vault.
+[dev_secrets]
+oidc-google = "not-a-real-secret"
+```
+
+- `id` is 1 to 32 of A-Z, a-z, 0-9, `-` and `_`, unique. The page shows it as `AT+CARD=<id>`.
+- `name` is the calling card text, 1 to 64 characters.
+- `issuer` is required for both kinds. For OIDC it is the issuer URL that discovery starts from and
+  that the ID token must name. For plain OAuth it is a stable name for the provider; it never
+  changes, because it is part of every stored identity key.
+- `kind` is `oidc` (the default) or `oauth2`. An `oidc` provider needs `issuer` and has no
+  `scopes`: the request is `openid` alone. An `oauth2` provider needs `authorize_url`,
+  `token_url` and `userinfo_url`; `id_field` names the JSON field with the user id (default
+  `id`). Its `scopes` must be the minimum the provider needs for that id, and `email`, `profile`,
+  `address` and `phone` are refused.
+- `client_secret_name` is the secret's name in the server vault (1 to 127 of letters, digits
+  and `-`). Without a vault it is looked up
+  in `[dev_secrets]`, then in `INNKEEPERD_SECRET_<NAME>` (upper case, `-` as `_`).
+
+Each login uses PKCE (S256), a random `state` and, for OIDC, a `nonce`; the ID token's signature,
+issuer, audience, expiry and nonce are checked. Discovery metadata and signing keys are cached for an
+hour and fetched again when a token names an unknown key. Redirects are not followed. A login that
+has not come back within ten minutes is forgotten.
+
+Apple is not supported: its client secret is a signed JWT, which this file cannot express yet. For
+Microsoft, use a tenant-specific issuer or `https://login.microsoftonline.com/consumers/v2.0`; the
+multi-tenant `common` issuer does not match the tokens it signs.
+
+### 8.3 Key Vault
+
+The client is plain REST (`reqwest` with rustls, Key Vault API version 7.4), not the Azure SDK.
+Startup reads a handful of secrets once, so it needs two token requests and a few GETs. The SDK
+crates would bring their own HTTP stack and async runtime choices, and a much larger dependency
+tree, for that.
+
+Credentials, chosen from the environment:
+
+- managed identity through IMDS (`http://169.254.169.254/metadata/identity/oauth2/token`,
+  `api-version=2018-02-01`, resource `https://vault.azure.net`). `AZURE_CLIENT_ID` alone picks a
+  user-assigned identity;
+- a service principal for a self-hosted server: `AZURE_TENANT_ID` and `AZURE_CLIENT_ID`, with
+  `AZURE_CLIENT_SECRET` or `AZURE_CLIENT_CERTIFICATE_PATH` (a PEM with the certificate and its
+  RSA private key; the client signs an RS256 assertion). The token comes from
+  `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token`.
+
+Secrets read, all before the sandbox and held in memory only (zeroized on drop where the type
+allows):
+
+| Name | What |
+|---|---|
+| `identity-hmac-key` | base64, at least 32 bytes. Every enabled version is read, newest first; the newest is current |
+| each `client_secret_name` | the provider's client secret |
+| `audit-public-key` | SPKI PEM; replaces `--audit-public-key` |
+| `audit-key-id` | the escrow key version URL; replaces `--audit-key-id` |
+
+A missing secret or a vault error stops startup. There is no
+periodic refresh: rotation is a restart. Old HMAC versions stay readable so an identity hashed under
+one is found and rewritten under the current version at its next sign-in (privacy.md section 7).
+The handle (`Caller 7F3A`) is taken from the key, so it changes after that rewrite.
+
+The hidden flags `--test-vault-endpoint`, `--test-imds-endpoint` and `--test-authority-endpoint`
+point the client at a local mock; the tests use them and never reach Azure.
+
+### 8.4 Accounts, sessions and the Login
+
+`POST /auth/accounts` numbers a new account like signup (one past the highest id, at least
+100001) and gives it a random password nobody knows. `POST /auth/accounts/<id>/credential` sets a
+new random password of 8 characters from A-Z and 0-9, stores it in the client's encoded form and
+returns it. Every call rotates it. A persona is 1 to 10 of A-Z, a-z and 0-9, unique without regard
+to case across every account row, deleted or not.
+
+The session token is 32 random bytes, base64url. The `sessions` row keeps only its SHA-256. The
+WebSocket upgrade takes it from `?session=` and nowhere else; the token is never logged. On a bound
+line a Login for an account the identity does not own gets the same reply as a wrong password
+(`That password is not right.`). The persona the client sends from `PLAYER.DIR` is accepted; the
+stored persona stays the one chosen on the web.
+
+### 8.5 The mock provider
+
+`innkeeperd dev-oidc --bind 127.0.0.1:2902` is a development OpenID Connect provider on loopback,
+for local runs and the integration test. Its consent page has a Subject field and Allow and Deny
+buttons, and signs in whoever is typed there. It refuses any scope but `openid`, requires PKCE S256
+and signs RS256 ID tokens with a key made at startup. It takes any `client_id` (the token request
+must repeat the one that started the login) and does not check the secret. Point an `oidc`
+provider's `issuer` at it (`--issuer` sets what it announces).
+
+A full local run, with a page served from `http://127.0.0.1:2901`:
+
+```
+innkeeperd dev-oidc --bind 127.0.0.1:2902 --issuer http://localhost:2902
+innkeeperd --public --insecure-dev-keys --ws-bind 127.0.0.1:2900 --data-dir work/signin \
+    --auth-config auth.toml --page-origin http://127.0.0.1:2901
+```
+
+`crates/innkeeperd/tests/signin.rs` runs that shape under the sandbox and walks the whole contract,
+then checks that the log holds no token, password, secret or subject.
+
+### 8.6 Server-side sign-in
+
+What the server decided where the `docs/web.md` contract is open or silent:
+
+- `GET <url>&return=…` answers with a 302 to the provider. There is no consent page of the
+  server's own; the provider's is the consent page. `mode` other than `redirect` is treated as
+  `popup`.
+- Callback errors are `access_denied` when the provider says so, `provider_error` for any other
+  provider failure (including a bad token), and `server_error` when the store fails. A callback
+  with an unknown or expired `state` is a 400 HTML page, because there is no verified page to post
+  to.
+- An `attest` on the login URL that does not parse is ignored. `POST /auth/attest` with one is 400
+  `bad_attest`.
+- `canCreate` is false when enrolment forbids it or the identity reached `--accounts-per-day`; the
+  429 body is `rate_limited`.
+- 401 bodies are `unauthorized`; a credential request for an account the identity does not own is
+  404 `no_such_account`.
+- More than 4096 logins in flight is 503 `busy`.
+- `POST /auth/logout` is 204 with or without a valid token; only a store failure is a 500.
+- A preflight from an origin that is not a `--page-origin` gets 204 without
+  `Access-Control-Allow-Origin`, so the browser blocks it. `Access-Control-Max-Age` is 600.
+- The token lives `--session-hours` (12). A token presented after logout or expiry is 401 on
+  every call and on the upgrade.
+- The upgrade is accepted on any path; only `?session=` matters.
+- Without `--public`, an unknown or expired token on the upgrade is refused (401) rather than
+  ignored, so a stale tab does not silently log on unbound.
+- Deleting an identity's last account (`account delete`) revokes its sessions; once nothing refers
+  to it, the purge job removes the identity.

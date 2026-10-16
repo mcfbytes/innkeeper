@@ -9,6 +9,9 @@ use innkeeper_session::SessionConfig;
 use innkeeper_world::RetentionPolicy;
 use pad_thai::{HayesConfig, LineKind};
 
+use crate::signin::config::PageOrigins;
+use crate::signin::EnrolmentMode;
+
 /// Command line of the daemon.
 #[derive(Debug, Parser)]
 #[command(
@@ -78,9 +81,39 @@ pub(crate) struct Config {
     /// Days a complaint is kept, counted from when it arrived.
     #[arg(long, default_value_t = 365)]
     pub(crate) retain_complaint_days: u32,
-    /// Days an expired session token is kept. The sessions table is not built yet.
+    /// Days an expired or revoked session token is kept, unless a hold covers it.
     #[arg(long, default_value_t = 30)]
     pub(crate) retain_session_days: u32,
+    /// TOML file naming the sign-in providers (docs/server/innkeeperd.md section 8). Needs --data-dir.
+    #[arg(long, value_name = "FILE")]
+    pub(crate) auth_config: Option<PathBuf>,
+    /// Origin of the game page allowed to sign in: CORS, `return` and postMessage. Repeatable.
+    #[arg(long = "page-origin", value_name = "ORIGIN")]
+    pub(crate) page_origins: Vec<String>,
+    /// Who creates accounts. Default open, or web-only with --public.
+    #[arg(long, value_enum)]
+    pub(crate) enrolment: Option<EnrolmentMode>,
+    /// Hours a sign-in session token lives.
+    #[arg(long, default_value_t = 12)]
+    pub(crate) session_hours: u32,
+    /// Accounts one signed-in identity may open per day.
+    #[arg(long, default_value_t = 3)]
+    pub(crate) accounts_per_day: u32,
+    /// The server Key Vault, https://NAME.vault.azure.net: identity HMAC key, client secrets, audit key.
+    #[arg(long, value_name = "URL")]
+    pub(crate) key_vault: Option<String>,
+    /// DEVELOPMENT ONLY: no vault; dev-identity.key and file secrets. With --public, loopback pages only.
+    #[arg(long, conflicts_with = "key_vault")]
+    pub(crate) insecure_dev_keys: bool,
+    /// Test only: where Key Vault requests go instead of --key-vault.
+    #[arg(long, hide = true, requires = "key_vault")]
+    pub(crate) test_vault_endpoint: Option<String>,
+    /// Test only: where managed-identity token requests go instead of IMDS.
+    #[arg(long, hide = true, requires = "key_vault")]
+    pub(crate) test_imds_endpoint: Option<String>,
+    /// Test only: where service-principal token requests go instead of Entra ID.
+    #[arg(long, hide = true, requires = "key_vault")]
+    pub(crate) test_authority_endpoint: Option<String>,
     /// What the client's serial port reaches: a modem emulator, a raw line, or auto-detect.
     #[arg(long, value_enum, default_value_t = LineArg::Auto)]
     pub(crate) line: LineArg,
@@ -120,6 +153,15 @@ pub(crate) enum Command {
         account: u32,
         #[arg(long)]
         data_dir: PathBuf,
+    },
+    /// DEVELOPMENT ONLY: a mock OpenID Connect provider with an Allow button, on loopback.
+    DevOidc {
+        /// Loopback address to listen on.
+        #[arg(long, default_value = "127.0.0.1:2902")]
+        bind: SocketAddr,
+        /// The issuer URL it announces. Default http://BIND.
+        #[arg(long)]
+        issuer: Option<String>,
     },
 }
 
@@ -299,7 +341,55 @@ impl Config {
             }
             self.no_int14h = true;
         }
+        self.check_sign_in()?;
         Ok(self)
+    }
+
+    /// The vault and dev-key rules (docs/server/innkeeperd.md section 8).
+    fn check_sign_in(&self) -> Result<(), clap::Error> {
+        if let Some(url) = &self.key_vault {
+            crate::keyvault::check_vault_url(url)
+                .map_err(|why| conflict(&format!("--key-vault {why}\n")))?;
+            if self.audit_public_key.is_some() {
+                return Err(conflict(
+                    "--key-vault cannot be used with --audit-public-key: the vault holds audit-public-key\n",
+                ));
+            }
+        }
+        let origins =
+            PageOrigins::parse(&self.page_origins).map_err(|why| conflict(&format!("{why}\n")))?;
+        if self.public && self.key_vault.is_none() {
+            if !self.insecure_dev_keys {
+                return Err(conflict(concat!(
+                    "--public requires --key-vault: the identity key and client secrets live in the ",
+                    "server vault (--insecure-dev-keys is for a loopback test)\n"
+                )));
+            }
+            if !origins.all_loopback() {
+                return Err(conflict(concat!(
+                    "--insecure-dev-keys with --public accepts only loopback --page-origin values; ",
+                    "a public page needs --key-vault\n"
+                )));
+            }
+        }
+        if self.auth_config.is_some() && self.data_dir.is_none() {
+            return Err(conflict(
+                "--auth-config requires --data-dir: identities and sessions are stored there\n",
+            ));
+        }
+        if self.session_hours == 0 {
+            return Err(conflict("--session-hours must be at least 1\n"));
+        }
+        Ok(())
+    }
+
+    /// `--enrolment`, or its default: open, and web-only with `--public`.
+    pub(crate) fn enrolment(&self) -> EnrolmentMode {
+        self.enrolment.unwrap_or(if self.public {
+            EnrolmentMode::WebOnly
+        } else {
+            EnrolmentMode::Open
+        })
     }
 
     /// Addresses the process actually binds. Public mode keeps only the WebSocket.
@@ -439,9 +529,14 @@ mod tests {
 
     #[test]
     fn public_mode_turns_capture_off() {
-        let config =
-            Config::try_load_from(["innkeeperd", "--public", "--ws-bind", "127.0.0.1:2316"])
-                .unwrap();
+        let config = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--insecure-dev-keys",
+            "--ws-bind",
+            "127.0.0.1:2316",
+        ])
+        .unwrap();
         assert!(config.public);
         assert_eq!(config.capture_dir(), None);
     }
@@ -491,7 +586,13 @@ mod tests {
             "[::ffff:127.0.0.1]:9",
         ]);
         assert!(mapped.unwrap_err().to_string().contains("loopback"));
-        let local = Config::try_load_from(["innkeeperd", "--public", "--ws-bind", "[::1]:9"]);
+        let local = Config::try_load_from([
+            "innkeeperd",
+            "--public",
+            "--insecure-dev-keys",
+            "--ws-bind",
+            "[::1]:9",
+        ]);
         assert!(local.is_ok());
     }
 
@@ -500,6 +601,7 @@ mod tests {
         let public = Config::try_load_from([
             "innkeeperd",
             "--public",
+            "--insecure-dev-keys",
             "--ws-bind",
             "127.0.0.1:9",
             "--line",
@@ -526,6 +628,7 @@ mod tests {
         let open = Config::try_load_from([
             "innkeeperd",
             "--public",
+            "--insecure-dev-keys",
             "--no-sandbox",
             "--ws-bind",
             "127.1.2.3:9",
@@ -623,5 +726,77 @@ mod tests {
             config.audit_key_id.as_deref(),
             Some("https://escrow.vault.azure.net/keys/audit/v1")
         );
+    }
+
+    #[test]
+    fn public_mode_needs_the_vault_or_a_loopback_dev_page() {
+        let base = ["innkeeperd", "--public", "--ws-bind", "127.0.0.1:9"];
+        let bare = Config::try_load_from(base).unwrap_err().to_string();
+        assert!(bare.contains("requires --key-vault"), "{bare}");
+        let vault = Config::try_load_from(
+            base.iter()
+                .copied()
+                .chain(["--key-vault", "https://inn-server.vault.azure.net"]),
+        )
+        .unwrap();
+        assert_eq!(vault.enrolment(), EnrolmentMode::WebOnly);
+        let dev = Config::try_load_from(base.iter().copied().chain([
+            "--insecure-dev-keys",
+            "--page-origin",
+            "http://127.0.0.1:2901",
+        ]));
+        assert!(dev.is_ok());
+        let exposed = Config::try_load_from(base.iter().copied().chain([
+            "--insecure-dev-keys",
+            "--page-origin",
+            "https://play.example.org",
+        ]))
+        .unwrap_err()
+        .to_string();
+        assert!(exposed.contains("loopback --page-origin"), "{exposed}");
+        let both = Config::try_load_from(base.iter().copied().chain([
+            "--insecure-dev-keys",
+            "--key-vault",
+            "https://inn-server.vault.azure.net",
+        ]));
+        assert!(both.is_err());
+    }
+
+    #[test]
+    fn the_vault_url_is_checked_and_replaces_the_audit_key_file() {
+        let wrong = Config::try_load_from(["innkeeperd", "--key-vault", "https://evil.test"]);
+        assert!(wrong.unwrap_err().to_string().contains("vault.azure.net"));
+        let plain =
+            Config::try_load_from(["innkeeperd", "--key-vault", "http://x.vault.azure.net"]);
+        assert!(plain.is_err());
+        let doubled = Config::try_load_from([
+            "innkeeperd",
+            "--key-vault",
+            "https://x.vault.azure.net",
+            "--audit-public-key",
+            "a.pem",
+            "--audit-key-id",
+            "kid",
+        ]);
+        assert!(doubled
+            .unwrap_err()
+            .to_string()
+            .contains("audit-public-key"));
+    }
+
+    #[test]
+    fn enrolment_defaults_to_open_and_sign_in_needs_a_data_dir() {
+        assert_eq!(
+            Config::parse_from(["innkeeperd"]).enrolment(),
+            EnrolmentMode::Open
+        );
+        let closed = Config::parse_from(["innkeeperd", "--enrolment", "closed"]);
+        assert_eq!(closed.enrolment(), EnrolmentMode::Closed);
+        let web = Config::parse_from(["innkeeperd", "--enrolment", "web-only"]);
+        assert_eq!(web.enrolment(), EnrolmentMode::WebOnly);
+        let missing = Config::try_load_from(["innkeeperd", "--auth-config", "auth.toml"]);
+        assert!(missing.unwrap_err().to_string().contains("--data-dir"));
+        let bad = Config::try_load_from(["innkeeperd", "--page-origin", "https://x.test/page"]);
+        assert!(bad.is_err());
     }
 }

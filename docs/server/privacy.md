@@ -8,7 +8,8 @@ are the one addition that is written in every mode, and only when an audit recip
 
 The SQLite file is `DIR/innkeeper.db` (`--data-dir DIR`). A row that a player or the operator deletes
 stays in the file until the retention job in section 6 hard-purges it. Schema:
-`crates/innkeeperd/src/sqlite_store.rs` (`user_version` 1 adds `deleted_at` and the audit tables).
+`crates/innkeeperd/src/sqlite_store.rs` (`user_version` 1 adds `deleted_at` and the audit tables;
+2 adds the sign-in tables).
 
 | Table | Columns | Why | How long |
 |---|---|---|---|
@@ -23,9 +24,12 @@ stays in the file until the retention job in section 6 hard-purges it. Schema:
 | `saves` | `account`, `path`, `version`, `hash`, `data`, `updated_at`, `current`, `deleted_at` | Browser game files ([saves.md](saves.md)) | With the account. The channel still keeps three versions per path and drops older versions at once |
 | `audit_sessions` | `id`, `started_at`, `ended_at`, `account_id`, `identity_key`, `hold_until`, `sealed` | Lawful-request record of a connection (section 5) | From creation, for `--audit-retention-days` (default 90) |
 | `holds` | `account`, `hold_until` | A preservation request covering that account's content and sealed rows | Until `release`, or until the date passes |
+| `identities` | `identity_key` (HMAC-SHA256 of issuer, a zero byte and subject), `key_version`, `subject_sealed`, `provider` (the auth file's id), `adult_attested_at` (a date), `attested_age`, `terms_version`, `created_at`, `deleted_at` | Sign-in ([innkeeperd.md](innkeeperd.md) section 8): finds the identity again without keeping who it is | Stamped when its last account is deleted; hard-purged once it owns no account and has no session row |
+| `identity_accounts` | `account_id`, `identity_key`, `created_at` | Which accounts an identity owns, and the per-day account limit | With the account |
+| `sessions` | `token_hash` (SHA-256 of the token), `identity_key`, `account_id` (the account the line logged on to), `created_at`, `expiry` | A WebSocket is bound to the identity | Logout and account deletion set `expiry` to now; hard-purged 30 days after `expiry` (section 6) |
 
-`deleted_at` and the timestamps are unix seconds. `identity_key` is reserved for the future sign-in
-HMAC and is written NULL today.
+`deleted_at` and the timestamps are unix seconds. `audit_sessions.identity_key` is the signed-in
+identity's HMAC, NULL for a line without a session.
 
 A 40/4 persona rename is session-only and is not written to `accounts`. Board posts are attributed by
 matching the stored Login persona to the `author` prefix, case-insensitive; a renamed session can leave
@@ -34,9 +38,19 @@ a post the delete command will not find. An empty persona matches no posts.
 `Envelope`'s `Debug` prints the text length and not the text, so a letter or a Town Hall form never appears in a log line, in any mode. (The raw hex line of the verbose default mode still carries message bytes; `--public` drops them.)
 
 Readable IP addresses and message contents are not written to logs or to clear columns. The peer
-address of a connection is inside `audit_sessions.sealed` only (section 5). The planned sign-in table
-is described in [PLAN.md](../PLAN.md): routine lookups use an HMAC, and the raw issuer and subject
-are kept only as a sealed copy.
+address of a connection is inside `audit_sessions.sealed` only (section 5).
+
+**Sign-in stores no personal profile.** The provider is asked for `openid` only (a plain-OAuth
+provider for the minimum scope that returns its user id), and no email, name, username, avatar or
+access token is kept: the plain-OAuth profile answer is read for its id field and dropped. Routine
+lookups use `identity_key` only. The raw issuer and subject exist in the database only inside
+`subject_sealed`, sealed with the audit envelope of section 5 as
+`{"provider", "issuer", "subject"}`, so the operator can name the provider account
+behind one account under legal process. Without an audit recipient `subject_sealed` is NULL and
+startup warns. The player sees a handle such as `Caller 7F3A`, the first two bytes of the key. The
+session token itself is never stored or logged; the table keeps its SHA-256. The age and terms
+answer is a self-declaration and is stored as given. Pending logins (state, PKCE verifier, nonce)
+live in memory for up to ten minutes and are never written.
 
 ## 2. Public mode (`innkeeperd --public`)
 
@@ -50,16 +64,18 @@ Opt-in. The default log and capture format stay exactly as they are.
   within one run and are not reversible or stable across restarts.
 - **No free text.** Persona names in info/warn lines become the account number. PAD commands, dial
   strings and AT lines log the event kind only.
-- **Sealed records.** With `--public` and no `--audit-public-key`, startup logs one warning that no
-  sealed connection records are kept, and the server still starts. A file key is accepted until the
-  vault client in section 7 exists, and it is logged as a development key.
+- **Sealed records.** With `--key-vault` the audit key is read from the server vault (section 7),
+  so a public server always has one. With `--public --insecure-dev-keys` and no
+  `--audit-public-key`, startup logs one warning that no sealed connection records are kept, and
+  the server still starts. A file key is logged as a development key.
 
 `LogPolicy` in `innkeeper-world` and `PeerTokens` in `innkeeperd` are the formatters; call sites do
 not branch on `--public` by hand.
 
 The same flag is also the only way in. A public server binds no raw TCP listener and no INT 14h
 listener; `--ws-bind` is required and must be a loopback address, because a TLS proxy on this host
-terminates TLS. Connections are not authenticated until sign-in exists, and startup says so.
+terminates TLS. Every WebSocket must carry a live sign-in session, or the upgrade is a 401
+([innkeeperd.md](innkeeperd.md) section 8).
 [hardening.md](hardening.md) is that ingress rule and the in-process sandbox `--public` turns on.
 
 ## 3. Export, delete and restore
@@ -87,7 +103,11 @@ items are included and each carries `"deleted_at"` (null while the row is live):
   `from` is this mailbox), each with `deleted_at`;
 - posts whose `author` matches the stored persona, each with `deleted_at`;
 - `money` as a number, and `money_deleted_at` beside it;
-- save file list, sizes, hashes, versions and `deleted_at`; `--with-saves` adds `data_base64`.
+- save file list, sizes, hashes, versions and `deleted_at`; `--with-saves` adds `data_base64`;
+- `identity`, when the account was made through sign-in: the handle, `identity_key_hex`, provider id,
+  key version, the age and terms answer, `created_at`, `deleted_at`, every account the identity
+  owns, and its sessions (`account_id`, `created_at`, `expiry`, never the token hash). The subject
+  is named as sealed, not exported: `audit export` carries it for the escrow key (section 5).
 
 **Delete** without `--yes` prints the plan (live letters and posts only) and exits 1. With `--yes` the
 account is disabled at once: it cannot log on, and its number is not issued again. The same
@@ -95,10 +115,12 @@ account is disabled at once: it cannot log on, and its number is not issued agai
 attributed to its stored persona, its money and its saves. The command prints the UTC purge date
 (`deleted_at` plus `--retain-account-days`). A second delete prints that date and leaves the stamp
 as it was. Sealed connection records are kept, held or not, and age out on their own clock.
-Someone who abuses the service and then deletes the account does not erase that trail.
+Someone who abuses the service and then deletes the account does not erase that trail. When the
+account was the identity's last live one, the identity is stamped too and its sessions end at once.
 
 **Restore** clears `deleted_at` on the account and on owned rows that share the account's stamp, so a
-letter the player deleted earlier stays deleted. It succeeds only while `now` is still inside the
+letter the player deleted earlier stays deleted. An identity stamped by that delete is restored
+with it; its ended sessions stay ended. It succeeds only while `now` is still inside the
 account window. After that the command reports that the window has closed.
 
 **`--purge-now`** also requires `--yes`. It hard-deletes the account and everything it owns, and it
@@ -151,8 +173,9 @@ On open the row's `sealed` blob is the envelope of this JSON:
 
 `transport` is `tcp` for a legacy line and for INT 14h, and `websocket` for a WebSocket line. The row
 is written when the connection opens (`account_id` and `ended_at` null). It is sealed again when
-Login is accepted and when the connection ends. `identity_key` stays NULL until sign-in exists. A
-failure to seal is a warning without the IP, and the connection continues.
+Login is accepted and when the connection ends. A line that carried a session token gets the
+identity's HMAC in `identity_key`, in the clear like `account_id`, so a request about one identity
+finds its connections. A failure to seal is a warning without the IP, and the connection continues.
 
 **Who can read them.** Only the holder of the operator private key, and that key is not on the
 server (section 7). Decryption is only for specific accounts named in valid legal process, or for a
@@ -163,7 +186,15 @@ random 96-bit nonce. The data key is wrapped with RSA-OAEP-256 (SHA-256, MGF1-SH
 operator RSA public key (`rsa` 0.9). Both crates are MIT OR Apache-2.0. The in-process sandbox
 ([hardening.md](hardening.md)) adds, on Linux only, `landlock` 0.4 (MIT OR Apache-2.0),
 `seccompiler` 0.5 (Apache-2.0 OR BSD-3-Clause), `prctl` 1 (MIT) and `libc` 0.2 (MIT OR
-Apache-2.0). There is no separate third-party licence list in this repo; this paragraph is the
+Apache-2.0). Sign-in and the vault client ([innkeeperd.md](innkeeperd.md) section 8) add
+`hyper` 1, `hyper-util` 0.1, `http-body-util` 0.1 and `bytes` 1 (MIT), `openidconnect` 4 (MIT),
+`oauth2` 5, `reqwest` 0.12 with rustls and the hickory resolver, `url` 2, `serde` 1, `toml` 0.8,
+`zeroize` 1 and `sha1` 0.10 (each MIT OR Apache-2.0). Their dependencies bring `rustls` (Apache-2.0
+OR ISC OR MIT), `ring` (Apache-2.0 AND ISC), `rustls-webpki` and `untrusted` (ISC),
+`curve25519-dalek` and `ed25519-dalek` (BSD-3-Clause, through `openidconnect`), `moka` ((MIT OR
+Apache-2.0) AND Apache-2.0, through the resolver), `sync_wrapper` (Apache-2.0) and the ICU crates
+under `url`'s `idna` (Unicode-3.0, a permissive licence). The rest are MIT or Apache-2.0, or offer one
+of them. There is no separate third-party licence list in this repo; this paragraph is the
 record. The server only encrypts with
 `rsa`, so that crate's decryption-timing advisory does not apply to the running process. The offline
 `--private-key` path does decrypt and is for local development only.
@@ -175,8 +206,8 @@ can still be found. In production `kid` is the escrow vault's key version URL.
 **Flags.** `--audit-public-key FILE` is an SPKI PEM, checked when the server starts, and
 `--audit-key-id STRING` is required with it. `--audit-retention-days` defaults to 90. A key shorter
 than 2048 bits is refused; a key shorter than 3072 bits is a warning. The production key is 3072
-bits or larger. Loading the public key from the server vault is later work (section 7); a file is
-enough until then, and every file load logs `DEVELOPMENT KEY`. A key with no `--data-dir` logs a
+bits or larger. With `--key-vault` the public key and its identifier are read from the server
+vault instead (section 7), and the two flags are refused. A file load logs `DEVELOPMENT KEY`. A key with no `--data-dir` logs a
 warning and writes nothing.
 
 **Purge.** At startup, and then every hour, rows whose `started_at` is older than the retention are
@@ -201,6 +232,9 @@ innkeeperd audit seal --public-key PEM --key-id KID --record JSON
 ```
 
 Export writes JSON lines `{id, started_at, ended_at, account_id, kid, wrapped_key_b64, sealed_b64}`.
+When the account belongs to a sign-in identity with a sealed subject, one more line follows with
+`"record": "identity"`, a null `id`, the provider and the same envelope fields; `open` prints the
+provider, issuer and subject from it.
 `--since` is inclusive of that UTC date; `--until` stops at the following midnight. `open` prints the
 decrypted JSON, one line per row. `--private-key` is labelled development-only on stderr. Production
 unwraps each `wrapped_key` with the escrow vault under the operator's own Azure login, then passes
@@ -228,7 +262,8 @@ Every number is a field of `RetentionPolicy` (`innkeeper-world`) and a flag. Def
 | An account deleted on request | at the request; the account is disabled at once | 30 days | `--retain-account-days` | erasure without undue delay (GDPR one month), long enough to undo abuse of the deletion itself |
 | Complaints on the operator board | on arrival | 365 days | `--retain-complaint-days` | reports are evidence; one year matches the CyberTipline preservation period (REPORT Act 2024) |
 | Sealed connection records | on creation | 90 days | `--audit-retention-days` | section 5 |
-| Expired session tokens (future sign-in) | at expiry | 30 days | `--retain-session-days` | the `sessions` table is not created yet; the job purges it once the table has `expiry` and `account_id` |
+| Sign-in sessions | at expiry, logout, or deletion of the identity's last account | 30 days after `expiry` | `--retain-session-days` | a short trail for abuse on a line; held when the session's account, or any account of its identity, is held |
+| Sign-in identities | when they own no account (the last one hard-purged) and have no session row | at the next purge, an hour after creation at the earliest | none | the identity exists only to own accounts; the hour covers a sign-in that has not created one yet |
 | Anything under a legal hold | never while held | when the hold ends, if the clock above has already run out | `hold` / `release` | preservation requests. The clock is counted from the delete or from creation and is not restarted when the hold ends |
 
 Players see a deleted letter or post as gone: every read skips `deleted_at`. The only user-facing
@@ -254,7 +289,7 @@ account still cannot log on and its number is still not reused. The password is 
 the restore window, which is the same 30 days.
 
 The purge job runs at startup and hourly. It logs one line of counts (audit, letters, posts,
-complaints, accounts, mailboxes, money, saves, sessions) and no contents. A letter is kept when the
+complaints, accounts, mailboxes, money, saves, sessions, identities) and no contents. A letter is kept when the
 mailbox owner or the sending account is held. A post is kept when any account with that persona,
 including a soft-deleted one, is held.
 
@@ -263,14 +298,16 @@ its purge.
 
 ## 7. Key handling
 
-Two Azure Key Vaults. The vault clients are not built yet; this is the plan the server will follow,
-also written under Sign-in in [PLAN.md](../PLAN.md).
+Two Azure Key Vaults. The server half is built: `--key-vault` and the client are
+[innkeeperd.md](innkeeperd.md) section 8.3. The design is also under Sign-in in
+[PLAN.md](../PLAN.md).
 
 **Server vault.** innkeeperd's managed identity on Azure, or a service principal when self-hosted,
-has the Key Vault Secrets User role here and nothing else. It holds the identity HMAC key, the OIDC
-client secret for each provider, future server-side keys, and a copy of the audit public key as a
-secret together with its key identifier. Default secret names: `audit-public-key` (SPKI PEM) and
-`audit-key-id` (the escrow key version URL).
+has the Key Vault Secrets User role here and nothing else. It holds the identity HMAC key
+(`identity-hmac-key`), the client secret for each provider (the auth file's
+`client_secret_name`), future server-side keys, and a copy of the audit public key as a secret
+together with its key identifier: `audit-public-key` (SPKI PEM) and `audit-key-id` (the escrow key
+version URL).
 
 **Escrow vault.** The server's managed identity and its service principal have no role assignment
 on this vault. It holds the audit key as a non-exportable RSA key, RSA-HSM when the SKU allows,
@@ -295,27 +332,33 @@ writes the PEM and the key version URL into the server vault, and ends with a ro
 reads the two secrets, seals a probe with `innkeeperd audit seal`, unwraps with the escrow vault
 using the operator's `az` login, opens the row, and compares the plaintext to the probe. It needs
 `az` and `innkeeperd` (`INNKEEPERD` overrides the binary). Optional `--public-secret` and
-`--kid-secret` override the default secret names.
+`--kid-secret` override the default secret names. The deployment also writes `identity-hmac-key`
+(32 random bytes or more, base64) and the provider client secrets.
 
-**Authentication, when the client lands.** innkeeperd reaches the server vault with the VM's managed
-identity, or with a service principal from the environment when self-hosted. The intended crates are
-`azure_identity` and `azure_security_keyvault_secrets` (MIT); the Key Vault REST API is the
-alternative if those crates do not fit. Configuration will be `--key-vault https://name.vault.azure.net/`
-plus the secret names above. That flag is not accepted today. When the vault client lands, `--public`
-will refuse to start without `--key-vault`. Until then a PEM file (`--audit-public-key`) is accepted
-and logged as a development key.
+**Authentication.** innkeeperd reaches the server vault with the VM's managed identity through
+IMDS, or with a service principal from the environment when self-hosted (a client secret or a
+certificate). The client is the Key Vault REST API over `reqwest` and rustls, not the
+`azure_identity` and `azure_security_keyvault_secrets` crates: startup needs one token and a few
+secret reads, and the SDK would add its own HTTP stack and a much larger dependency tree for that.
+`--public` refuses to start without `--key-vault`, except with `--insecure-dev-keys` and loopback
+page origins only (innkeeperd.md section 8.1).
 
-**Local development uses no vault.** The identity HMAC key will come from `dev-identity.key` (mode
-0600) generated in `--data-dir` once sign-in exists; that file is not created yet. The audit keypair
-is `innkeeperd audit dev-keygen --out-dir DIR`. Either file path logs `DEVELOPMENT KEY`.
+**Local development uses no vault.** With `--insecure-dev-keys`, or without `--public`, the identity
+HMAC key is `dev-identity.key` (32 random bytes in base64, mode 0600), generated in `--data-dir` on first use.
+Its key version is the label `dev-identity.key`. Client secrets come from the auth file's
+`[dev_secrets]` or `INNKEEPERD_SECRET_<NAME>`. The audit keypair is `innkeeperd audit dev-keygen
+--out-dir DIR`. Each of these logs `DEVELOPMENT KEY`.
 
-**Runtime.** Secrets are fetched at startup and held in memory only, never logged and never written
-to disk. Rotation is a restart, or a periodic refresh of the latest secret versions.
+**Runtime.** Secrets are fetched once at startup, before the sandbox, and held in memory only,
+zeroized on drop where the type allows. They are never logged and never written to disk. There is
+no periodic refresh: rotation is a restart.
 
-**Rotation.** Each identity row records the HMAC key version that produced it. At sign-in the server
-tries the current version first, then older enabled versions, and on a match with an old version
-rewrites the row under the current version while the raw subject is in hand. Old versions are
-disabled after a window. A new audit RSA key version means new records carry the new `kid`; old
-versions stay enabled until the records that name them age out.
+**Rotation.** Each identity row records the HMAC key version that produced it. Startup reads every
+enabled version of `identity-hmac-key`, newest first. At sign-in the server tries the current
+version first, then the older ones, and on a match with an old version rewrites the row, its
+account links, its sessions and its sealed connection records under the current version while the
+raw subject is in hand. Old versions are disabled after a window; an identity that has not signed in
+by then is not found again and starts afresh. A new audit RSA key version means new records carry
+the new `kid`; old versions stay enabled until the records that name them age out.
 
 **Vault protection.** Soft delete and purge protection are on for both vaults.

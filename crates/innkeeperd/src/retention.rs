@@ -54,6 +54,7 @@ pub(crate) struct PurgeCounts {
     pub money: u64,
     pub saves: u64,
     pub sessions: u64,
+    pub identities: u64,
 }
 
 pub(crate) fn log_counts(counts: &PurgeCounts) {
@@ -67,6 +68,7 @@ pub(crate) fn log_counts(counts: &PurgeCounts) {
         money = counts.money,
         saves = counts.saves,
         sessions = counts.sessions,
+        identities = counts.identities,
         "retention purge"
     );
 }
@@ -129,8 +131,32 @@ pub(crate) fn disable_account(
         params![account, stamp],
     )
     .map_err(StoreError::backend)?;
+    disable_identity(&tx, account, stamp)?;
     tx.commit().map_err(StoreError::backend)?;
     Ok(Disable::Fresh(stamp))
+}
+
+/// The owning identity is stamped too once it has no live account left, and its sessions end.
+fn disable_identity(conn: &Connection, account: u32, stamp: i64) -> Result<(), StoreError> {
+    conn.execute(
+        "UPDATE identities SET deleted_at = ?2
+         WHERE deleted_at IS NULL
+         AND identity_key = (SELECT identity_key FROM identity_accounts WHERE account_id = ?1)
+         AND NOT EXISTS (
+             SELECT 1 FROM identity_accounts JOIN accounts ON accounts.id = identity_accounts.account_id
+             WHERE identity_accounts.identity_key = identities.identity_key
+             AND accounts.deleted_at IS NULL
+         )",
+        params![account, stamp],
+    )
+    .map_err(StoreError::backend)?;
+    conn.execute(
+        "UPDATE sessions SET expiry = min(expiry, ?1)
+         WHERE identity_key IN (SELECT identity_key FROM identities WHERE deleted_at = ?1)",
+        [stamp],
+    )
+    .map_err(StoreError::backend)?;
+    Ok(())
 }
 
 /// Clears `deleted_at` only on rows stamped by the account deletion itself.
@@ -186,6 +212,8 @@ pub(crate) fn restore_account(
         "UPDATE saves SET deleted_at = NULL WHERE account = ?1 AND deleted_at = ?2",
         "UPDATE mailboxes SET deleted_at = NULL WHERE account = ?1 AND deleted_at = ?2",
         "UPDATE accounts SET deleted_at = NULL WHERE id = ?1 AND deleted_at = ?2",
+        "UPDATE identities SET deleted_at = NULL WHERE deleted_at = ?2
+         AND identity_key = (SELECT identity_key FROM identity_accounts WHERE account_id = ?1)",
     ] {
         tx.execute(sql, params![account, stamp])
             .map_err(StoreError::backend)?;
@@ -322,6 +350,7 @@ pub(crate) fn purge_expired(
     let (posts, complaints) = purge_posts(&tx, now, policy)?;
     let (accounts, mailboxes, money, saves) = purge_accounts(&tx, now, policy)?;
     let sessions = purge_sessions(&tx, now, policy)?;
+    let identities = purge_identities(&tx, now)?;
     let counts = PurgeCounts {
         audit,
         letters,
@@ -332,6 +361,7 @@ pub(crate) fn purge_expired(
         money,
         saves,
         sessions,
+        identities,
     };
     tx.commit().map_err(StoreError::backend)?;
     Ok(counts)
@@ -556,15 +586,8 @@ fn purge_accounts(
     Ok((accounts, mailboxes, money, saves))
 }
 
+/// A hold on the session's account, or on any account its identity owns, keeps the row.
 fn purge_sessions(conn: &Connection, now: i64, policy: RetentionPolicy) -> Result<u64, StoreError> {
-    if !table_exists(conn, "sessions")? {
-        return Ok(0);
-    }
-    let names = column_names(conn, "sessions")?;
-    if !names.iter().any(|name| name == "expiry") || !names.iter().any(|name| name == "account_id")
-    {
-        return Ok(0);
-    }
     let cutoff = now.saturating_sub(RetentionPolicy::seconds(policy.session_days));
     let n = conn
         .execute(
@@ -572,7 +595,11 @@ fn purge_sessions(conn: &Connection, now: i64, policy: RetentionPolicy) -> Resul
              WHERE expiry < ?1
              AND NOT EXISTS (
                  SELECT 1 FROM holds
-                 WHERE holds.account = sessions.account_id AND holds.hold_until > ?2
+                 WHERE holds.hold_until > ?2
+                 AND (holds.account = sessions.account_id OR holds.account IN (
+                     SELECT account_id FROM identity_accounts
+                     WHERE identity_accounts.identity_key = sessions.identity_key
+                 ))
              )",
             params![cutoff, now],
         )
@@ -580,30 +607,24 @@ fn purge_sessions(conn: &Connection, now: i64, policy: RetentionPolicy) -> Resul
     Ok(changed(n))
 }
 
-fn table_exists(conn: &Connection, name: &str) -> Result<bool, StoreError> {
-    let found: Option<String> = conn
-        .query_row(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?1",
-            [name],
-            |row| row.get(0),
+/// An identity that owns no account and has no session row left is gone. An hour's grace
+/// covers a sign-in between creating the identity and its session.
+fn purge_identities(conn: &Connection, now: i64) -> Result<u64, StoreError> {
+    let n = conn
+        .execute(
+            "DELETE FROM identities
+             WHERE created_at < ?1
+             AND NOT EXISTS (
+                 SELECT 1 FROM identity_accounts
+                 WHERE identity_accounts.identity_key = identities.identity_key
+             )
+             AND NOT EXISTS (
+                 SELECT 1 FROM sessions WHERE sessions.identity_key = identities.identity_key
+             )",
+            [now.saturating_sub(3600)],
         )
-        .optional()
         .map_err(StoreError::backend)?;
-    Ok(found.is_some())
-}
-
-fn column_names(conn: &Connection, table: &str) -> Result<Vec<String>, StoreError> {
-    let sql = match table {
-        "sessions" => "PRAGMA table_info(sessions)",
-        _ => return Ok(Vec::new()),
-    };
-    let mut statement = conn.prepare(sql).map_err(StoreError::backend)?;
-    let names = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(StoreError::backend)?;
-    names
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::backend)
+    Ok(changed(n))
 }
 
 /// `None` when the account is gone, `Some(None)` when it is live.
@@ -973,24 +994,99 @@ mod tests {
         assert_eq!(count(&store, "SELECT COUNT(*) FROM audit_sessions"), 1);
     }
 
-    #[test]
-    fn expired_session_rows_are_purged_when_that_table_exists() {
-        let store = memory();
-        let now = 1_700_000_000;
-        store
-            .connection()
-            .execute_batch("CREATE TABLE sessions (expiry INTEGER, account_id INTEGER, token TEXT)")
+    fn add_identity(store: &SqliteStore, key: u8, account: Option<u32>, now: i64) {
+        let conn = store.connection();
+        conn.execute(
+            "INSERT INTO identities (identity_key, key_version, provider, created_at)
+             VALUES (?1, 'v', 'p', ?2)",
+            params![vec![key; 32], now - 7 * 86_400],
+        )
+        .unwrap();
+        if let Some(account) = account {
+            conn.execute(
+                "INSERT INTO identity_accounts (account_id, identity_key, created_at)
+                 VALUES (?1, ?2, ?3)",
+                params![account, vec![key; 32], now],
+            )
             .unwrap();
+        }
+    }
+
+    fn add_session(store: &SqliteStore, token: u8, key: u8, account: Option<u32>, expiry: i64) {
         store
             .connection()
             .execute(
-                "INSERT INTO sessions (expiry, account_id, token) VALUES (?1, 1, 'old'), (?1, 2, 'held'), (?2, 1, 'fresh')",
-                params![now - 40 * 86_400, now],
+                "INSERT INTO sessions (token_hash, identity_key, account_id, created_at, expiry)
+                 VALUES (?1, ?2, ?3, ?4, ?4)",
+                params![vec![token; 32], vec![key; 32], account, expiry],
             )
             .unwrap();
+    }
+
+    #[test]
+    fn expired_session_rows_are_purged_unless_a_hold_covers_the_identity() {
+        let store = memory();
+        let now = 1_700_000_000;
+        add_account(&store, 1, "one");
+        add_account(&store, 2, "two");
+        add_identity(&store, 1, Some(1), now);
+        add_identity(&store, 2, Some(2), now);
+        let old = now - 40 * 86_400;
+        add_session(&store, 1, 1, Some(1), old);
+        add_session(&store, 2, 2, Some(2), old);
+        add_session(&store, 3, 1, Some(1), now);
+        add_session(&store, 4, 2, None, old);
         place_hold(&store, 2, now + 86_400).unwrap();
         let counts = purge_expired(&store, policy(), now).unwrap();
         assert_eq!(counts.sessions, 1);
-        assert_eq!(count(&store, "SELECT COUNT(*) FROM sessions"), 2);
+        assert_eq!(count(&store, "SELECT COUNT(*) FROM sessions"), 3);
+    }
+
+    #[test]
+    fn an_identity_with_no_account_and_no_session_is_purged() {
+        let store = memory();
+        let now = 1_700_000_000;
+        add_account(&store, 1, "one");
+        add_identity(&store, 1, Some(1), now);
+        add_identity(&store, 2, None, now);
+        add_identity(&store, 3, None, now);
+        add_session(&store, 1, 3, None, now + 3600);
+        let counts = purge_expired(&store, policy(), now).unwrap();
+        assert_eq!(counts.identities, 1);
+        assert_eq!(count(&store, "SELECT COUNT(*) FROM identities"), 2);
+    }
+
+    #[test]
+    fn deleting_the_last_account_retires_the_identity_and_ends_its_sessions() {
+        let store = memory();
+        let now = dates::unix_now();
+        add_account(&store, 1, "one");
+        add_account(&store, 2, "two");
+        add_identity(&store, 1, Some(1), now);
+        store
+            .connection()
+            .execute(
+                "INSERT INTO identity_accounts (account_id, identity_key, created_at) VALUES (2, ?1, 0)",
+                [vec![1u8; 32]],
+            )
+            .unwrap();
+        add_session(&store, 1, 1, None, now + 86_400);
+        let owned = OwnedRows {
+            mailbox: None,
+            sent: Vec::new(),
+            posts: Vec::new(),
+        };
+        disable_account(&store, 1, &owned).unwrap();
+        let live = "SELECT COUNT(*) FROM identities WHERE deleted_at IS NULL";
+        assert_eq!(count(&store, live), 1, "one account is still live");
+        disable_account(&store, 2, &owned).unwrap();
+        assert_eq!(count(&store, live), 0);
+        let open = format!(
+            "SELECT COUNT(*) FROM sessions WHERE expiry > {}",
+            now + 3600
+        );
+        assert_eq!(count(&store, &open), 0);
+        restore_account(&store, 2, policy(), dates::unix_now()).unwrap();
+        assert_eq!(count(&store, live), 1);
     }
 }
