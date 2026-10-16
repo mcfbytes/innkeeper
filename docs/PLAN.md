@@ -197,6 +197,25 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
 ### Phase 7: Hosting and security (deferred; keep it simple first)
 - Host `innkeeperd` as a container (not a function app: sessions are long-lived TCP), with WebSocket-over-TLS
   ingress and managed certificates; raw TCP+TLS stays available for self-hosters.
+- **Azure deployment** (ledgered 2026-10-16). The web client (only the public hybrid build of INN-Decomp: the
+  lifted and native builds hold Sierra-derived code and are not published) on Azure Static Web Apps, e.g.
+  `play.<domain>`; `innkeeperd` on Azure Container Apps, consumption plan, e.g. `api.<domain>`:
+  - min replicas 0, max replicas 1. The world (objects, groups, locks, mirrors) lives in one process, so it
+    never scales out; at zero replicas nobody is connected and the empty world is lost harmlessly. The
+    cold start falls inside the client's dial.
+  - WebSocket ingress for browsers. Raw TCP 2314 for DOSBox needs an environment with its own VNet;
+    optional.
+  - Persistence, later if needed: the container's disk does not survive scaling to zero. Either Litestream
+    replicating the SQLite file to Blob Storage (restore at start), or a second `Store` backend on Azure
+    Table Storage checked by the existing conformance tests. SQLite on Azure Files (SMB) is avoided:
+    unreliable locking, no WAL.
+  - Evaluated and rejected (2026-10-16): a Function App on the consumption plan. INT 14h calls are local
+    and very frequent (Poll and Service run many times a second), so the cut would have to be at
+    application messages. The host pushes unsolicited messages (Azure Web PubSub, whose free tier is 20
+    connections), the object store would need shared transactional state, cold starts and a storage round
+    trip per message hurt Red Baron and chat, and raw TCP is impossible. That would be a rewrite of the
+    core for a slower and probably dearer server. Request/response services (mail, boards, saves, money)
+    could move to Functions later over a Table Storage store if ever useful.
 - DOSBox cannot speak TLS: a small local bridge accepts DOSBox's modem connection on localhost and forwards it
   over WSS. ScummVM connects over WSS directly.
 - The client sends its password as reversible obfuscation (`docs/protocol/messages.md` 4.1); the server stores
@@ -215,6 +234,27 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   provider identity maps to an account record (`accounts` gains linked identities); the page then hands
   the client its INN id and password (written into the drive's `LSCI.CFG` and password file) so the
   original logon runs unchanged. Local accounts keep working; the provider list is configuration.
+  Design (2026-10-16):
+  - `innkeeperd` is an OIDC relying party (the `openidconnect` crate, MIT/Apache) with its own HTTP
+    endpoints (`/auth/login`, `/auth/callback`, `/auth/logout`) next to the WebSocket. Providers with
+    plain OAuth 2.0 only (Discord) use their profile endpoint. An identity broker (Keycloak, Authentik,
+    Auth0) can stand in for the provider list as one issuer.
+  - A new `identities` table maps (issuer, subject) to an account; first sign-in creates the account,
+    and one identity may own several accounts (personas).
+  - The INN password is weak by design (6 to 10 of A-Z and 0-9, fixed XOR), so it is not the web
+    credential: the server generates a random one per account and the page writes it with the account
+    number into the browser's `LSCI.CFG` and `PASS_SET.DTA` before the client starts.
+  - **Connection session:** sign-in issues a session token (a `sessions` table: token hash, identity,
+    expiry). The page opens the WebSocket with it; `innkeeperd` binds that connection to the identity
+    and accepts a Login on it only for an account the identity owns. A stolen INN password then opens
+    nothing over the web.
+  - Enrolment modes (configuration): open (today: an unknown account is created at its first Login),
+    web-only (new accounts only through sign-in; TCP clients log on to existing accounts), closed.
+    Account creation is rate-limited per identity and per address.
+  - Development works on `http://localhost` redirect URIs, which Google, Microsoft and GitHub accept. A
+    public host needs HTTPS: a free host subdomain or a tunnel works, and a custom domain becomes useful
+    when Google's consent screen leaves testing mode (homepage, privacy policy, verified domain).
+  - The admin portal uses the same sign-in, with an operator role on the identity.
 
 ### Deferred
 - **Red Baron and 3-D Golf:** DOSBox only, through the same server, whenever we get to them. Their server needs are game-channel relay plus host time.
