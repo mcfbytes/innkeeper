@@ -29,6 +29,7 @@ pub(crate) enum Command {
     Account = 34,
     HostInfo = 36,
     Mail = 37,
+    Hint = 38,
     UserInfo = 40,
     ObjExists = 41,
     ChangePassword = 44,
@@ -45,7 +46,7 @@ pub(crate) enum Command {
     LoginWithProdigyId = 59,
 }
 
-pub(crate) const COMMANDS: [Command; 39] = [
+pub(crate) const COMMANDS: [Command; 40] = [
     Command::Ack,
     Command::Nak,
     Command::Send,
@@ -71,6 +72,7 @@ pub(crate) const COMMANDS: [Command; 39] = [
     Command::Account,
     Command::HostInfo,
     Command::Mail,
+    Command::Hint,
     Command::UserInfo,
     Command::ObjExists,
     Command::ChangePassword,

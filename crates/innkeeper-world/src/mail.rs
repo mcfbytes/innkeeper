@@ -7,7 +7,7 @@ use tracing::warn;
 
 use crate::assumptions::{
     NO_ACCOUNT_MAILBOX_STATUS_ASSUMED, OTHER_BOXES_ARE_PRIVATE_ASSUMED,
-    STORE_FAULT_MAILBOX_STATUS_ASSUMED,
+    SHORT_MAIL_FORM_IS_REFUSED_ASSUMED, STORE_FAULT_MAILBOX_STATUS_ASSUMED,
 };
 use crate::message::{StoredLetter, FIELD_LEN};
 use crate::town_hall;
@@ -104,6 +104,7 @@ impl PostOffice<'_> {
             MailRequest::List { sid, mailbox } => self.list(*sid, *mailbox),
             MailRequest::Send { sub, letter } => self.deliver(*sub, letter),
             MailRequest::Form(_) | MailRequest::SystemList { .. } => Ok(None),
+            MailRequest::Page { .. } => self.page(),
             MailRequest::Read(wanted) => self.read(wanted.sid, wanted.mailbox, wanted.letter),
             MailRequest::Delete(wanted) => self.delete(wanted.mailbox, wanted.letter),
             MailRequest::Forward {
@@ -119,6 +120,15 @@ impl PostOffice<'_> {
             })),
         };
         outcome.unwrap_or_else(|fault| request.refused(fault))
+    }
+
+    /// The sysop pages (the short 37/20 and 37/21) are refused: nobody here has sysop rights over a
+    /// box (`SHORT_MAIL_FORM_IS_REFUSED_ASSUMED`).
+    fn page(&self) -> Outcome {
+        match SHORT_MAIL_FORM_IS_REFUSED_ASSUMED {
+            true => Err(MailFault::NotYourBox),
+            false => Ok(None),
+        }
     }
 
     fn boxes(&self, sid: Sid, account: AccountId) -> Outcome {

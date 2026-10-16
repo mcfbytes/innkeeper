@@ -6,6 +6,7 @@ mod bbs;
 mod client;
 mod command;
 mod group;
+mod hint;
 mod host;
 mod invoke_method;
 mod lock;
@@ -29,13 +30,16 @@ mod wire;
 
 pub use account::{AccountReply, AccountRequest, SummaryKind};
 pub use ack::Ack;
-pub use bbs::{BbsReply, BbsRequest, BoardListing, BoardRef, MessagePosition, ReadStep};
+pub use bbs::{
+    BbsReply, BbsRequest, BoardListing, BoardRef, ComplaintText, MessagePosition, ReadStep,
+};
 pub use client::{
     ChangePassword, ClientMessage, EncodedPassword, GroupJoin, HostInfoRequest, JoinNet, Login,
     PasswordSource,
 };
 pub(crate) use command::Command;
 pub use group::{GroupLeave, GroupMembers, GroupMembersRequest};
+pub use hint::{HintKind, HintReply, HintRequest, HINT_NO_MORE, HINT_UNAVAILABLE};
 pub use host::{
     HostMessage, LandDirectory, LandEntry, LoginAck, LoginNakReason, LoginStatus, Nak, Occupancy,
 };

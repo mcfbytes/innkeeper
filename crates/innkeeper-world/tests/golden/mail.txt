@@ -35,3 +35,6 @@
 < nak no such box 37/24 | 01 00 00 01 25 18 06 09 00 00 00
 < nak no such letter 37/26 | 01 00 00 01 25 1a 0e 02 00 00 00
 < nak post office closed 37/18 | 01 00 00 01 25 12 15 01 00 00 00
+> short sysop page 37/20 (sid, box, two words, 0x7530, 0) | 25 14 02 01 05 00 00 00 07 00 08 00 30 75 00 00
+> short sysop page 37/21 (sid, box, two words) | 25 15 02 01 05 00 00 00 07 00 08 00
+< Nak 37/21, no rights (fault 12) | 01 00 02 01 25 15 0c 05 00 00 00

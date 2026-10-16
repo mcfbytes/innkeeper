@@ -59,6 +59,11 @@ impl<'a> WireReader<'a> {
         self.rest.is_empty()
     }
 
+    /// How many bytes are not read yet.
+    pub(crate) fn remaining(&self) -> usize {
+        self.rest.len()
+    }
+
     pub(crate) fn finish(self) -> Result<(), MessageError> {
         match self.rest.len() {
             0 => Ok(()),

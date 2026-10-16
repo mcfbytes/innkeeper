@@ -36,7 +36,8 @@ Every command 37 request is `b 37, b sub, w sid`; the host answers to `sid`.
 Sub 17 is the Mail Room asking which boxes the signed-on account owns (`script.140` export 4 with the
 account number); the answer opens the box directly when there is one. Sub 20 and 21 also exist as short
 `bbw+` forms (`script.145` exports 7 and 8, six words, used by the sysop screens); they are not envelopes,
-fail to parse (`Truncated`) and get no answer.
+are parsed (`MailRequest::Page`) and refused with Nak fault 12; nothing is stored and no stock screen sends them
+([hub-services.md](hub-services.md) section 7).
 
 `45/1` is `b 45, b 1, w sid`.
 
@@ -140,7 +141,7 @@ mailbox number is stable) and the golden rows, which replay the layouts the clie
 
 ## 8. Not done
 
-- A sysop's view of other accounts' boxes (`sysopIDToBoxMI`), mailing lists and the short sub-20 and
-  sub-21 forms.
+- A sysop's view of other accounts' boxes (`sysopIDToBoxMI`), mailing lists. (The short sub-20 and sub-21
+  forms are refused with fault 12.)
 - Services (31) is an empty list; the service forms (30) are acknowledged ([services.md](services.md)).
 - Push delivery: a client learns of a letter at its next 18, not when it arrives.

@@ -4,9 +4,9 @@ use crate::message::client::{read_stamp, write_stamp};
 use crate::message::command::LOGIN_REPLY_COMMAND;
 use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
-    AccountReply, Ack, BbsReply, Command, GroupLeave, GroupMembers, InvokeMethod, LockRefused,
-    MailReply, MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice, ObjNewListReply,
-    ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr, UserFindReply,
+    AccountReply, Ack, BbsReply, Command, GroupLeave, GroupMembers, HintReply, InvokeMethod,
+    LockRefused, MailReply, MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice,
+    ObjNewListReply, ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr, UserFindReply,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -63,6 +63,8 @@ pub enum HostMessage {
     UserFind(UserFindReply),
     /// The Town Hall billing texts (34).
     Account(AccountReply),
+    /// The Hint Board room's menus and hints (38).
+    Hint(HintReply),
 }
 
 /// `AckMsg` for a Login; the client keeps all three fields for the session.
@@ -183,6 +185,7 @@ impl HostMessage {
             HostMessage::ObjNewList(_) => "ObjNewList",
             HostMessage::UserFind(_) => "UserFind",
             HostMessage::Account(_) => "Account",
+            HostMessage::Hint(_) => "Hint",
         }
     }
 
@@ -258,6 +261,7 @@ impl HostMessage {
             HostMessage::ObjNewList(reply) => reply.write(&mut writer),
             HostMessage::UserFind(reply) => reply.write(&mut writer),
             HostMessage::Account(reply) => reply.write(&mut writer),
+            HostMessage::Hint(reply) => reply.write(&mut writer),
         }
         writer.into_bytes()
     }
@@ -354,6 +358,7 @@ impl HostMessage {
             Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
             Command::UserFind => HostMessage::UserFind(UserFindReply::parse(&mut reader)?),
             Command::Account => HostMessage::Account(AccountReply::parse(&mut reader)?),
+            Command::Hint => HostMessage::Hint(HintReply::parse(&mut reader)?),
             Command::Lock
             | Command::ServiceProperties
             | Command::Unlock

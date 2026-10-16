@@ -7,6 +7,7 @@ mod assumptions;
 mod bbs;
 mod conference;
 mod error;
+mod hint_board;
 mod host_time;
 mod ids;
 mod land;
@@ -53,9 +54,10 @@ pub use message::{
     SetPersona, SetStr, Signup, SummaryKind, SystemService, UserFind, UserFindReply,
 };
 pub use message::{
-    InvokeMethod, LockId, LockRefused, LockRequest, MemberProperties, MemberRow, Property,
-    PropertyColumn, PropertyKind, PropertyRequest, PropertyValue, PropertyValues,
-    ServicePropertyRequest, Unexplained, UnexplainedCommand,
+    ComplaintText, HintKind, HintReply, HintRequest, InvokeMethod, LockId, LockRefused,
+    LockRequest, MemberProperties, MemberRow, Property, PropertyColumn, PropertyKind,
+    PropertyRequest, PropertyValue, PropertyValues, ServicePropertyRequest, Unexplained,
+    UnexplainedCommand,
 };
 pub use objects::{
     ConnectionId, Delivery, GamePhase, GameSession, GameType, GroupKey, Invitation, ObjectStore,

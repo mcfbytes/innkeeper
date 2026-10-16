@@ -3,10 +3,10 @@ use tracing::{info, warn};
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::objects::OnlinePlayer;
 use crate::{
-    bbs, conference, logon, mail, mall, money, object_list, presence, red_baron, router, rpg,
-    signup, town_hall, user_find, Account, AccountId, AccountRequest, ClientMessage, ConnectionId,
-    Delivery, HostInfoRequest, HostMessage, JoinNet, LogPolicy, Login, ObjectStore, Place,
-    Unexplained, UnexplainedCommand, World,
+    bbs, conference, hint_board, logon, mail, mall, money, object_list, presence, red_baron,
+    router, rpg, signup, town_hall, user_find, Account, AccountId, AccountRequest, ClientMessage,
+    ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, LogPolicy, Login, ObjectStore,
+    Place, Unexplained, UnexplainedCommand, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -191,6 +191,9 @@ impl PlayerSession {
                 self.when_logged_in(|_| reply(user_find::answer(world, objects, request)))
             }
             ClientMessage::Account(request) => reply(self.account_request(&request)),
+            ClientMessage::Hint(request) => {
+                self.when_logged_in(|_| reply(hint_board::answer(&request)))
+            }
         };
         self.publish(objects, connection);
         deliveries
