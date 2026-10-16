@@ -158,7 +158,7 @@ impl Store for SqliteStore {
             None => Ok(None),
             Some(id) => u32::try_from(id)
                 .map(|id| Some(AccountId(id)))
-                .map_err(|error| StoreError::backend(error)),
+                .map_err(StoreError::backend),
         }
     }
 
