@@ -480,6 +480,10 @@ What the server decided where the `docs/web.md` contract is open or silent:
   without `--public`: the paths exist only with `--auth-config`, so one rule is simpler than two. It
   comes after the enrolment check, so a closed host still says `enrolment_closed`. The session
   JSON's `attested` field is unchanged, and a Login on an existing account is not gated.
+- `GET /auth/accounts/<id>/saves` (and `?path=P` for one file) hands a signed-in page the account's
+  current save files before it dials, so a fresh browser does not overwrite them; 401 without a
+  live token, 404 `no_such_account` when the identity does not own the account. The shape is in
+  [saves.md](saves.md) section 6. Only counts and sizes are logged.
 - `POST /auth/logout` is 204 with or without a valid token; only a store failure is a 500.
 - A preflight from an origin that is not a `--page-origin` gets 204 without
   `Access-Control-Allow-Origin`, so the browser blocks it. `Access-Control-Max-Age` is 600.

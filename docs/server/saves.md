@@ -106,7 +106,28 @@ character files after that. The window is not closed by construction: a game sta
 trip would read the old file. Verified end to end in headless Chromium: a fresh browser profile with an
 install lacking the character files received them after the logon (`INN-Decomp/docs/web.md`).
 
-## 6. Store and upgrade
+## 6. Fetching before the dial (HTTP)
+
+The logon manifest arrives after the client has already read its persona, so a browser that has never
+held the account would dial with a made-up persona and overwrite the host's. A signed-in page therefore
+fetches the account's files over HTTP before it dials, on the sign-in listener, authorised by the session
+token like the other `/auth/*` calls (`signin/routes.rs`):
+
+| Request | Answer |
+|---|---|
+| `GET /auth/accounts/<id>/saves` with `Authorization: Bearer <token>` | `200 {"account":N,"files":[entry...]}`: the same entries as the channel manifest (`path`, `version`, `hash`, `size`, `mtime`, `current`), each with `"data"` (base64) while the running total of inline bytes stays within 2 MiB. A file that would pass the cap comes without `data`. |
+| `GET /auth/accounts/<id>/saves?path=P` | `200` one entry with `data`, always. `P` is URL-encoded and goes through the same canonical path rules; `400 bad_path` for a path that cannot be stored, `404 no_such_file` for one the account lacks. |
+
+`401 unauthorized` without a live token; `404 no_such_account` when the identity does not own the account
+(the same answer as for a credential). The files are exactly the current versions the save channel would
+list: same store, same allowlist, same per-account filter, so `PASS_SET.DTA` and the like never appear.
+CORS is the same as the other `/auth/*` routes. The log gets counts and byte sizes only (`saves
+prefetched`), never paths or contents. A Login is not required, which is the point; the token is the
+proof that the identity owns the account. Tests: `signin/tests.rs` (cap, ownership, errors) and
+`tests/signin.rs` (a put over the WebSocket read back over HTTP, under the sandbox where the kernel
+allows it).
+
+## 7. Store and upgrade
 
 `Store` gains `saves`, `save_versions`, `save_read` and `save_write` ([store.md](store.md)). SQLite:
 
@@ -122,7 +143,7 @@ The table is created on open, so an existing database upgrades in place on the n
 row kept (`a_database_from_before_the_saves_table_gains_it`). `updated_at` is the content's modification
 time as the uploader said, not the time of the upload.
 
-## 7. Tests
+## 8. Tests
 
 `save_channel.rs` (sans-IO, memory store): refusal before logon and after hang-up, upload and download, id
 echo, account isolation, the allowlist, size and quota, both conflict outcomes, three versions kept, time

@@ -13,6 +13,7 @@ use common::*;
 
 use std::sync::Arc;
 
+use futures_util::SinkExt;
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
 
@@ -106,6 +107,35 @@ async fn a_web_sign_in_opens_its_own_account_and_nothing_else() {
     // 8. The same token cannot open another identity's account, even with its password.
     let refused = line.login(their_id, &their_password).await;
     assert_eq!(refused[0], NAK, "{refused:?}");
+
+    // 8b. A save put on the logged-on line is what the page fetches over HTTP before it dials.
+    let chars = "INN\\YSERBIUS\\MYCHARS.DAT";
+    let put =
+        json!({"op": "put", "path": chars, "base": 0, "mtime": 5, "id": "p1", "data": "aGVybw=="});
+    line.socket
+        .send(tokio_tungstenite::tungstenite::Message::text(
+            put.to_string(),
+        ))
+        .await
+        .unwrap();
+    loop {
+        if let tokio_tungstenite::tungstenite::Message::Text(text) = line.next().await {
+            let reply: Value = serde_json::from_str(text.as_str()).unwrap();
+            if reply["id"] == "p1" {
+                assert_eq!(reply["op"], "stored", "{reply}");
+                break;
+            }
+        }
+    }
+    let saves = format!("/auth/accounts/{id}/saves");
+    let (status, listed) = call(&base, reqwest::Method::GET, &saves, &token, None).await;
+    assert_eq!(status, 200, "{listed}");
+    assert_eq!(listed["files"][0]["path"], chars);
+    assert_eq!(listed["files"][0]["data"], "aGVybw==");
+    let (status, _) = call(&base, reqwest::Method::GET, &saves, &bob, None).await;
+    assert_eq!(status, 404, "another identity's account has no saves route");
+    let (status, _) = call(&base, reqwest::Method::GET, &saves, "bad-token", None).await;
+    assert_eq!(status, 401);
 
     // 9. Public mode refuses a socket without a token before the upgrade.
     assert_eq!(Line::open(port, None).await.err(), Some(401));

@@ -4,12 +4,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use hyper::body::Incoming;
 use hyper::header::{
     HeaderValue, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
     ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_MAX_AGE, AUTHORIZATION, ORIGIN, VARY,
 };
 use hyper::{Method, Request, StatusCode};
+use innkeeper_world::saves::{canonical_path, SaveMeta};
 use innkeeper_world::{AccountId, AccountRecord, Store};
 use serde_json::{json, Value};
 use tracing::{info, warn};
@@ -23,6 +26,8 @@ use crate::http::{self, Reply};
 
 const DAY: i64 = 86_400;
 const MAX_PERSONA: usize = 10;
+/// The most file bytes the saves listing carries inline; later files are fetched one by one.
+const PREFETCH_INLINE_BYTES: usize = 2 * 1024 * 1024;
 
 impl SignIn {
     /// Answers one request under `/auth/`.
@@ -43,6 +48,12 @@ impl SignIn {
         let identity = self.bearer(&request);
         let reply = match (method, path.as_str()) {
             (Method::OPTIONS, _) => http::empty(StatusCode::NO_CONTENT),
+            (Method::GET, other) if saves_target(other).is_some() => {
+                match (identity, saves_target(other)) {
+                    (Some(key), Some(account)) => self.saves(&key, account, &query),
+                    _ => unauthorized(),
+                }
+            }
             (Method::GET, "/auth/providers") => self.providers(),
             (Method::GET, "/auth/session") => self.session(identity),
             (Method::POST, "/auth/logout") => self.logout(&request),
@@ -408,6 +419,82 @@ impl SignIn {
         }
     }
 
+    /// The files the save channel would hand `account` at logon, for a page that has not dialled
+    /// yet (docs/server/saves.md section 8). Without `path` the answer lists every current file
+    /// and carries the bytes of as many as fit under `PREFETCH_INLINE_BYTES`; with `path` it is
+    /// that one file, always with its bytes. Only counts and sizes are logged.
+    fn saves(
+        &self,
+        key: &IdentityKey,
+        account: AccountId,
+        query: &HashMap<String, String>,
+    ) -> Reply {
+        match store::owns(&self.store, key, account) {
+            Ok(true) => {}
+            Ok(false) => {
+                return http::error(
+                    StatusCode::NOT_FOUND,
+                    "no_such_account",
+                    "That account does not belong to this sign-in.",
+                )
+            }
+            Err(error) => return server_error(&error),
+        }
+        if let Some(raw) = query.get("path") {
+            return self.one_save(account, raw);
+        }
+        let metas = match self.store.saves(account) {
+            Ok(metas) => metas,
+            Err(error) => return server_error(&error),
+        };
+        let mut inline = 0usize;
+        let mut files = Vec::with_capacity(metas.len());
+        for meta in &metas {
+            let mut entry = save_entry(meta);
+            if inline + meta.size <= PREFETCH_INLINE_BYTES {
+                match self.store.save_read(account, &meta.path, None) {
+                    Ok(Some((_, data))) => {
+                        inline += data.len();
+                        entry.insert("data".to_owned(), json!(BASE64.encode(data)));
+                    }
+                    Ok(None) => {}
+                    Err(error) => return server_error(&error),
+                }
+            }
+            files.push(Value::Object(entry));
+        }
+        info!(
+            account = account.0,
+            files = files.len(),
+            inline_bytes = inline,
+            "saves prefetched"
+        );
+        http::json_reply(
+            StatusCode::OK,
+            &json!({"account": account.0, "files": files}),
+        )
+    }
+
+    fn one_save(&self, account: AccountId, raw: &str) -> Reply {
+        let Ok(path) = canonical_path(raw) else {
+            return http::error(StatusCode::BAD_REQUEST, "bad_path", "Not a save file path.");
+        };
+        match self.store.save_read(account, &path, None) {
+            Ok(Some((meta, data))) => {
+                info!(
+                    account = account.0,
+                    size = data.len(),
+                    "one save prefetched"
+                );
+                let mut entry = save_entry(&meta);
+                entry.insert("data".to_owned(), json!(BASE64.encode(data)));
+                http::json_reply(StatusCode::OK, &Value::Object(entry))
+            }
+            Ok(None) => http::error(StatusCode::NOT_FOUND, "no_such_file", "No such save file."),
+            Err(error) => server_error(&error),
+        }
+    }
+
     fn logout(&self, request: &Request<Incoming>) -> Reply {
         let token = request
             .headers()
@@ -442,10 +529,36 @@ pub(crate) fn persona_ok(persona: &str) -> bool {
         && persona.bytes().all(|b| b.is_ascii_alphanumeric())
 }
 
+/// `/auth/accounts/<id>/saves`.
+fn saves_target(path: &str) -> Option<AccountId> {
+    let number = path
+        .strip_prefix("/auth/accounts/")?
+        .strip_suffix("/saves")?;
+    account_number(number)
+}
+
+fn save_entry(meta: &SaveMeta) -> serde_json::Map<String, Value> {
+    let Value::Object(map) = json!({
+        "path": meta.path,
+        "version": meta.version,
+        "hash": meta.hash,
+        "size": meta.size,
+        "mtime": meta.modified,
+        "current": meta.current,
+    }) else {
+        return serde_json::Map::new();
+    };
+    map
+}
+
 fn credential_target(path: &str) -> Option<AccountId> {
     let number = path
         .strip_prefix("/auth/accounts/")?
         .strip_suffix("/credential")?;
+    account_number(number)
+}
+
+fn account_number(number: &str) -> Option<AccountId> {
     if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
@@ -517,6 +630,17 @@ mod tests {
         for bad in ["", "Abcdefghijk", "two words", "a-b", "é"] {
             assert!(!persona_ok(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn the_saves_path_names_one_account() {
+        assert_eq!(
+            saves_target("/auth/accounts/100002/saves"),
+            Some(AccountId(100_002))
+        );
+        assert_eq!(saves_target("/auth/accounts/0/saves"), None);
+        assert_eq!(saves_target("/auth/accounts/x/saves"), None);
+        assert_eq!(saves_target("/auth/accounts/1/saves/INN"), None);
     }
 
     #[test]

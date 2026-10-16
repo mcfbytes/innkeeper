@@ -542,3 +542,98 @@ fn a_signup_creates_nothing_unless_enrolment_is_open() {
     settings.signup_open = true;
     assert_eq!(signup(&settings).len(), 1);
 }
+
+#[tokio::test]
+async fn the_saves_route_hands_an_owner_the_files_the_channel_would() {
+    use innkeeper_world::Store;
+    let fx = fixture(EnrolmentMode::WebOnly, 3, false).await;
+    let (token, _) = fx.token("alice");
+    let (other, _) = fx.token("bob");
+    let post = Some(json!({"persona": "Elaine"}));
+    let (status, _) = fx
+        .call(reqwest::Method::POST, "/auth/accounts", &token, post)
+        .await;
+    assert_eq!(status, 201);
+    let id = AccountId(100_001);
+    let chars = "INN\\YSERBIUS\\MYCHARS.DAT";
+    let big = vec![9u8; 1024 * 1024];
+    fx.store.save_write(id, chars, b"hero", 77, true).unwrap();
+    fx.store
+        .save_write(id, "INN\\ELAINE.DTA", &[1, 2, 3], 78, true)
+        .unwrap();
+    // Three 1 MiB files go past the 2 MiB inline cap: the last one comes without bytes.
+    for path in ["INN\\TWINION\\TWINCHAR.DAT", "INN\\TWINION\\AUTOMAPS.DAT"] {
+        fx.store.save_write(id, path, &big, 79, true).unwrap();
+    }
+    fx.store
+        .save_write(AccountId(100_009), chars, b"not yours", 1, true)
+        .unwrap();
+
+    let path = "/auth/accounts/100001/saves";
+    let get = reqwest::Method::GET;
+    let (status, body) = fx.call(get.clone(), path, "nope", None).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (401, Some("unauthorized"))
+    );
+    let (status, body) = fx.call(get.clone(), path, &other, None).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (404, Some("no_such_account"))
+    );
+    let (status, body) = fx
+        .call(get.clone(), "/auth/accounts/100009/saves", &token, None)
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (404, Some("no_such_account"))
+    );
+
+    let (status, list) = fx.call(get.clone(), path, &token, None).await;
+    assert_eq!(status, 200, "{list}");
+    assert_eq!(list["account"], 100_001);
+    let files = list["files"].as_array().unwrap();
+    assert_eq!(files.len(), 4);
+    let find = |name: &str| files.iter().find(|f| f["path"] == name).unwrap();
+    let entry = find(chars);
+    assert_eq!(entry["data"], BASE64.encode(b"hero"));
+    assert_eq!(
+        (
+            entry["version"].as_u64(),
+            entry["size"].as_u64(),
+            entry["mtime"].as_u64()
+        ),
+        (Some(1), Some(4), Some(77))
+    );
+    assert_eq!(entry["hash"], innkeeper_world::saves::hash_hex(b"hero"));
+    assert_eq!(find("INN\\ELAINE.DTA")["data"], BASE64.encode([1, 2, 3]));
+    let inline = files.iter().filter(|f| f.get("data").is_some()).count();
+    assert_eq!(
+        inline, 3,
+        "the cap leaves the last big file for its own request"
+    );
+    let bare = files.iter().find(|f| f.get("data").is_none()).unwrap();
+    let one = format!(
+        "{path}?path={}",
+        bare["path"].as_str().unwrap().replace('\\', "%5C")
+    );
+    let (status, single) = fx.call(get.clone(), &one, &token, None).await;
+    assert_eq!(status, 200);
+    assert_eq!(single["data"], BASE64.encode(&big));
+    let (status, body) = fx
+        .call(
+            get.clone(),
+            &format!("{path}?path=INN%5CNOPE.EXE"),
+            &token,
+            None,
+        )
+        .await;
+    assert_eq!((status, body["error"].as_str()), (400, Some("bad_path")));
+    let (status, body) = fx
+        .call(get, &format!("{path}?path=INN%5CGONE.DTA"), &token, None)
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (404, Some("no_such_file"))
+    );
+}
