@@ -6,6 +6,7 @@ mod config;
 mod connection;
 mod host;
 mod int14h_listener;
+mod peer;
 mod save_channel;
 mod server;
 mod sqlite_store;
@@ -14,14 +15,13 @@ mod websocket;
 
 use std::process::ExitCode;
 
-use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
-    match server::serve(config::Config::parse()).await {
+    match server::serve(config::Config::load()).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "innkeeperd stopped");

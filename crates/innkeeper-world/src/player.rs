@@ -1,17 +1,19 @@
-use tracing::{info, info_span, warn};
+use tracing::{info, warn};
 
 use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::objects::OnlinePlayer;
 use crate::{
     bbs, conference, logon, mail, mall, money, object_list, presence, red_baron, router, rpg,
     signup, user_find, Account, AccountId, ClientMessage, ConnectionId, Delivery, HostInfoRequest,
-    HostMessage, JoinNet, Login, ObjectStore, Place, Unexplained, UnexplainedCommand, World,
+    HostMessage, JoinNet, LogPolicy, Login, ObjectStore, Place, Unexplained, UnexplainedCommand,
+    World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
 #[derive(Debug)]
 pub struct PlayerSession {
     state: PlayerState,
+    log: LogPolicy,
 }
 
 #[derive(Debug)]
@@ -49,8 +51,13 @@ impl Default for PlayerSession {
 
 impl PlayerSession {
     pub fn new() -> Self {
+        Self::with_log(LogPolicy::Verbose)
+    }
+
+    pub fn with_log(log: LogPolicy) -> Self {
         PlayerSession {
             state: PlayerState::AwaitingLogin,
+            log,
         }
     }
 
@@ -141,12 +148,12 @@ impl PlayerSession {
             ClientMessage::ServiceProperties(ref request) => self.when_logged_in(|_| {
                 let answers = red_baron::service_properties(request);
                 if answers.is_empty() {
-                    info!(?message, "no reply awaited: absorbed");
+                    info!(message = %self.log.debug(message), "no reply awaited: absorbed");
                 }
                 reply(answers)
             }),
             ClientMessage::PlayStatus(status) => {
-                info!(?status, "play status noted");
+                info!(status = %self.log.debug(&status), "play status noted");
                 Vec::new()
             }
             ClientMessage::Mall(ref request) => {
@@ -166,7 +173,7 @@ impl PlayerSession {
                 Vec::new()
             }),
             ClientMessage::Unexplained(_) => {
-                info!(?message, "purpose unknown, no reply expected: absorbed");
+                info!(message = %self.log.debug(message), "purpose unknown, no reply expected: absorbed");
                 Vec::new()
             }
             ClientMessage::ObjExists(ref lookup) => self.when_logged_in(|_| {
@@ -174,7 +181,7 @@ impl PlayerSession {
                     .or_else(|| red_baron::locate_service(lookup))
                     .or_else(|| conference::locate(objects, lookup));
                 if located.is_none() {
-                    info!(?message, "decoded, no handler yet: ignored");
+                    info!(message = %self.log.debug(message), "decoded, no handler yet: ignored");
                 }
                 reply(located.into_iter().collect())
             }),
@@ -213,7 +220,11 @@ impl PlayerSession {
     fn set_persona(&mut self, name: &str) {
         match &mut self.state {
             PlayerState::LoggedIn(player) => {
-                info!(from = %player.account.persona, to = name, "persona renamed");
+                info!(
+                    from = %self.log.persona(player.account.id.0, &player.account.persona),
+                    to = %self.log.persona(player.account.id.0, name),
+                    "persona renamed"
+                );
                 name.clone_into(&mut player.account.persona);
             }
             PlayerState::AwaitingLogin => warn!("message before Login ignored"),
@@ -240,7 +251,10 @@ impl PlayerSession {
     fn when_logged_in(&self, answer: impl FnOnce(&Player) -> Vec<Delivery>) -> Vec<Delivery> {
         match &self.state {
             PlayerState::LoggedIn(player) => {
-                let _player = info_span!("player", persona = %player.account.persona).entered();
+                let _player = self
+                    .log
+                    .player_span(player.account.id.0, &player.account.persona)
+                    .entered();
                 answer(player)
             }
             PlayerState::AwaitingLogin => {
@@ -253,7 +267,11 @@ impl PlayerSession {
     fn log_in(&mut self, world: &World, login: &Login) -> HostMessage {
         match logon::admit(world, login) {
             Ok(account) => {
-                info!(account = account.id.0, persona = %account.persona, "logged in");
+                info!(
+                    account = account.id.0,
+                    persona = %self.log.persona(account.id.0, &account.persona),
+                    "logged in"
+                );
                 let mut ack = account.login_ack();
                 if ack.rating == 0 && UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED {
                     ack.rating = world.lands.rights();
@@ -287,7 +305,7 @@ fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage>
             )]
         }
         HostInfoRequest::HostAddressFile { .. } => {
-            info!(?request, "no reply: the client keeps what it has");
+            info!(request = %world.log.debug(&request), "no reply: the client keeps what it has");
             Vec::new()
         }
     }

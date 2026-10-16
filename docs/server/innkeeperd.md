@@ -55,6 +55,7 @@ events come out, and timers are a `next_deadline()` that the caller sleeps on. `
 
 ```
 cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures] [--no-capture]
+                           [--public]
                            [--data-dir DIR]
                            [--line auto|hayes|pad] [--connect-rate 2400]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
@@ -73,6 +74,10 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
   directions, split anywhere; text messages are the save channel's JSON control messages once the line has
   logged on ([saves.md](saves.md)); a binary message over 64 KiB (a text message over 2 MiB) or a handshake that
   takes over 10 s closes the connection. Closing the WebSocket is a TCP hang-up. Any `Origin` is accepted.
+- `--public` is for a host that should process as little personal data as possible: it refuses
+  `--capture-dir`, writes no capture files, logs message kinds without fields, and replaces peer
+  addresses with a per-process HMAC token. Persona names in other info lines become the account
+  number. Development tools that parse verbose logs keep working: the default format is unchanged.
 - `RUST_LOG=debug` adds one line per received frame; the default level `info` shows line and PAD events
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an

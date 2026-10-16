@@ -70,7 +70,7 @@ impl ObjectStore {
         request: &PropertyRequest,
     ) -> Vec<Delivery> {
         if !self.is_live(request.target) {
-            warn!(?request, "getProp for a SID nobody holds");
+            warn!(request = %self.log.debug(request), "getProp for a SID nobody holds");
             return Vec::new();
         }
         let properties = request.offsets.iter().filter_map(|&offset| {
@@ -93,7 +93,7 @@ impl ObjectStore {
         let Some(Role::Group { members, .. }) = self.objects.get(&request.target).map(|o| &o.role)
         else {
             warn!(
-                ?request,
+                request = %self.log.debug(request),
                 "member properties of something that is not a group"
             );
             return Vec::new();

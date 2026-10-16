@@ -52,7 +52,7 @@ pub(crate) fn answer(
     request: &BbsRequest,
 ) -> Vec<HostMessage> {
     let Some(place) = place else {
-        warn!(?request, "bulletin board request outside any land: offline");
+        warn!(request = %world.log.debug(request), "bulletin board request outside any land: offline");
         return offline(request);
     };
     let boards = Boards {
@@ -63,7 +63,7 @@ pub(crate) fn answer(
     match boards.handle(request) {
         Ok(reply) => reply.into_iter().map(HostMessage::Bbs).collect(),
         Err(error) => {
-            warn!(%error, ?request, "bulletin board store failed: offline");
+            warn!(%error, request = %world.log.debug(request), "bulletin board store failed: offline");
             offline(request)
         }
     }

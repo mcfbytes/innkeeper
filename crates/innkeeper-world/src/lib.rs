@@ -10,6 +10,7 @@ mod error;
 mod host_time;
 mod ids;
 mod land;
+mod log_policy;
 mod logon;
 mod mail;
 mod mall;
@@ -36,6 +37,7 @@ pub use ids::{
     Stamp,
 };
 pub use land::LandCatalog;
+pub use log_policy::LogPolicy;
 pub use message::{
     Ack, BbsReply, BbsRequest, BoardListing, BoardRef, ChangePassword, ClientMessage,
     EncodedPassword, Envelope, FoundUser, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest,

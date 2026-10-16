@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
 
-use innkeeper_world::ConnectionId;
+use innkeeper_world::{ConnectionId, LogPolicy};
 use int14h::{
     encode_envelope, Body, Envelope, EnvelopeParser, Int14hError, LineRate, PeerName, Welcome,
     PROTOCOL_VERSION,
@@ -46,14 +46,15 @@ enum TransportError {
 /// Runs one transport client to its end, logging instead of failing.
 pub(crate) async fn serve_transport(
     stream: TcpStream,
-    peer: SocketAddr,
+    addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
     let id = settings.new_connection();
+    let peer = settings.peer_log(addr);
     let span = info_span!("transport", id = id.0, %peer);
     async move {
         info!("client connected");
-        match drive(stream, peer, id, &settings).await {
+        match drive(stream, addr, id, &settings).await {
             Ok(()) => info!("client closed the transport"),
             Err(error) => warn!(%error, "transport closed"),
         }
@@ -74,6 +75,7 @@ async fn drive(
         stream,
         parser: EnvelopeParser::new(),
         capture,
+        log: settings.world.log,
     };
     wire.greet().await?;
     let mut executive = Executive::new(Host::new(settings, id), line_rate(settings));
@@ -98,10 +100,18 @@ async fn serve_calls(wire: &mut Wire, executive: &mut Executive<'_>) -> Result<(
                 let Body::Call(call) = body else {
                     return Err(TransportError::NotCall);
                 };
-                debug!(?call, "call");
+                if wire.log.is_public() {
+                    debug!("call");
+                } else {
+                    debug!(?call, "call");
+                }
                 let handled = executive.handle(call);
                 wire.report(handled.exchange);
-                debug!(reply = ?handled.reply, "reply");
+                if wire.log.is_public() {
+                    debug!("reply");
+                } else {
+                    debug!(reply = ?handled.reply, "reply");
+                }
                 wire.send(&Envelope { tag, body: Body::Reply(handled.reply) }).await?;
             }
             Some(notice) = executive.next_notice() => wire.report(executive.pass_on(notice)),
@@ -115,6 +125,7 @@ struct Wire {
     stream: TcpStream,
     parser: EnvelopeParser,
     capture: Option<FileCapture>,
+    log: LogPolicy,
 }
 
 impl Wire {
@@ -126,7 +137,11 @@ impl Wire {
         if hello.version != PROTOCOL_VERSION {
             return Err(TransportError::Version(hello.version));
         }
-        info!(client = hello.client.as_str(), "transport opened");
+        if self.log.is_public() {
+            info!("transport opened");
+        } else {
+            info!(client = hello.client.as_str(), "transport opened");
+        }
         let welcome = Welcome {
             version: PROTOCOL_VERSION,
             server: PeerName::try_new(SERVER_NAME)?,
@@ -165,7 +180,7 @@ impl Wire {
     }
 
     fn report(&mut self, steps: Vec<Exchange>) {
-        report(&mut self.capture, Instant::now(), steps);
+        report(&mut self.capture, Instant::now(), steps, self.log);
     }
 }
 

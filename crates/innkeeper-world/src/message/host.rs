@@ -149,6 +149,40 @@ const OCCUPANCY_TYPE: u8 = 1;
 const DIRECTORY_TYPE: u8 = 2;
 
 impl HostMessage {
+    /// The variant name, for public-mode logs that must not print fields.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            HostMessage::LoginAccepted(_) => "LoginAccepted",
+            HostMessage::Ack(_) => "Ack",
+            HostMessage::Nak(_) => "Nak",
+            HostMessage::Send(_) => "Send",
+            HostMessage::ObjId { .. } => "ObjId",
+            HostMessage::GroupJoined { .. } => "GroupJoined",
+            HostMessage::GroupLeft(_) => "GroupLeft",
+            HostMessage::GroupMembers(_) => "GroupMembers",
+            HostMessage::ObjectFreed(_) => "ObjectFreed",
+            HostMessage::SetInt(_) => "SetInt",
+            HostMessage::SetStr(_) => "SetStr",
+            HostMessage::Money(_) => "Money",
+            HostMessage::ObjectLocated(_) => "ObjectLocated",
+            HostMessage::Notice(_) => "Notice",
+            HostMessage::HostNumber(_) => "HostNumber",
+            HostMessage::HostTime(_) => "HostTime",
+            HostMessage::LandDirectory(_) => "LandDirectory",
+            HostMessage::LandOccupancy(_) => "LandOccupancy",
+            HostMessage::Mail(_) => "Mail",
+            HostMessage::Mailbox(_) => "Mailbox",
+            HostMessage::LockRefused(_) => "LockRefused",
+            HostMessage::InvokeMethod(_) => "InvokeMethod",
+            HostMessage::Properties(_) => "Properties",
+            HostMessage::MemberProperties(_) => "MemberProperties",
+            HostMessage::Bbs(_) => "Bbs",
+            HostMessage::Mall(_) => "Mall",
+            HostMessage::ObjNewList(_) => "ObjNewList",
+            HostMessage::UserFind(_) => "UserFind",
+        }
+    }
+
     pub fn encode(&self) -> Vec<u8> {
         let mut writer = WireWriter::default();
         match self {

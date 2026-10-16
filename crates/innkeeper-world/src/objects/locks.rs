@@ -53,12 +53,12 @@ impl ObjectStore {
     ) -> Vec<Delivery> {
         let reply = match self.locks.take(connection, &request.locks) {
             Ok(()) => {
-                info!(?request, "locks taken");
+                info!(request = %self.log.debug(request), "locks taken");
                 self.note_locks_granted(connection, request.from, &request.locks);
                 HostMessage::Ack(request.acknowledged(Command::Lock))
             }
             Err(taken) => {
-                warn!(?request, taken = taken.0, "lock held by another connection");
+                warn!(request = %self.log.debug(request), taken = taken.0, "lock held by another connection");
                 HostMessage::LockRefused(request.refused(taken))
             }
         };
@@ -73,7 +73,7 @@ impl ObjectStore {
     ) -> Vec<Delivery> {
         self.locks.release(connection, &request.locks);
         self.note_locks_released(connection, &request.locks);
-        info!(?request, "locks released");
+        info!(request = %self.log.debug(request), "locks released");
         match UNLOCK_IS_ACKNOWLEDGED_ASSUMED {
             true => {
                 let ack = request.acknowledged(Command::Unlock);

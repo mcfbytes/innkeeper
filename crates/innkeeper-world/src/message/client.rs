@@ -271,6 +271,45 @@ impl ClientMessage {
         }
         writer.into_bytes()
     }
+
+    /// The variant name, for public-mode logs that must not print fields.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            ClientMessage::Login(_) => "Login",
+            ClientMessage::Send(_) => "Send",
+            ClientMessage::JoinNet(_) => "JoinNet",
+            ClientMessage::LeaveNet(_) => "LeaveNet",
+            ClientMessage::GroupJoin(_) => "GroupJoin",
+            ClientMessage::GroupLeave(_) => "GroupLeave",
+            ClientMessage::GroupMembers(_) => "GroupMembers",
+            ClientMessage::SetInt(_) => "SetInt",
+            ClientMessage::SetStr(_) => "SetStr",
+            ClientMessage::Multicast(_) => "Multicast",
+            ClientMessage::HostInfo(_) => "HostInfo",
+            ClientMessage::ObjExists(_) => "ObjExists",
+            ClientMessage::ChangePassword(_) => "ChangePassword",
+            ClientMessage::SetPersona(_) => "SetPersona",
+            ClientMessage::ReadMoney(_) => "ReadMoney",
+            ClientMessage::SaveMoney(_) => "SaveMoney",
+            ClientMessage::LandOccupancyRequest => "LandOccupancyRequest",
+            ClientMessage::Mail(_) => "Mail",
+            ClientMessage::NewMailbox(_) => "NewMailbox",
+            ClientMessage::Lock(_) => "Lock",
+            ClientMessage::Unlock(_) => "Unlock",
+            ClientMessage::InvokeMethod(_) => "InvokeMethod",
+            ClientMessage::GetProperties(_) => "GetProperties",
+            ClientMessage::GetMemberProperties(_) => "GetMemberProperties",
+            ClientMessage::Bbs(_) => "Bbs",
+            ClientMessage::ServiceProperties(_) => "ServiceProperties",
+            ClientMessage::PlayStatus(_) => "PlayStatus",
+            ClientMessage::Mall(_) => "Mall",
+            ClientMessage::Signup(_) => "Signup",
+            ClientMessage::ObjNewList(_) => "ObjNewList",
+            ClientMessage::ObjFreeList(_) => "ObjFreeList",
+            ClientMessage::UserFind(_) => "UserFind",
+            ClientMessage::Unexplained(_) => "Unexplained",
+        }
+    }
 }
 
 fn expect_sub(reader: &mut WireReader, command: Command, sub: u8) -> Result<(), MessageError> {

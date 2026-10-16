@@ -17,7 +17,7 @@ use crate::rpg::RPG_OBJECT_LAND_TYPE;
 use crate::Cookie;
 use crate::{
     AccountId, GroupJoin, GroupLeave, GroupMembers, GroupMembersRequest, HostMessage, JoinNet,
-    LandType, Nak, ObjectKind, Sid,
+    LandType, LogPolicy, Nak, ObjectKind, Sid,
 };
 use games::GameBook;
 pub use games::{GamePhase, GameSession, GameType, Invitation};
@@ -85,6 +85,7 @@ pub struct ObjectStore {
     mirror: PropertyMirror,
     /// Logged-in players. Dropped when the connection hangs up; the phone book reads it.
     online: BTreeMap<ConnectionId, OnlinePlayer>,
+    log: LogPolicy,
 }
 
 #[derive(Debug)]
@@ -144,7 +145,15 @@ impl ObjectStore {
             games: GameBook::default(),
             mirror: PropertyMirror::default(),
             online: BTreeMap::new(),
+            log: LogPolicy::Verbose,
         }
+    }
+
+    /// Same empty store, logging under `log`.
+    pub fn with_log(log: LogPolicy) -> Self {
+        let mut store = Self::new();
+        store.log = log;
+        store
     }
 
     /// The members of the shared group with this key; 0 while nobody holds it.
@@ -262,7 +271,7 @@ impl ObjectStore {
                     sid,
                 },
             )),
-            None => warn!(?join, "every SID is taken"),
+            None => warn!(join = %self.log.debug(&join), "every SID is taken"),
         }
         deliveries
     }
@@ -310,10 +319,10 @@ impl ObjectStore {
         join: GroupJoin,
     ) -> Vec<Delivery> {
         if let Err(refusal) = self.admit(connection, join) {
-            warn!(?join, ?refusal, "group join refused");
+            warn!(join = %self.log.debug(&join), refusal = %self.log.debug(&refusal), "group join refused");
             return vec![Delivery::new(connection, refusal.nak(join.group))];
         }
-        info!(?join, "group member added");
+        info!(join = %self.log.debug(&join), "group member added");
         let mut audience = if GROUP_JOIN_TELLS_MEMBERS_ASSUMED {
             self.connections_of(self.members_of(join.group))
         } else {
@@ -335,7 +344,7 @@ impl ObjectStore {
         join: GroupJoin,
     ) -> Vec<Delivery> {
         let refusal = GroupJoinRefusal::WrongVersion;
-        warn!(?join, ?refusal, "group join refused");
+        warn!(join = %self.log.debug(&join), refusal = %self.log.debug(&refusal), "group join refused");
         vec![Delivery::new(connection, refusal.nak(join.group))]
     }
 
@@ -346,7 +355,7 @@ impl ObjectStore {
         leave: GroupLeave,
     ) -> Vec<Delivery> {
         if !self.members_of(leave.group).contains(&leave.member) {
-            warn!(?leave, "GrpDel for a member that is not in the group");
+            warn!(leave = %self.log.debug(&leave), "GrpDel for a member that is not in the group");
             return Vec::new();
         }
         self.remove_member(connection, leave.group, leave.member)
@@ -367,7 +376,7 @@ impl ObjectStore {
                 }),
             )],
             Some(Role::Object) | None => {
-                warn!(?request, "member list of something that is not a group");
+                warn!(request = %self.log.debug(&request), "member list of something that is not a group");
                 Vec::new()
             }
         }
@@ -438,7 +447,7 @@ impl ObjectStore {
 
     fn create(&mut self, connection: ConnectionId, request: JoinNet, role: Role) -> Option<Sid> {
         let sid = self.allocate_sid()?;
-        info!(sid = sid.0, ?request, "object joined");
+        info!(sid = sid.0, request = %self.log.debug(&request), "object joined");
         let holders = BTreeMap::from([(connection, 1)]);
         let object = NetObject {
             request,
@@ -464,7 +473,7 @@ impl ObjectStore {
             let references = group.holders.entry(connection).or_default();
             *references = references.saturating_add(1);
         }
-        info!(sid = sid.0, ?key, "shared group joined");
+        info!(sid = sid.0, key = %self.log.debug(&key), "shared group joined");
         Some(sid)
     }
 
@@ -533,7 +542,7 @@ impl ObjectStore {
         self.mirror.forget(sid);
         self.conferences.retain(|_, bound| *bound != sid);
         if let Some(object) = self.objects.remove(&sid) {
-            info!(sid = sid.0, request = ?object.request, "object freed");
+            info!(sid = sid.0, request = %self.log.debug(&object.request), "object freed");
             if let Some(key) = object.shared {
                 self.shared_groups.remove(&key);
             }

@@ -7,14 +7,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
-use innkeeper_world::{ConnectionId, HostMessage, ObjectStore, World};
+use innkeeper_world::{ConnectionId, HostMessage, LogPolicy, ObjectStore, World};
+use pad_thai::{LineEvent, ModemEvent, PadEvent};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
 use tsn_link::{LinkEvent, Message};
 
 use crate::capture::{Capture, Direction};
-use crate::host::{Exchange, Host, LogonSignal, ReplyError};
+use crate::host::{Exchange, Host, LoggedExchange, LogonSignal, ReplyError};
+use crate::peer::{PeerLog, PeerTokens};
 use crate::switchboard::Switchboard;
 
 pub(crate) const READ_CHUNK: usize = 4096;
@@ -30,18 +32,28 @@ pub(crate) struct ConnectionSettings {
     pub(crate) objects: Mutex<ObjectStore>,
     pub(crate) switchboard: Switchboard,
     pub(crate) capture_dir: Option<PathBuf>,
+    pub(crate) peers: PeerTokens,
     next_connection: AtomicU64,
 }
 
 impl ConnectionSettings {
     pub(crate) fn new(session: SessionConfig, world: World, capture_dir: Option<PathBuf>) -> Self {
+        let objects = ObjectStore::with_log(world.log);
         ConnectionSettings {
             session,
-            world,
-            objects: Mutex::new(ObjectStore::new()),
+            objects: Mutex::new(objects),
             switchboard: Switchboard::default(),
             capture_dir,
+            peers: PeerTokens::new(),
             next_connection: AtomicU64::new(1),
+            world,
+        }
+    }
+
+    pub(crate) fn peer_log(&self, addr: SocketAddr) -> PeerLog {
+        match self.world.log {
+            LogPolicy::Verbose => PeerLog::Addr(addr),
+            LogPolicy::Public => PeerLog::Token(self.peers.token(addr.ip())),
         }
     }
 
@@ -54,30 +66,32 @@ impl ConnectionSettings {
 /// Runs one client connection to its end, logging instead of failing.
 pub(crate) async fn serve_connection(
     stream: TcpStream,
-    peer: SocketAddr,
+    addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
+    let peer = settings.peer_log(addr);
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
-    serve_line(stream, peer, settings, None).await;
+    serve_line(stream, addr, settings, None).await;
 }
 
 /// Runs a legacy line session over any byte stream: a TCP socket or a WebSocket's bytes.
 /// With a `logon` signal, it reports the account the Login opened, and `None` after the hang-up.
 pub(crate) async fn serve_line<S>(
     stream: S,
-    peer: SocketAddr,
+    addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
     logon: Option<LogonSignal>,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let id = settings.new_connection();
+    let peer = settings.peer_log(addr);
     let span = info_span!("session", id = id.0, %peer);
     async move {
         info!("client connected");
-        match drive(stream, peer, id, &settings, logon).await {
+        match drive(stream, addr, id, &settings, logon).await {
             Ok(()) => info!("client hung up"),
             Err(error) => warn!(%error, "connection failed"),
         }
@@ -135,7 +149,12 @@ where
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
             Some(notice) = host.next_notice() => {
                 let now = Instant::now();
-                report(capture, now, send_all(&mut session, vec![notice], now));
+                report(
+                    capture,
+                    now,
+                    send_all(&mut session, vec![notice], now),
+                    host.log_policy(),
+                );
             }
         }
         deliver_outputs(&mut session, host, stream, capture).await?;
@@ -161,13 +180,18 @@ where
                 stream.write_all(&bytes).await?;
             }
             SessionOutput::Event(event) => {
-                log_event(&event);
+                log_event(&event, host.log_policy());
                 record(capture, |c| c.record_event(now, &event));
                 match &event {
                     SessionEvent::Message(message) => {
                         let answer = host.answer(message.body());
-                        report(capture, now, answer.exchange);
-                        report(capture, now, send_all(session, answer.outgoing, now));
+                        report(capture, now, answer.exchange, host.log_policy());
+                        report(
+                            capture,
+                            now,
+                            send_all(session, answer.outgoing, now),
+                            host.log_policy(),
+                        );
                     }
                     SessionEvent::LinkLost(_) => host.hang_up(),
                     SessionEvent::Line(_) | SessionEvent::Link(_) => {}
@@ -198,21 +222,31 @@ fn send(session: &mut Session, reply: &HostMessage, now: Instant) -> Result<(), 
     Ok(())
 }
 
-pub(crate) fn report(capture: &mut Option<FileCapture>, now: Instant, steps: Vec<Exchange>) {
+pub(crate) fn report(
+    capture: &mut Option<FileCapture>,
+    now: Instant,
+    steps: Vec<Exchange>,
+    policy: LogPolicy,
+) {
     for step in steps {
-        log_exchange(&step);
+        log_exchange(&step, policy);
         record(capture, |c| c.record_event(now, &step));
     }
 }
 
-fn log_exchange(step: &Exchange) {
+fn log_exchange(step: &Exchange, policy: LogPolicy) {
+    let logged = LoggedExchange { step, policy };
     match step {
-        Exchange::Received(_) | Exchange::Replied(_) => info!(%step),
-        Exchange::Undecodable(_) | Exchange::NotSent(_) => warn!(%step),
+        Exchange::Received(_) | Exchange::Replied(_) => info!(step = %logged),
+        Exchange::Undecodable(_) | Exchange::NotSent(_) => warn!(step = %logged),
     }
 }
 
-fn log_event(event: &SessionEvent) {
+fn log_event(event: &SessionEvent, policy: LogPolicy) {
+    if policy.is_public() {
+        log_event_public(event);
+        return;
+    }
     match event {
         SessionEvent::Message(message) => info!(%message, "client message"),
         SessionEvent::Link(LinkEvent::FrameReceived { .. }) => debug!(%event),
@@ -224,6 +258,53 @@ fn log_event(event: &SessionEvent) {
             | LinkEvent::GaveUp { .. },
         ) => warn!(%event),
         SessionEvent::Link(_) | SessionEvent::Line(_) | SessionEvent::LinkLost(_) => info!(%event),
+    }
+}
+
+fn log_event_public(event: &SessionEvent) {
+    match event {
+        SessionEvent::Message(message) => {
+            info!(message = %format!("len={}", message.body().len()), "client message");
+        }
+        SessionEvent::Link(LinkEvent::FrameReceived { .. }) => debug!(event = %public_event(event)),
+        SessionEvent::Link(
+            LinkEvent::BadCrc { .. }
+            | LinkEvent::Aborted { .. }
+            | LinkEvent::Oversized { .. }
+            | LinkEvent::UnknownControl { .. }
+            | LinkEvent::GaveUp { .. },
+        ) => warn!(event = %public_event(event)),
+        SessionEvent::Link(_) | SessionEvent::Line(_) | SessionEvent::LinkLost(_) => {
+            info!(event = %public_event(event));
+        }
+    }
+}
+
+fn public_event(event: &SessionEvent) -> String {
+    match event {
+        SessionEvent::Message(message) => format!("message len={}", message.body().len()),
+        SessionEvent::Link(link) => format!("link: {link}"),
+        SessionEvent::LinkLost(loss) => format!("link lost: {loss}"),
+        SessionEvent::Line(LineEvent::Detected(kind)) => format!("detected {kind:?}"),
+        SessionEvent::Line(LineEvent::Modem(ModemEvent::Command(_))) => "AT command".to_owned(),
+        SessionEvent::Line(LineEvent::Modem(ModemEvent::Dialled { .. })) => "dialled".to_owned(),
+        SessionEvent::Line(LineEvent::Modem(event)) => event.to_string(),
+        SessionEvent::Line(LineEvent::Pad(PadEvent::Command(_))) => "PAD command".to_owned(),
+        SessionEvent::Line(LineEvent::Pad(PadEvent::UnknownCommand(_))) => {
+            "unknown PAD command".to_owned()
+        }
+        SessionEvent::Line(LineEvent::Pad(PadEvent::InvalidAddress(_))) => {
+            "invalid call address".to_owned()
+        }
+        SessionEvent::Line(LineEvent::Pad(PadEvent::HostConnected(_))) => {
+            "call connected".to_owned()
+        }
+        SessionEvent::Line(LineEvent::Pad(PadEvent::HostDisconnected(_))) => {
+            "call cleared".to_owned()
+        }
+        SessionEvent::Line(LineEvent::Pad(PadEvent::Escaped)) => {
+            "escaped to the PAD prompt".to_owned()
+        }
     }
 }
 

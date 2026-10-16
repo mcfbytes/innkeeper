@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use innkeeper_world::{StoreError, World};
+use innkeeper_world::{LogPolicy, StoreError, World};
 use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{info, warn};
@@ -45,7 +45,12 @@ fn open_world(data_dir: Option<&Path>) -> Result<World, ServerError> {
 }
 
 pub(crate) async fn serve(config: Config) -> Result<(), ServerError> {
-    let world = open_world(config.data_dir.as_deref())?;
+    let mut world = open_world(config.data_dir.as_deref())?;
+    world.log = if config.public {
+        LogPolicy::Public
+    } else {
+        LogPolicy::Verbose
+    };
     let legacy = listen(config.bind).await?;
     let transport = listen_if(config.int14h_bind()).await?;
     let websocket = listen_if(config.ws_bind).await?;

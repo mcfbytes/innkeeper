@@ -1,7 +1,10 @@
+use std::ffi::OsString;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use clap::{Parser, ValueEnum};
+use clap::error::ErrorKind;
+use clap::parser::ValueSource;
+use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use innkeeper_session::SessionConfig;
 use pad_thai::{HayesConfig, LineKind};
 
@@ -31,6 +34,9 @@ pub(crate) struct Config {
     /// Write no capture files.
     #[arg(long)]
     pub(crate) no_capture: bool,
+    /// Public host: no captures, no message fields, no peer addresses.
+    #[arg(long)]
+    pub(crate) public: bool,
     /// Directory holding the account database; without it every account number is admitted.
     #[arg(long)]
     pub(crate) data_dir: Option<PathBuf>,
@@ -50,6 +56,31 @@ pub(crate) enum LineArg {
 }
 
 impl Config {
+    /// Parse argv and refuse `--public` together with an explicit `--capture-dir`.
+    pub(crate) fn load() -> Self {
+        Self::try_load_from(std::env::args_os()).unwrap_or_else(|error| error.exit())
+    }
+
+    pub(crate) fn try_load_from<I, T>(args: I) -> Result<Self, clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<OsString> + Clone,
+    {
+        let matches = Self::command().try_get_matches_from(args)?;
+        let config = Self::from_arg_matches(&matches)?;
+        config.validated(&matches)
+    }
+
+    fn validated(self, matches: &ArgMatches) -> Result<Self, clap::Error> {
+        let capture_given = matches.value_source("capture_dir") == Some(ValueSource::CommandLine);
+        if self.public && capture_given {
+            let text =
+                "--public cannot be used with --capture-dir: public mode writes no capture files\n";
+            return Err(clap::Error::raw(ErrorKind::ArgumentConflict, text));
+        }
+        Ok(self)
+    }
+
     pub(crate) fn session_config(&self) -> SessionConfig {
         let line = match self.line {
             LineArg::Auto => LineKind::Auto,
@@ -68,7 +99,7 @@ impl Config {
     }
 
     pub(crate) fn capture_dir(&self) -> Option<PathBuf> {
-        (!self.no_capture).then(|| self.capture_dir.clone())
+        (!self.no_capture && !self.public).then(|| self.capture_dir.clone())
     }
 
     pub(crate) fn int14h_bind(&self) -> Option<SocketAddr> {
@@ -128,5 +159,21 @@ mod tests {
         assert_eq!(config.capture_dir(), None);
         assert_eq!(config.session_config().line, LineKind::Pad);
         assert_eq!(config.session_config().hayes.connect_rate, 9600);
+    }
+
+    #[test]
+    fn public_mode_turns_capture_off() {
+        let config = Config::try_load_from(["innkeeperd", "--public"]).unwrap();
+        assert!(config.public);
+        assert_eq!(config.capture_dir(), None);
+    }
+
+    #[test]
+    fn public_mode_rejects_an_explicit_capture_dir() {
+        let error = Config::try_load_from(["innkeeperd", "--public", "--capture-dir", "x"]);
+        let text = error.unwrap_err().to_string();
+        assert!(text.contains("--public"));
+        assert!(text.contains("--capture-dir"));
+        assert!(text.contains("no capture"));
     }
 }

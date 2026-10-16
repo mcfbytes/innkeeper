@@ -67,7 +67,11 @@ impl<'s> Executive<'s> {
                 Reply::SetSharedData
             }
             Call::Connect(dial) => {
-                debug!(dial = dial.as_str(), "connect");
+                if self.host.log_policy().is_public() {
+                    debug!("connect");
+                } else {
+                    debug!(dial = dial.as_str(), "connect");
+                }
                 if !self.is_connected() {
                     self.line = Line::Connected(VecDeque::new());
                 }
@@ -85,7 +89,11 @@ impl<'s> Executive<'s> {
             Call::Service => Reply::Service(self.link_status()),
             Call::IsTransmitIdle => Reply::IsTransmitIdle { idle: true },
             Call::SwitchHost(address) => {
-                debug!(address = address.as_str(), "switch host");
+                if self.host.log_policy().is_public() {
+                    debug!("switch host");
+                } else {
+                    debug!(address = address.as_str(), "switch host");
+                }
                 Reply::SwitchHost(self.switch_host())
             }
             Call::Flush => Reply::Flush,
@@ -113,7 +121,10 @@ impl<'s> Executive<'s> {
         if self.is_connected() {
             self.queue(vec![notice], &mut exchange);
         } else {
-            debug!(?notice, "notice for a client without a call dropped");
+            debug!(
+                notice = %self.host.log_policy().debug(&notice),
+                "notice for a client without a call dropped"
+            );
         }
         exchange
     }

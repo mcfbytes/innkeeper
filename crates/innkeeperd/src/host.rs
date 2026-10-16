@@ -3,8 +3,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use innkeeper_session::SessionError;
 use innkeeper_world::{
-    AccountId, ClientMessage, ConnectionId, Delivery, HostMessage, MessageError, ObjectStore,
-    PlayerSession, World,
+    AccountId, ClientMessage, ConnectionId, Delivery, HostMessage, LogPolicy, MessageError,
+    ObjectStore, PlayerSession, World,
 };
 use int14h::Int14hError;
 use thiserror::Error;
@@ -65,9 +65,13 @@ impl<'s> Host<'s> {
             switchboard: &settings.switchboard,
             connection,
             inbox: settings.switchboard.register(connection),
-            player: PlayerSession::new(),
+            player: PlayerSession::with_log(settings.world.log),
             logon: None,
         }
+    }
+
+    pub(crate) fn log_policy(&self) -> LogPolicy {
+        self.world.log
     }
 
     /// Publishes the signed-on account (or `None` after a hang-up) on `signal` from now on.
@@ -154,5 +158,78 @@ impl fmt::Display for Exchange {
             Exchange::Replied(message) => write!(f, "host {message:?}"),
             Exchange::NotSent(error) => write!(f, "reply not sent: {error}"),
         }
+    }
+}
+
+/// Exchange text for a log line: full Debug when verbose, kind only when public.
+#[derive(Debug)]
+pub(crate) struct LoggedExchange<'a> {
+    pub(crate) step: &'a Exchange,
+    pub(crate) policy: LogPolicy,
+}
+
+impl fmt::Display for LoggedExchange<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.policy {
+            LogPolicy::Verbose => write!(f, "{}", self.step),
+            LogPolicy::Public => match self.step {
+                Exchange::Received(message) => write!(f, "client {}", message.kind()),
+                Exchange::Replied(message) => write!(f, "host {}", message.kind()),
+                Exchange::Undecodable(_) => write!(f, "client message not decoded"),
+                Exchange::NotSent(_) => write!(f, "reply not sent"),
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use innkeeper_world::{
+        AccountId, ClientVersion, EncodedPassword, LandType, Login, PasswordSource,
+    };
+
+    fn login() -> ClientMessage {
+        ClientMessage::Login(Login {
+            land_type: LandType(1),
+            version: ClientVersion::new(2, 3, 18),
+            account: AccountId(100_001),
+            password_source: PasswordSource::StoredFile,
+            password: EncodedPassword([0x12, 0xa1, 0x86, 0x01, 0x00, 0x01, 0x1d, 0x7a, 0x01, 0x66]),
+            name: "guybrush".into(),
+            prodigy_id: None,
+        })
+    }
+
+    #[test]
+    fn public_mode_logs_a_login_by_kind_only() {
+        let step = Exchange::Received(login());
+        let public = LoggedExchange {
+            step: &step,
+            policy: LogPolicy::Public,
+        }
+        .to_string();
+        assert_eq!(public, "client Login");
+        assert!(!public.contains("guybrush"));
+        assert!(!public.contains("EncodedPassword"));
+        assert!(!public.contains("12"));
+        assert!(!public.contains("a1"));
+        let verbose = step.to_string();
+        assert!(verbose.starts_with("client Login"));
+        assert!(verbose.contains("guybrush"));
+    }
+
+    #[test]
+    fn public_mode_logs_a_host_reply_by_kind_only() {
+        let step = Exchange::Replied(HostMessage::LoginAccepted(Default::default()));
+        let public = LoggedExchange {
+            step: &step,
+            policy: LogPolicy::Public,
+        }
+        .to_string();
+        assert_eq!(public, "host LoginAccepted");
+        let verbose = step.to_string();
+        assert!(verbose.starts_with("host LoginAccepted"));
+        assert!(verbose.contains('{'));
     }
 }

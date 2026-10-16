@@ -44,9 +44,10 @@ enum RelayError {
 /// Upgrades one accepted socket and runs a line session on its bytes, logging instead of failing.
 pub(crate) async fn serve_websocket(
     stream: TcpStream,
-    peer: SocketAddr,
+    addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
+    let peer = settings.peer_log(addr);
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
@@ -63,7 +64,7 @@ pub(crate) async fn serve_websocket(
     let saves = SaveChannel::new(Arc::clone(&settings.world.store));
     let (relayed, ()) = tokio::join!(
         relay(socket, line, saves, signed_on),
-        serve_line(session_end, peer, settings, Some(logon))
+        serve_line(session_end, addr, settings, Some(logon))
     );
     if let Err(error) = relayed {
         warn!(%error, %peer, "websocket relay stopped");
