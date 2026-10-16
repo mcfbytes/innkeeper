@@ -14,17 +14,24 @@ pub const KEPT_VERSIONS: usize = 3;
 /// Longest path text the server looks at.
 const MAX_PATH_CHARS: usize = 64;
 
-/// Drive-relative paths (upper case, `\` separators) the server stores besides `INN\*.DTA`.
-const FIXED_PATHS: [&str; 5] = [
+/// Drive-relative paths (upper case, `\` separators) the server stores besides the personas
+/// (`*.DTA` in `PERSONA_DIRS`) and the CasinoLand bankroll (`INN\LL$$<digits>.DAT`).
+const FIXED_PATHS: [&str; 7] = [
     "INN\\YSERBIUS\\MYCHARS.DAT",
     "INN\\YSERBIUS\\AUTOMAPS.DAT",
     "INN\\TWINION\\TWINCHAR.DAT",
     "INN\\TWINION\\AUTOMAPS.DAT",
     "INN\\PLAYER.DIR",
+    "INN\\LL\\PLAYER.DIR",
+    "INN\\SL\\PLAYER.DIR",
 ];
 /// The password file is never stored.
 const PASSWORD_FILE_STEM: &str = "PASS_SET";
-const PERSONA_DIR: &str = "INN\\";
+/// Where personas live: the hub's, CasinoLand's (`LL`) and SierraLand's (`SL`).
+const PERSONA_DIRS: [&str; 3] = ["INN\\", "INN\\LL\\", "INN\\SL\\"];
+/// CasinoLand keeps the bankroll in `INN\LL$$<digits>.DAT`, named from the account number.
+const BANKROLL_PREFIX: &str = "INN\\LL$$";
+const BANKROLL_SUFFIX: &str = ".DAT";
 const PERSONA_SUFFIX: &str = ".DTA";
 const DOS_STEM_MAX: usize = 8;
 
@@ -86,10 +93,22 @@ pub fn canonical_path(raw: &str) -> Result<String, PathRefusal> {
     if FIXED_PATHS.contains(&path) {
         return Ok(path.to_owned());
     }
-    let stem = path
-        .strip_prefix(PERSONA_DIR)
-        .and_then(|name| name.strip_suffix(PERSONA_SUFFIX))
-        .filter(|stem| !stem.is_empty() && stem.len() <= DOS_STEM_MAX && !stem.contains('\\'));
+    let bankroll = path
+        .strip_prefix(BANKROLL_PREFIX)
+        .and_then(|name| name.strip_suffix(BANKROLL_SUFFIX))
+        .is_some_and(|digits| {
+            !digits.is_empty()
+                && digits.len() + 4 <= DOS_STEM_MAX
+                && digits.bytes().all(|b| b.is_ascii_digit())
+        });
+    if bankroll {
+        return Ok(path.to_owned());
+    }
+    let stem = PERSONA_DIRS.iter().find_map(|dir| {
+        path.strip_prefix(dir)
+            .and_then(|name| name.strip_suffix(PERSONA_SUFFIX))
+            .filter(|stem| !stem.is_empty() && stem.len() <= DOS_STEM_MAX && !stem.contains('\\'))
+    });
     match stem {
         Some(PASSWORD_FILE_STEM) => Err(PathRefusal::PasswordFile),
         Some(_) => Ok(path.to_owned()),
@@ -111,6 +130,11 @@ mod tests {
             ("INN\\TWINION\\AUTOMAPS.DAT", "INN\\TWINION\\AUTOMAPS.DAT"),
             ("inn\\player.dir", "INN\\PLAYER.DIR"),
             ("Inn\\Guybrush.dta", "INN\\GUYBRUSH.DTA"),
+            ("INN\\LL\\LUCKY.DTA", "INN\\LL\\LUCKY.DTA"),
+            ("inn/ll/player.dir", "INN\\LL\\PLAYER.DIR"),
+            ("INN\\SL\\SUNNY.DTA", "INN\\SL\\SUNNY.DTA"),
+            ("INN\\SL\\PLAYER.DIR", "INN\\SL\\PLAYER.DIR"),
+            ("inn\\ll$$3446.dat", "INN\\LL$$3446.DAT"),
         ] {
             assert_eq!(canonical_path(raw).unwrap(), canonical, "{raw}");
         }
@@ -127,6 +151,14 @@ mod tests {
             PathRefusal::NotASaveFile
         );
         assert_eq!(refused("INN\\SUB\\X.DTA"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\LL\\PASS_SET.DTA"), PathRefusal::PasswordFile);
+        // CasinoLand's access password setting stays with the installation, as PASS_SET.DTA does.
+        assert_eq!(refused("INN\\LLSYSTEM.DAT"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\LL\\SUB\\X.DTA"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\LL$$.DAT"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\LL$$12345.DAT"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\LL$$12A.DAT"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\LL\\LL$$3446.DAT"), PathRefusal::NotASaveFile);
         assert_eq!(refused("INN\\TOOLONGNAME.DTA"), PathRefusal::NotASaveFile);
         assert_eq!(refused("INN\\.DTA"), PathRefusal::NotASaveFile);
         assert_eq!(refused(""), PathRefusal::Malformed);

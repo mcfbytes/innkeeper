@@ -54,8 +54,11 @@ upper case with `\`:
 | `INN\YSERBIUS\MYCHARS.DAT`, `INN\YSERBIUS\AUTOMAPS.DAT` | Yserbius characters and automaps |
 | `INN\TWINION\TWINCHAR.DAT`, `INN\TWINION\AUTOMAPS.DAT` | Twinion characters and automaps |
 | `INN\PLAYER.DIR` and `INN\<name>.DTA`, name of 1 to 8 letters, digits, `_`, `$`, `-` | the INN persona files |
+| `INN\LL\PLAYER.DIR`, `INN\LL\<name>.DTA`, `INN\SL\PLAYER.DIR`, `INN\SL\<name>.DTA` | the CasinoLand and SierraLand personas |
+| `INN\LL$$<digits>.DAT`, 1 to 4 digits | the CasinoLand bankroll, named from the account number; the client asks the host (command 40) only when it is missing |
 
-`INN\PASS_SET.DTA` is never stored or served, whatever its case. Everything else (`.NEW` work files,
+`PASS_SET.DTA` is never stored or served, whatever its case or directory. Neither is `INN\LLSYSTEM.DAT`,
+CasinoLand's optional access password: like the INN password it belongs to the installation. Everything else (`.NEW` work files,
 executables, `..`, other directories) is `not_allowed` or `bad_path`.
 
 Limits (constants in `saves.rs`): 1 MiB per file, 8 MiB for the current versions of one account's
@@ -97,11 +100,11 @@ Uploads also happen when the emulated program closes a file it wrote or renames 
 debounced, and for all changed files when the page is hidden or unloaded. A downloaded file is given
 the host's `mtime` so it is not mistaken for a local change.
 
-Timing: the manifest is sent as the logon completes, a round trip before the player can pick a land,
-and CGENN/TWGENN read the character files only after that, so a download lands before the game reads the
-file. The window is not closed by construction: a game started within one round trip of the logon would
-read the old file (and the later upload would be skipped, since the page sees the host's newer version
-and the local file unchanged only if nothing was written meanwhile).
+Timing: the manifest is sent as the logon completes, and a download is a round trip after it, so
+the files are in place long before a player can pick a land and start CGENN or TWGENN, which read the
+character files after that. The window is not closed by construction: a game started within that round
+trip would read the old file. Verified end to end in headless Chromium: a fresh browser profile with an
+install lacking the character files received them after the logon (`INN-Decomp/docs/web.md`).
 
 ## 6. Store and upgrade
 
