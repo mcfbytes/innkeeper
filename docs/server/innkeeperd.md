@@ -4,6 +4,7 @@ The host daemon. It accepts the stock DOS client over TCP, answers the modem, PA
 the host side of the logon, and records everything. With it the stock client logs in, reaches the town map
 and enters the Clubhouse waiting room (`docs/protocol/captures.md` sections 9 to 11). Connections share
 one object store, so players in the same waiting room see each other ([objects.md](objects.md)).
+Command coverage against every program is [coverage.md](coverage.md).
 
 ## 1. Crates
 
