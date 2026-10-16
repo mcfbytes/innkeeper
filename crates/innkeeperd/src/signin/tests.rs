@@ -57,6 +57,8 @@ fn sign_in_for(store: &Arc<SqliteStore>, enrolment: EnrolmentMode, per_day: u32)
         enrolment,
         session_lifetime: Duration::from_secs(3600),
         accounts_per_day: per_day,
+        minimum_age: 18,
+        terms_version: 1,
         recipient: None,
     })
 }
@@ -93,6 +95,19 @@ async fn fixture(enrolment: EnrolmentMode, per_day: u32, require_session: bool) 
 impl Fixture {
     /// A signed-in identity and a live token for it, without a provider round trip.
     fn token(&self, subject: &str) -> (String, IdentityKey) {
+        let (token, key) = self.token_unattested(subject);
+        let on = "2026-10-16".to_owned();
+        let said = store::Attested {
+            age: 18,
+            terms: 1,
+            on,
+        };
+        store::record_attestation(&self.store, &key, &said).unwrap();
+        (token, key)
+    }
+
+    /// Like `token`, but the identity has not said its age or accepted the terms.
+    fn token_unattested(&self, subject: &str) -> (String, IdentityKey) {
         let keys = KeyRing::new(vec![
             HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap()
         ])
@@ -217,7 +232,7 @@ async fn the_session_answer_follows_the_contract() {
         .call(reqwest::Method::GET, "/auth/session", "nope", None)
         .await;
     assert_eq!(missing, 401);
-    let (token, key) = fx.token("alice");
+    let (token, key) = fx.token_unattested("alice");
     let (status, session) = fx
         .call(reqwest::Method::GET, "/auth/session", &token, None)
         .await;
@@ -336,6 +351,70 @@ async fn accounts_follow_enrolment_the_rate_limit_and_ownership() {
     assert_eq!(
         stored.user_flags,
         AccountRecord::new(stored.password, "x").user_flags
+    );
+}
+
+#[tokio::test]
+async fn an_account_or_password_needs_the_age_and_terms_answer() {
+    let fx = fixture(EnrolmentMode::WebOnly, 3, false).await;
+    let (token, _) = fx.token_unattested("alice");
+    let create = Some(json!({"persona": "Elaine"}));
+    let (status, body) = fx
+        .call(
+            reqwest::Method::POST,
+            "/auth/accounts",
+            &token,
+            create.clone(),
+        )
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("attest_required"))
+    );
+    assert!(
+        body["message"].as_str().unwrap().contains("18 or older"),
+        "{body}"
+    );
+    let attest = |text: &str| Some(json!({"attest": text}));
+    let post = reqwest::Method::POST;
+    fx.call(post.clone(), "/auth/attest", &token, attest("17+v1"))
+        .await;
+    let (status, body) = fx
+        .call(post.clone(), "/auth/accounts", &token, create.clone())
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("attest_required")),
+        "too young"
+    );
+    fx.call(post.clone(), "/auth/attest", &token, attest("18+v0"))
+        .await;
+    let (status, _) = fx
+        .call(post.clone(), "/auth/accounts", &token, create.clone())
+        .await;
+    assert_eq!(status, 403, "old terms");
+    fx.call(post.clone(), "/auth/attest", &token, attest("18+v1"))
+        .await;
+    let (status, _) = fx
+        .call(post.clone(), "/auth/accounts", &token, create)
+        .await;
+    assert_eq!(status, 201);
+    // A credential is gated the same way, even for an owner whose answer was withdrawn.
+    store::record_attestation(
+        &fx.store,
+        &fx.token_unattested("alice").1,
+        &store::Attested {
+            age: 13,
+            terms: 1,
+            on: "2026-10-16".into(),
+        },
+    )
+    .unwrap();
+    let path = "/auth/accounts/100001/credential";
+    let (status, body) = fx.call(post, path, &token, None).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("attest_required"))
     );
 }
 

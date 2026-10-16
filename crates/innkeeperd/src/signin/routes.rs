@@ -289,6 +289,29 @@ impl SignIn {
         }
     }
 
+    /// The refusal for an identity whose stored attestation is missing or too old, else `None`.
+    fn attestation_gate(&self, key: &IdentityKey) -> Option<Reply> {
+        let attested = match store::identity(&self.store, key) {
+            Ok(row) => row.and_then(|row| row.attested),
+            Err(error) => return Some(server_error(&error)),
+        };
+        let enough =
+            attested.is_some_and(|at| at.age >= self.minimum_age && at.terms >= self.terms_version);
+        if enough {
+            return None;
+        }
+        let message = format!(
+            "The desk needs your word first: you are {} or older, and you accept terms version {} \
+             or later. Say so, then ask again.",
+            self.minimum_age, self.terms_version
+        );
+        Some(http::error(
+            StatusCode::FORBIDDEN,
+            "attest_required",
+            &message,
+        ))
+    }
+
     fn create_account(&self, key: &IdentityKey, body: Option<Value>) -> Reply {
         if !self.enrolment.web_creates() {
             return http::error(
@@ -296,6 +319,9 @@ impl SignIn {
                 "enrolment_closed",
                 "New accounts are not being taken.",
             );
+        }
+        if let Some(refusal) = self.attestation_gate(key) {
+            return refusal;
         }
         let persona = body
             .as_ref()
@@ -358,6 +384,9 @@ impl SignIn {
                 )
             }
             Err(error) => return server_error(&error),
+        }
+        if let Some(refusal) = self.attestation_gate(key) {
+            return refusal;
         }
         let password = keys::new_password();
         let Some(encoded) = keys::encode_password(&password) else {

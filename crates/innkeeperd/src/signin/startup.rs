@@ -156,6 +156,8 @@ fn build(
         enrolment: config.enrolment(),
         session_lifetime: Duration::from_secs(u64::from(config.session_hours) * 3600),
         accounts_per_day: config.accounts_per_day,
+        minimum_age: config.minimum_age,
+        terms_version: config.terms_version,
         recipient,
     }))
 }

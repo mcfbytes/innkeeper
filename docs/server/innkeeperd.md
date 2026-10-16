@@ -278,7 +278,7 @@ Example, the end of a real session (`docs/protocol/captures.md`):
   land switch between hosts is not modelled. No client speaks the transport yet (ScummVM's online executive
   is the first one planned).
 - Sign-in (section 8): Apple, the admin portal on `/admin/auth/callback`, and a periodic vault
-  refresh. The age and terms answer is stored but is not required before an account is created.
+  refresh. The age and terms answer is required before an account or password is issued (8.6).
 
 ## 8. Sign-in
 
@@ -301,6 +301,8 @@ is [privacy.md](privacy.md) sections 1 and 6; the sandbox and outbound connectio
   `POST /auth/accounts`; a Login never does. `closed` creates none. The default is `open`, or
   `web-only` with `--public`.
 - `--session-hours 12`: how long a session token lives. Logout ends it at once.
+- `--minimum-age 18` and `--terms-version 1`: the least age and terms version an identity must have
+  attested before the server opens an account or issues a password (8.6).
 - `--accounts-per-day 3`: accounts one identity may open in any 24 hours. `canCreate` is false and
   `POST /auth/accounts` is 429 `rate_limited` beyond that.
 - `--key-vault https://NAME.vault.azure.net`: read the identity HMAC key, the client secrets and the
@@ -467,6 +469,14 @@ What the server decided where the `docs/web.md` contract is open or silent:
 - 401 bodies are `unauthorized`; a credential request for an account the identity does not own is
   404 `no_such_account`.
 - More than 4096 logins in flight is 503 `busy`.
+- **Attestation is enforced.** `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are
+  403 `attest_required` unless the identity's stored answer (from `attest=` on the login URL or
+  `POST /auth/attest`) has age at least `--minimum-age` and terms at least `--terms-version`. The
+  message is plain: "The desk needs your word first: you are 18 or older, and you accept terms
+  version 1 or later. Say so, then ask again." The check runs whenever sign-in is configured, with or
+  without `--public`: the paths exist only with `--auth-config`, so one rule is simpler than two. It
+  comes after the enrolment check, so a closed host still says `enrolment_closed`. The session
+  JSON's `attested` field is unchanged, and a Login on an existing account is not gated.
 - `POST /auth/logout` is 204 with or without a valid token; only a store failure is a 500.
 - A preflight from an origin that is not a `--page-origin` gets 204 without
   `Access-Control-Allow-Origin`, so the browser blocks it. `Access-Control-Max-Age` is 600.

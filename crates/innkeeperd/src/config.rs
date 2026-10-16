@@ -99,6 +99,12 @@ pub(crate) struct Config {
     /// Accounts one signed-in identity may open per day.
     #[arg(long, default_value_t = 3)]
     pub(crate) accounts_per_day: u32,
+    /// Least age an identity must have attested before it can open an account or take a password.
+    #[arg(long, default_value_t = 18)]
+    pub(crate) minimum_age: u32,
+    /// Least terms version an identity must have accepted (the page's `<age>+v<terms>` answer).
+    #[arg(long, default_value_t = 1)]
+    pub(crate) terms_version: u32,
     /// The server Key Vault, https://NAME.vault.azure.net: identity HMAC key, client secrets, audit key.
     #[arg(long, value_name = "URL")]
     pub(crate) key_vault: Option<String>,

@@ -69,6 +69,10 @@ pub(crate) struct SignInSetup {
     pub(crate) enrolment: EnrolmentMode,
     pub(crate) session_lifetime: Duration,
     pub(crate) accounts_per_day: u32,
+    /// An account or password needs an attestation of at least this age ...
+    pub(crate) minimum_age: u32,
+    /// ... and at least this terms version.
+    pub(crate) terms_version: u32,
     pub(crate) recipient: Option<Recipient>,
 }
 
@@ -100,6 +104,8 @@ pub(crate) struct SignIn {
     enrolment: EnrolmentMode,
     session_lifetime: i64,
     accounts_per_day: u32,
+    minimum_age: u32,
+    terms_version: u32,
     recipient: Option<Recipient>,
     pending: Mutex<HashMap<String, PendingLogin>>,
 }
@@ -124,6 +130,8 @@ impl SignIn {
             enrolment: setup.enrolment,
             session_lifetime: i64::try_from(setup.session_lifetime.as_secs()).unwrap_or(i64::MAX),
             accounts_per_day: setup.accounts_per_day,
+            minimum_age: setup.minimum_age,
+            terms_version: setup.terms_version,
             recipient: setup.recipient,
             pending: Mutex::new(HashMap::new()),
         }
