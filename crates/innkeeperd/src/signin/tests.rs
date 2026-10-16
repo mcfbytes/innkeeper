@@ -9,7 +9,7 @@ use base64::Engine;
 use innkeeper_session::SessionConfig;
 use innkeeper_world::{
     AccountId, AccountRecord, ClientMessage, ClientVersion, ConnectionId, HostMessage, LandType,
-    Login, PasswordSource, World,
+    Login, PasswordSource, Store, World,
 };
 use serde_json::{json, Value};
 use tokio::net::TcpListener;
@@ -264,6 +264,54 @@ async fn the_session_answer_follows_the_contract() {
         .call(reqwest::Method::GET, "/auth/session", &token, None)
         .await;
     assert_eq!(session["attested"], json!({"age": 18, "terms": 2}));
+}
+
+#[tokio::test]
+async fn an_account_opens_with_no_persona_and_the_session_says_null() {
+    let fx = fixture(EnrolmentMode::WebOnly, 5, false).await;
+    let (token, _) = fx.token("alice");
+    for body in [None, Some(json!({})), Some(json!({"persona": null}))] {
+        let (status, created) = fx
+            .call(reqwest::Method::POST, "/auth/accounts", &token, body)
+            .await;
+        assert_eq!(status, 201);
+        assert_eq!(created["persona"], serde_json::Value::Null);
+    }
+    let (_, session) = fx
+        .call(reqwest::Method::GET, "/auth/session", &token, None)
+        .await;
+    let accounts = session["accounts"].as_array().unwrap();
+    assert_eq!(accounts.len(), 3);
+    assert!(accounts.iter().all(|a| a["persona"].is_null()));
+    // Several accounts without a name do not clash; a given name still does.
+    let (status, _) = fx
+        .call(
+            reqwest::Method::POST,
+            "/auth/accounts",
+            &token,
+            Some(json!({"persona": "Elaine"})),
+        )
+        .await;
+    assert_eq!(status, 201);
+    let (status, body) = fx
+        .call(
+            reqwest::Method::POST,
+            "/auth/accounts",
+            &token,
+            Some(json!({"persona": "elaine"})),
+        )
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (409, Some("persona_taken"))
+    );
+    // A name adopted from the client shows in the session list.
+    fx.store.set_persona(AccountId(100_001), "Zelda").unwrap();
+    let (_, session) = fx
+        .call(reqwest::Method::GET, "/auth/session", &token, None)
+        .await;
+    assert_eq!(session["accounts"][0]["persona"], "Zelda");
+    assert!(session["accounts"][1]["persona"].is_null());
 }
 
 #[tokio::test]

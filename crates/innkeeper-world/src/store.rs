@@ -93,6 +93,9 @@ pub trait Store: fmt::Debug + Send + Sync {
     fn highest_account_id(&self) -> Result<Option<AccountId>, StoreError>;
     /// Replaces the password and clears the password-expired flag.
     fn update_password(&self, id: AccountId, password: EncodedPassword) -> Result<(), StoreError>;
+    /// Replaces the account's persona, the name shown for it in lists and the phone book.
+    /// A name is not unique: two accounts may hold the same one.
+    fn set_persona(&self, id: AccountId, persona: &str) -> Result<(), StoreError>;
 
     /// The account's CasinoLand bankroll, or `None` when nothing has been stored for it yet.
     fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError>;
@@ -250,6 +253,17 @@ impl Store for MemoryStore {
             .ok_or(StoreError::UnknownAccount(id))?;
         row.record.password = password;
         row.record.password_expired = false;
+        Ok(())
+    }
+
+    fn set_persona(&self, id: AccountId, persona: &str) -> Result<(), StoreError> {
+        let mut tables = self.tables();
+        let row = tables
+            .accounts
+            .get_mut(&id)
+            .filter(|row| row.deleted_at.is_none())
+            .ok_or(StoreError::UnknownAccount(id))?;
+        persona.clone_into(&mut row.record.persona);
         Ok(())
     }
 
@@ -508,8 +522,9 @@ pub mod conformance {
 
     /// Runs every case, each on a store from `fresh`.
     pub fn run_all<S: Store>(fresh: impl Fn() -> S) {
-        let cases: [fn(&dyn Store); 12] = [
+        let cases: [fn(&dyn Store); 13] = [
             unknown_account_is_absent,
+            persona_updates_replace_the_name_and_need_an_account,
             created_account_reads_back,
             duplicate_account_is_refused,
             bankroll_reads_absent_then_per_account,
@@ -576,6 +591,19 @@ pub mod conformance {
         store.create_account(BOB, record(3)).unwrap();
         assert_ne!(store.assign_mailbox(BOB).unwrap(), mailbox);
         assert!(store.append_letter(mailbox, b"new").unwrap() > letter);
+    }
+
+    fn persona_updates_replace_the_name_and_need_an_account(store: &dyn Store) {
+        let unknown = store.set_persona(ALICE, "Zelda").unwrap_err();
+        assert!(matches!(unknown, StoreError::UnknownAccount(ALICE)));
+        store.create_account(ALICE, record(1)).unwrap();
+        store.create_account(BOB, record(2)).unwrap();
+        store.set_persona(ALICE, "Zelda").unwrap();
+        assert_eq!(store.account(ALICE).unwrap().unwrap().persona, "Zelda");
+        store.set_persona(ALICE, "Link").unwrap();
+        store.set_persona(BOB, "Link").unwrap();
+        assert_eq!(store.account(ALICE).unwrap().unwrap().persona, "Link");
+        assert_eq!(store.account(BOB).unwrap().unwrap().persona, "Link");
     }
 
     fn unknown_account_is_absent(store: &dyn Store) {

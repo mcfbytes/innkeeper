@@ -108,7 +108,7 @@ impl PlayerSession {
                 self.when_logged_in(|_| router::multicast(objects, connection, relayed))
             }
             ClientMessage::SetPersona(ref set) => {
-                self.set_persona(&set.name);
+                self.set_persona(world, &set.name);
                 Vec::new()
             }
             ClientMessage::ReadMoney(request) => {
@@ -223,7 +223,10 @@ impl PlayerSession {
         }
     }
 
-    fn set_persona(&mut self, name: &str) {
+    /// The player takes the name for the session, and the store keeps it as the account's persona
+    /// when it is one a board post can carry (`storable_persona`). A store that refuses is logged
+    /// and the session still plays under the name.
+    fn set_persona(&mut self, world: &World, name: &str) {
         match &mut self.state {
             PlayerState::LoggedIn(player) => {
                 info!(
@@ -232,6 +235,11 @@ impl PlayerSession {
                     "persona renamed"
                 );
                 name.clone_into(&mut player.account.persona);
+                if storable_persona(name) {
+                    if let Err(error) = world.store.set_persona(player.account.id, name) {
+                        warn!(account = player.account.id.0, %error, "persona not stored");
+                    }
+                }
             }
             PlayerState::AwaitingLogin => warn!("message before Login ignored"),
         }
@@ -310,6 +318,18 @@ impl PlayerSession {
             Err(nak) => HostMessage::Nak(nak),
         }
     }
+}
+
+/// Longest persona the store keeps; the web page's own rule is shorter.
+const STORED_PERSONA_MAX: usize = 16;
+
+/// A persona the store keeps: 1 to 16 printable ASCII characters with no `|` (the board posts'
+/// `author|text` separator), no leading or trailing space.
+fn storable_persona(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= STORED_PERSONA_MAX
+        && name == name.trim()
+        && name.bytes().all(|b| (0x20..0x7f).contains(&b) && b != b'|')
 }
 
 fn replies_to(connection: ConnectionId, messages: Vec<HostMessage>) -> Vec<Delivery> {

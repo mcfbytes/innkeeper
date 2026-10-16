@@ -101,6 +101,24 @@ fn web_accounts_are_numbered_after_the_highest_and_personas_are_unique() {
 }
 
 #[test]
+fn accounts_without_a_persona_do_not_clash_and_a_named_one_shows() {
+    let store = SqliteStore::open_in_memory().unwrap();
+    let keys = ring(&[("v1", 1)]);
+    let key = sign_in(&store, &keys, "iss", "sub", "p", || None, 10)
+        .unwrap()
+        .key;
+    let first = create_owned_account(&store, &key, &record(""), 10).unwrap();
+    let second = create_owned_account(&store, &key, &record(""), 10).unwrap();
+    assert_eq!(first, Created::Account(AccountId(100_001)));
+    assert_eq!(second, Created::Account(AccountId(100_002)));
+    store.set_persona(AccountId(100_002), "Zelda").unwrap();
+    assert_eq!(
+        owned_accounts(&store, &key).unwrap(),
+        vec![(100_001, String::new()), (100_002, "Zelda".to_owned())]
+    );
+}
+
+#[test]
 fn an_empty_store_starts_web_accounts_at_100001() {
     let store = SqliteStore::open_in_memory().unwrap();
     let keys = ring(&[("v1", 1)]);

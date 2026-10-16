@@ -346,6 +346,6 @@ item id) and its gates: `cargo fmt --all --check`, `cargo clippy --workspace --a
 | Does a DOS game that inherits the session need a Login first, and may the host refuse one that has none? | C11 (the launcher logs in), D2, D3 | `messages.md` section 9 |
 | Is a second Login for an account that is already online refused? | none yet (policy, after C2's registry exists) | `messages.md` 4.2 |
 | The reply layout of `UserFindMsg` 49 (`body @4`), so the command stays undecoded | a later presence item | `messages.md` 3.3 |
-| Whether the persona set by 40/4 is kept: the `Store` has no update for it, so it lives for the session | a later account item | `messages.md` 3.3 row 40 |
+| Whether the persona set by 40/4 is kept: now yes, as the account's persona (`Store::set_persona`, [innkeeperd.md](innkeeperd.md) section 5) | done | `messages.md` 3.3 row 40 |
 | How a conference is named and what 41/0 returns for a free name | C8 (research first) | `messages.md` 3.3 row 41 |
 | What an unreachable host looks like to the legacy PAD and to the transport | C14 | `link-layer.md` 3.2, 5.1; `int14h-transport.md` 5 |

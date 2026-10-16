@@ -12,7 +12,7 @@ Five families, each as narrow as its first users need.
 
 | Family | Key | Operations | Used by |
 |---|---|---|---|
-| accounts | `AccountId` | `account` (get), `create_account`, `update_password` | account book, logon, command 44 |
+| accounts | `AccountId` | `account` (get), `create_account`, `update_password`, `set_persona` | account book, logon, command 44 |
 | money | `AccountId` | `money` (get), `set_money` | CasinoLand bankroll (commands 40/3 and 40/2) |
 | mailboxes | `MailboxNumber`, assigned per account | `assign_mailbox`, `append_letter`, `letters`, `delete_letter` | mail (`NewBoxHandler` 45, `EMMsg` 37) |
 | boards | `BoardId` | `post`, `posts` | the RPG bulletin board (command 27) |

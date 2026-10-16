@@ -302,7 +302,8 @@ pub(crate) enum Created {
 }
 
 /// A new account owned by `key`, numbered like signup: one past the highest, from 100001.
-/// The persona is compared without case against every row, a retired one included.
+/// A given persona is compared without case against every row, a retired one included; an empty
+/// one (named later by the client's 40/4) is not compared.
 pub(crate) fn create_owned_account(
     store: &SqliteStore,
     key: &IdentityKey,
@@ -311,14 +312,18 @@ pub(crate) fn create_owned_account(
 ) -> Result<Created, StoreError> {
     let conn = store.connection();
     let tx = conn.unchecked_transaction().map_err(backend)?;
-    let taken: Option<i64> = tx
-        .query_row(
-            "SELECT 1 FROM accounts WHERE persona = ?1 COLLATE NOCASE",
-            [&record.persona],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(backend)?;
+    // An account with no persona yet (empty) has no name to clash.
+    let taken: Option<i64> = match record.persona.is_empty() {
+        true => None,
+        false => tx
+            .query_row(
+                "SELECT 1 FROM accounts WHERE persona = ?1 COLLATE NOCASE",
+                [&record.persona],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(backend)?,
+    };
     if taken.is_some() {
         return Ok(Created::PersonaTaken);
     }

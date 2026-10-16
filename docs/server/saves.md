@@ -109,7 +109,7 @@ install lacking the character files received them after the logon (`INN-Decomp/d
 ## 6. Fetching before the dial (HTTP)
 
 The logon manifest arrives after the client has already read its persona, so a browser that has never
-held the account would dial with a made-up persona and overwrite the host's. A signed-in page therefore
+held the account would show an empty Select Player (the account's personas live in its save space: its `PLAYER.DIR` and `.DTA` files) and its first Create would overwrite the host's. A signed-in page therefore
 fetches the account's files over HTTP before it dials, on the sign-in listener, authorised by the session
 token like the other `/auth/*` calls (`signin/routes.rs`):
 

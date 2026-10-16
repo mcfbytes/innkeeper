@@ -218,7 +218,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
 | 47/1 | occupancy for the same lands: maximum 64, current the number of members in the land's waiting room (0 for a land nobody entered; the room itself holds 128, the size of the stock joinNet) |
-| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`); the name replaces the account's persona for the session and is not written to the store |
+| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`). The name replaces the account's persona for the session, and is also written to the store as the account's persona (`Store::set_persona`) when it is 1 to 16 printable ASCII characters with no `\|`, no leading or trailing space; any other name only renames the session. It applies to every account, not only web accounts, so that phone-signup accounts (which start with an empty persona) are named the same way; the last name presented wins, and a name need not be unique |
 | 40/3 | the bankroll from the store as `HostMessage::Money`; 500 (`MONEY_STARTING_BALANCE`) for an account with no balance yet, and nothing at all when the store fails, so the client keeps its own copy |
 | 40/2 | Ack 40/2 after the bankroll is stored, because the client waits for a reply naming command 40; Nak 40/2 with a text when the store fails |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
@@ -425,14 +425,25 @@ point the client at a local mock; the tests use them and never reach Azure.
 `POST /auth/accounts` numbers a new account like signup (one past the highest id, at least
 100001) and gives it a random password nobody knows. `POST /auth/accounts/<id>/credential` sets a
 new random password of 8 characters from A-Z and 0-9, stores it in the client's encoded form and
-returns it. Every call rotates it. A persona is 1 to 10 of A-Z, a-z and 0-9, unique without regard
-to case across every account row, deleted or not.
+returns it. Every call rotates it. The body of `POST /auth/accounts` may be empty, `{}` or carry a
+null `persona`: the account then has no persona yet (the row's `persona` is empty, and the session
+JSON's `accounts` entry says `"persona": null`). The browser page now sends `{}`: the original
+client's own Select Player screen (Create) makes the persona, and the name it presents becomes the
+account's persona through 40/4, below. A `persona` in the body still works, for compatibility, with
+today's checks: 1 to 10 of A-Z, a-z and 0-9, unique without regard to case across every account row,
+deleted or not (`400 bad_persona`, `409 persona_taken`). A name that came from the client is not
+checked for uniqueness: the original let two players share a name, and the phone book and the board
+posts already cope with that (privacy.md section 1).
 
 The session token is 32 random bytes, base64url. The `sessions` row keeps only its SHA-256. The
 WebSocket upgrade takes it from `?session=` and nowhere else; the token is never logged. On a bound
 line a Login for an account the identity does not own gets the same reply as a wrong password
-(`That password is not right.`). The persona the client sends from `PLAYER.DIR` is accepted; the
-stored persona stays the one chosen on the web.
+(`That password is not right.`). The Login's name, which the client takes from the persona it picked
+in Select Player, is accepted as it is; the stored persona changes only on a 40/4 (the 40/4 row of
+section 5). One INN account can hold several personas in the client's `PLAYER.DIR`; the server keeps
+the name the client last presented, for display (the session list, the operator portal, the phone
+book). The page keeps each account's `PLAYER.DIR` and persona files in that account's own save space,
+so the lists never mix (INN-Decomp `docs/web.md`, "The persona on the drive").
 
 ### 8.5 The mock provider
 
@@ -554,7 +565,8 @@ Menu: Ledger (dashboard, audit), Desk (complaints, holds), Records (accounts, po
 Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
 
 - **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`.
-- **Accounts:** search by number or persona; detail page; suspend and unsuspend (a suspended
+- **Accounts:** search by number or persona; an account the client has not named yet shows
+  "(not named yet)"; detail page; suspend and unsuspend (a suspended
   account's Login is refused with a Nak and its lines are kicked); stamps, staff level and land
   rights; CasinoBucks; password reset (the new password is shown once); revoke web sessions;
   soft delete and restore (the account tools of [privacy.md](privacy.md) section 3).

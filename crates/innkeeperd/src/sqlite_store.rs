@@ -372,6 +372,20 @@ impl Store for SqliteStore {
         }
     }
 
+    fn set_persona(&self, id: AccountId, persona: &str) -> Result<(), StoreError> {
+        let updated = self
+            .connection()
+            .execute(
+                "UPDATE accounts SET persona = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+                params![id.0, persona],
+            )
+            .map_err(backend)?;
+        match updated {
+            0 => Err(StoreError::UnknownAccount(id)),
+            _ => Ok(()),
+        }
+    }
+
     fn money(&self, id: AccountId) -> Result<Option<Money>, StoreError> {
         let connection = self.connection();
         let mut statement = connection

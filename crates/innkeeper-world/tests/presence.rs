@@ -3,10 +3,13 @@
 
 mod common;
 
+use std::sync::Arc;
+
 use common::{Table, LOGIN};
 use innkeeper_world::{
     ClientMessage, ClientVersion, ConnectionId, Cookie, Delivery, GroupJoin, GroupKey, HostMessage,
-    JoinNet, LandCatalog, LandType, ObjectKind, ObjectStore, PlayerSession, Sid, World,
+    JoinNet, LandCatalog, LandType, MemoryStore, ObjectKind, ObjectStore, PlayerSession, Sid,
+    Store, World,
 };
 
 const CLUBHOUSE: LandType = LandType(1);
@@ -187,6 +190,35 @@ fn the_129th_joiner_of_a_128_member_room_gets_nak_10_code_2() {
     };
     assert_eq!((nak.which_cmd, nak.which_sub), (10, 2));
     assert_eq!(objects.member_count(WAITING_ROOM), 128);
+}
+
+#[test]
+fn a_persona_name_is_kept_as_the_accounts_persona_and_a_second_one_replaces_it() {
+    let store = Arc::new(MemoryStore::new());
+    let world = World::stored(store.clone());
+    let mut objects = ObjectStore::new();
+    let connection = ConnectionId(1);
+    let mut player = PlayerSession::new();
+    let login = ClientMessage::parse(&hex(LOGIN)).unwrap();
+    let _ = player.handle(&world, &mut objects, connection, &login);
+    let id = player.account().unwrap();
+    // The Login opened the account under the name it presented (the book enrols).
+    assert_eq!(store.account(id).unwrap().unwrap().persona, "guybrush");
+    let set = |name: &str| {
+        let mut bytes = vec![0x28, 0x04];
+        bytes.extend_from_slice(name.as_bytes());
+        bytes.push(0);
+        ClientMessage::parse(&bytes).unwrap()
+    };
+    let _ = player.handle(&world, &mut objects, connection, &set("Zelda"));
+    assert_eq!(store.account(id).unwrap().unwrap().persona, "Zelda");
+    assert_eq!(player.persona(), Some("Zelda"));
+    let _ = player.handle(&world, &mut objects, connection, &set("Link"));
+    assert_eq!(store.account(id).unwrap().unwrap().persona, "Link");
+    // A name a board post cannot carry plays the session and is not kept.
+    let _ = player.handle(&world, &mut objects, connection, &set("a|b"));
+    assert_eq!(player.persona(), Some("a|b"));
+    assert_eq!(store.account(id).unwrap().unwrap().persona, "Link");
 }
 
 #[test]

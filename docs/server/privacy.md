@@ -32,9 +32,15 @@ stays in the file until the retention job in section 6 hard-purges it. Schema:
 `deleted_at` and the timestamps are unix seconds. `audit_sessions.identity_key` is the signed-in
 identity's HMAC, NULL for a line without a session.
 
-A 40/4 persona rename is session-only and is not written to `accounts`. Board posts are attributed by
-matching the stored Login persona to the `author` prefix, case-insensitive; a renamed session can leave
-a post the delete command will not find. An empty persona matches no posts.
+`accounts.persona` is a pseudonym the player typed (a name in the client's Select Player screen, or one
+given when the account was opened); sign-in itself stores no name. It is empty for a web account until the
+client's first 40/4, which writes the name the player picked (the last one wins). The server keeps a name
+only when it is 1 to 16 printable ASCII characters with no `|`; it is part of the account's export and is
+erased with the account like the row. Names are not unique, as in the original, so an export or a delete that matches board posts by persona
+can also match a post by another player of the same name (known limit: a player could choose another's
+name to have those posts listed in their export, or hidden by their delete); the retention purge already
+keeps a post while any account with that persona is held (section 6). Board posts are attributed by
+matching the stored persona to the `author` prefix, case-insensitive. An empty persona matches no posts.
 
 `Envelope`'s `Debug` prints the text length and not the text, so a letter or a Town Hall form never appears in a log line, in any mode. (The raw hex line of the verbose default mode still carries message bytes; `--public` drops them.)
 

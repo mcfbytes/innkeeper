@@ -23,6 +23,17 @@ pub(crate) const FLAG_BITS: [(u16, &str); 4] = [
     (0x0004, "Staff level 3 (moderator)"),
 ];
 
+/// What a list shows for a persona the client has not named yet.
+const NOT_NAMED: &str = "(not named yet)";
+
+/// The persona, or a note when the account has none.
+fn shown(persona: &str) -> &str {
+    match persona.trim().is_empty() {
+        true => NOT_NAMED,
+        false => persona,
+    }
+}
+
 /// One logged-in line, joined from the world and the switchboard.
 #[derive(Clone, Debug)]
 pub(crate) struct OnlineRow {
@@ -193,14 +204,14 @@ impl Admin {
                     csrf: &req.ctx.csrf,
                     hidden: &hidden,
                     confirm: Some(html::Confirm {
-                        question: &format!("Kick {}?", row.persona),
+                        question: &format!("Kick {}?", shown(&row.persona)),
                         detail: "This ends their connection now. They can log on again unless the account is suspended.",
                         yes: "Kick",
                     }),
                     inline: true,
                 };
                 rows.push_str(&tr(&[
-                    esc(&row.persona),
+                    esc(shown(&row.persona)),
                     account_link(row.account),
                     esc(&row.land),
                     esc(&row.since.map_or_else(|| "unknown".into(), when)),
@@ -262,7 +273,7 @@ impl Admin {
                 }
                 rows.push_str(&tr(&[
                     account_link(account.id),
-                    esc(&account.persona),
+                    esc(shown(&account.persona)),
                     flag_names(account.user_flags),
                     marks,
                 ]));
@@ -370,7 +381,7 @@ impl Admin {
             .join("; ");
         let mut facts = format!(
             "<dl class=\"facts\"><dt>Persona</dt><dd>{}</dd><dt>State</dt><dd>{state}</dd>",
-            esc(&s.persona)
+            esc(shown(&s.persona))
         );
         if !online.is_empty() {
             let _ = write!(facts, "<dt>Online</dt><dd>{}</dd>", esc(&online_text));
@@ -416,7 +427,7 @@ impl Admin {
                 "none".to_owned()
             },
         );
-        window(&format!("{} (account {})", s.persona, s.id), &facts)
+        window(&format!("{} (account {})", shown(&s.persona), s.id), &facts)
     }
 
     fn account_links(&self, _req: &Req, d: &AccountDetail) -> String {
@@ -515,7 +526,7 @@ impl Admin {
             let form = Form {
                 action: &path, csrf, hidden: &[], inline: false,
                 confirm: Some(html::Confirm {
-                    question: &format!("Suspend {}?", d.summary.persona),
+                    question: &format!("Suspend {}?", shown(&d.summary.persona)),
                     detail: "Any live connection is kicked now, and a Login is refused until you unsuspend.",
                     yes: "Suspend",
                 }),
@@ -590,7 +601,7 @@ impl Admin {
             hidden: &[],
             inline: false,
             confirm: Some(html::Confirm {
-                question: &format!("Reset the password of {}?", d.summary.persona),
+                question: &format!("Reset the password of {}?", shown(&d.summary.persona)),
                 detail: "A new password is made and shown once. The old one stops working.",
                 yes: "Reset",
             }),
@@ -618,7 +629,7 @@ impl Admin {
                 p.letters_in_box, p.letters_sent, p.posts, p.save_versions
             )
         });
-        let question = format!("Delete {}?", d.summary.persona);
+        let question = format!("Delete {}?", shown(&d.summary.persona));
         let yes_detail = format!(
             "{detail} The account is disabled now and erased for good after {} days, unless a legal hold covers it. Until then you can restore it.",
             self.retention.account_days
@@ -934,7 +945,7 @@ impl Admin {
                         &format!("box {}", mailbox.number),
                     ),
                     account_link(mailbox.account),
-                    esc(&mailbox.persona),
+                    esc(shown(&mailbox.persona)),
                     mailbox.letters.to_string(),
                 ]));
             }

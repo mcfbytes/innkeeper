@@ -250,7 +250,7 @@ impl SignIn {
             let accounts = store::owned_accounts(&self.store, &key)?;
             let accounts: Vec<Value> = accounts
                 .into_iter()
-                .map(|(id, persona)| json!({"id": id, "persona": persona}))
+                .map(|(id, persona)| json!({"id": id, "persona": named(&persona)}))
                 .collect();
             let provider = row
                 .as_ref()
@@ -334,17 +334,21 @@ impl SignIn {
         if let Some(refusal) = self.attestation_gate(key) {
             return refusal;
         }
-        let persona = body
-            .as_ref()
-            .and_then(|body| body.get("persona"))
-            .and_then(Value::as_str)
-            .filter(|persona| persona_ok(persona));
-        let Some(persona) = persona else {
-            return http::error(
-                StatusCode::BAD_REQUEST,
-                "bad_persona",
-                "Use 1 to 10 letters or digits.",
-            );
+        // No body, `{}` or a null persona opens an account with no persona yet: the client's own
+        // Select Player screen names one at its first Login (40/4). A given persona is checked.
+        let given = body.as_ref().and_then(|body| body.get("persona"));
+        let persona = match given {
+            None | Some(Value::Null) => None,
+            Some(value) => match value.as_str().filter(|persona| persona_ok(persona)) {
+                Some(persona) => Some(persona),
+                None => {
+                    return http::error(
+                        StatusCode::BAD_REQUEST,
+                        "bad_persona",
+                        "Use 1 to 10 letters or digits.",
+                    )
+                }
+            },
         };
         match self.can_create(key) {
             Ok(true) => {}
@@ -366,7 +370,7 @@ impl SignIn {
                 "Try again.",
             );
         };
-        let record = AccountRecord::new(unknown, persona);
+        let record = AccountRecord::new(unknown, persona.unwrap_or_default());
         match store::create_owned_account(&self.store, key, &record, dates::unix_now()) {
             Ok(Created::Account(id)) => {
                 info!(account = id.0, "account created through sign-in");
@@ -378,7 +382,10 @@ impl SignIn {
             Ok(Created::PersonaTaken) => http::error(
                 StatusCode::CONFLICT,
                 "persona_taken",
-                &format!("The name {persona} is already in use."),
+                &format!(
+                    "The name {} is already in use.",
+                    persona.unwrap_or_default()
+                ),
             ),
             Err(error) => server_error(&error),
         }
@@ -522,7 +529,12 @@ pub(crate) fn parse_attest(text: &str) -> Option<(u32, u32)> {
     Some((digits(age, 3)?, digits(terms, 6)?))
 }
 
-/// 1 to 10 of A-Z, a-z and 0-9, the rule the page shows.
+/// An account's persona for JSON: null until the client has named one.
+fn named(persona: &str) -> Option<&str> {
+    (!persona.trim().is_empty()).then_some(persona)
+}
+
+/// 1 to 10 of A-Z, a-z and 0-9, the rule for a persona given when the account is opened.
 pub(crate) fn persona_ok(persona: &str) -> bool {
     !persona.is_empty()
         && persona.len() <= MAX_PERSONA
