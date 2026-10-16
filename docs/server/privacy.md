@@ -110,9 +110,19 @@ is one past the highest id, counting soft-deleted rows.
 - **Reverse proxy:** no access logs. Nginx `access_log off;` on the WebSocket and TCP upgrade
   location; Caddy `log` off for that site. The proxy otherwise records client IPs that `--public`
   just hashed.
-- **Backups:** the live database is the only long store. Copy it to Azure Blob Storage, private
-  access only, encrypted at rest. A lifecycle management rule deletes each blob after 30 days, so
-  data that the purge job has removed leaves backups within 30 days of that purge. Complaints (a
+- **Backups:** the live database is the only long store. Copy it to Azure Blob Storage, encrypted at
+  rest, with access by identity only (no Private Endpoints):
+  - anonymous blob access and shared-key access are off, so Entra ID is the only way in;
+  - the VM's managed identity has a role on the backup container that can read and write but not
+    delete;
+  - blob versioning and soft delete are on;
+  - a free Microsoft.Storage service endpoint on the VM's subnet, plus a virtual-network rule,
+    limits the network. The trusted-services exception does not cover VMs, and an IP rule for the
+    VM's own public address does not match traffic from the same region.
+
+  A lifecycle management rule removes each backup, and its versions, within about 30 days
+  including soft delete (the arithmetic is in the infra repo's README). Data that the purge job
+  has removed therefore leaves backups within about 30 days of that purge. Complaints (a
   year) and legal holds live in the database, so backups do not need a longer rule and the archive
   tier is unnecessary: that tier also charges for deletion before 180 days. A preservation request
   that needs one backup uses a blob legal hold (immutability) on that blob. Database backups never
