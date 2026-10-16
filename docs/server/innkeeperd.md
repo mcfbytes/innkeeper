@@ -139,7 +139,7 @@ DATA frame per client message.
 
 | Module | Holds |
 |---|---|
-| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `object_kind`, `mail`); the type names are in `messages.md` section 3.2.1 |
+| `message` | `ClientMessage` (parse, encode) and `HostMessage` (encode, parse) for the commands below, on a `WireReader` and `WireWriter` of the `b`/`w`/`a`/`s` field codes; `Command` is the table of command bytes. One file per family (`send`, `group`, `properties`, `multicast`, `service_lookup`, `notice`, `ack`, `user_info`, `object_kind`, `object_list`, `mail`, `mall`, `signup`); the type names are in `messages.md` section 3.2.1 |
 | `account` | `AccountBook`: who may log in. `anyone()` admits every account number and password, the dev default; `listed(...)` checks number and encoded password; `stored(store, Enrolment)` reads the `AccountRecord` and gives the `Account` its `user_flags`, `rating` and `LoginStatus` (11 while the record's password is expired), and `change_password` updates the record |
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory with each row's version range, `admits(land_type, version)` against that range, and occupancy counted from the object store (`current` is the member count of the land's waiting room, `maximum` the catalog's 64) |
@@ -149,6 +149,10 @@ DATA frame per client message.
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4) |
 | `rpg` | Yserbius and Twinion: the title table (land type, version, land size), the 41/2 service lookup, the place a land joinNet sets and the map groups shared within it, the land version gate, no echo of RPG sends. See [yserbius.md](../protocol/yserbius.md) |
 | `bbs` | the RPG bulletin board (27) over the store's boards: a fixed directory per location, messages numbered in posting order |
+| `mall` | Shoppers Advantage (54): the gate launches Shop, the join is answered, and one line says the mall is closed |
+| `signup` | command 55/1, before Login: create an account and return its number on Ack 55/1 |
+| `conference` | command 41/0: a free conference name is SID 0, a taken name is that object's SID |
+| `object_list` | commands 51/0 and 52/0: create a list of plain objects and free them the way leaveNet does |
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
@@ -159,7 +163,12 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 
 | Client sends | Host replies |
 |---|---|
-| Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A Login on a connection that holds objects first releases them, as a hang-up does |
+| Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A Login on a connection that holds objects first releases them, as a hang-up does. A signup row whose password is still the placeholder adopts the password this Login presents (`SIGNUP_ADOPTS_PRESENTED_PASSWORD_ASSUMED`) |
+| signup (55/1) | Ack 55/1 with the new account number at words 6 and 8, before Login, and the session stays logged out. The form has no password, so the row keeps `SIGNUP_PASSWORD_ASSUMED` until that first Login (`SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED`). Numbers start at `SIGNUP_FIRST_ACCOUNT_ASSUMED`. An explicit signup creates a row even when enrolment is closed (`SIGNUP_CREATES_WHEN_ENROLMENT_IS_CLOSED_ASSUMED`). A store fault sends nothing |
+| 54/27, 54/25, 54/24, 54/26 | The gate launches Shop (`MALL_LAUNCHES_SHOP_ASSUMED`): one 54/19, then 54/17 and a 54/16 kind 1 that says the mall is closed (`MALL_CLOSED_TEXT_ASSUMED`, `MALL_NOTICE_FOLLOWS_JOIN_ASSUMED`). Word 2 of each reply is `MALL_HEADER_SLOT_ASSUMED`. A typed `/EXIT` also gets 54/20 kind `0x1A`. 54/26 gets 54/19 kind `0x1A`. There is no mall back end |
+| 41/0 | `ObjectLocated` with the SID at word 6. Zero means the name is free; the bound object's SID means it is taken. The check does not create the conference. The key is the raw tail (`CONFERENCE_KEY_IS_THE_RAW_TAIL_ASSUMED`) |
+| 51/0 | one plain object per requested count, no `ObjID`. Command 51 echoes the caller's cookie at word 4 and lists the new SIDs from byte 8. A longer list is cut to `OBJ_NEW_LIST_MAX_ASSUMED`. The words at bytes 2 and 6 are `OBJ_NEW_LIST_PREFACE_WORD_ASSUMED` and `OBJ_NEW_LIST_UNREAD_WORD_ASSUMED` |
+| 52/0 | nothing to the sender. Each listed SID is released like leaveNet, so a peer hears `ObjFree` (9), not command 52 (`OBJ_FREE_LIST_TELLS_PEERS_ASSUMED`) |
 | 44 | Ack 44/1 to the request's SID after the password is stored and the expired flag cleared; Nak 44 when the store refuses. The open book stores nothing and still acks |
 | joinNet (7) | `ObjID` with the cookie echoed and a host-wide SID counting up from `0x0100`; a group of kind 2, 4 or 5 is shared by `(kind, landType, parameter)`, so every joiner of the same waiting room gets the same SID; a game object joined again with the same cookie replaces the old one ([objects.md](objects.md) section 3) |
 | leaveNet (9) | nothing to the sender; releases one reference, and the last one frees the object: `GrpDel` and `ObjFree` to the other connections that see it |
@@ -182,9 +191,10 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 37/26, 30 | nothing: the letter is deleted, the service form is dropped |
 | 37/31, 32 | an empty services listing and an empty system list |
 
-Commands 13, 14 and 41 decode (`messages.md` section 3.2.1), are logged and get no reply until
-the property replication and the service lookup handle them. Every other command is logged as "not decoded" and gets no reply. At
-logon that is 34/4, and in the Clubhouse 26; the client carries on without answers
+`SetInt` (13), `SetStr` (14), `getProp` (32) and member properties (31) are mirrored and answered as
+[objects.md](objects.md) describes. Command 41 answers a service lookup and a conference name check.
+A command the codec does not know is logged as "not decoded" and gets no reply. At logon the client
+still sends 34/4, which is not answered, and in the Clubhouse 26 is absorbed; the client carries on
 (`captures.md` section 9). Mail (37, 45) is answered on a host with `--data-dir`; without one every 37 request is refused
 and 45/1 answers status 2 ([mail.md](mail.md) section 6).
 
@@ -220,12 +230,10 @@ Example, the end of a real session (`docs/protocol/captures.md`):
 
 ## 7. Not done yet
 
-- Property replication: `SetInt` (13) and `SetStr` (14) are decoded and ignored, so a client that sets a
-  property on an object does not reach its replicas; `Send` (2) and multicast (28) are routed
-  ([router.md](router.md)).
 - Password hashing (Phase 7): the encoded password is stored as the client sends it. A second Login for an
   account that is already online is not refused.
-- Replies to 34/4 (rates), `getProp` (32) and the other services of `messages.md` section 3.3.
+- Replies still open in `messages.md` section 3.3: 34/4 (rates), hints (38), the finder (49) and LSCI's own
+  bulletin-board subs 27/6, 27/8 and 27/9. See [coverage.md](coverage.md) section 3.2.
 - Mail beyond [mail.md](mail.md): letters arriving while the recipient is online are not pushed, and a
   new account has no stamps flag, so it cannot send until its record has `0x200`.
 - On the INT 14h transport, SwitchHost and Connect accept any address and keep the client on this host; a
