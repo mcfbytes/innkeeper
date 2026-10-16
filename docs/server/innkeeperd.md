@@ -95,6 +95,7 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
   and every decoded client message.
 - `--data-dir` keeps the accounts in `DIR/innkeeper.db` (`SqliteStore`, created on first use) and enrols an
   unknown account from the password its first Login presents (INFERRED, `STORED_BOOK_ENROLS_ASSUMED`).
+  That enrolment stores the starting 500 CasinoBucks when the number has no balance yet.
   Without it every account number and password is admitted and nothing is kept, which is what the DOSBox
   scripts use. Offline, `innkeeperd account export` reads that file, including soft-deleted rows.
   `account delete` disables the account until the retention purge; `account restore` undoes that
@@ -166,7 +167,7 @@ DATA frame per client message.
 | `logon` | `logon::admit`: the Login policy (land type in the `LandCatalog`, then the account book) as an `Account` or the Nak that refuses it, and the command 44 handler. `PlayerSession` only calls it |
 | `land` | `LandCatalog`: the land directory with each row's version range, `admits(land_type, version)` against that range, and occupancy counted from the object store (`current` is the member count of the land's waiting room, `maximum` the catalog's 64) |
 | `mail` | the mailbox assignment (45/1) and the `EMMsg` requests (37) over the store: new-mail check, listing, send, read, delete, forward. See [mail.md](mail.md) |
-| `money` | the CasinoLand bankroll: a 40/3 read answered from the store with the starting 1,000,000 for an account that has none, and a 40/2 save stored and acked. See [store.md](store.md) section 5 |
+| `money` | the CasinoLand bankroll: a 40/3 read answered from the store with the starting 500 for an account that has none, and a 40/2 save stored and acked. Signup and open enrolment store that 500 when the new account has no balance yet. See [store.md](store.md) section 5 |
 | `presence` | the waiting room of a land as a `GroupKey` (kind 5, land type, land number), and the GrpJoin that passes through the version gate before the store sees it |
 | `town_hall` | the Town Hall: account texts (34), the system list boxes (37/32) and the Member Services and Accounting forms (37/30). See [services.md](services.md) |
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4). Each message republishes the signed-on player for the phone book |
@@ -181,14 +182,14 @@ DATA frame per client message.
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. It also keeps who is logged in, and drops them on hang-up. See [objects.md](objects.md) |
 | `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
 | `store` | `Store`: accounts, bankrolls, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
-| `assumptions` | the INFERRED values the replies encode, each naming its section of `messages.md` |
+| `assumptions` | values the client does not pin down, each naming its section of `messages.md`. A name ending `_ASSUMED` is an inference; `MONEY_STARTING_BALANCE` is an operator choice |
 
 What the host answers (`docs/protocol/messages.md` for the layouts):
 
 | Client sends | Host replies |
 |---|---|
 | Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A Login on a connection that holds objects first releases them, as a hang-up does. A signup row whose password is still the placeholder adopts the password this Login presents (`SIGNUP_ADOPTS_PRESENTED_PASSWORD_ASSUMED`) |
-| signup (55/1) | Ack 55/1 with the new account number at words 6 and 8, before Login, and the session stays logged out. The form has no password, so the row keeps `SIGNUP_PASSWORD_ASSUMED` until that first Login (`SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED`). Numbers start at `SIGNUP_FIRST_ACCOUNT_ASSUMED`. An explicit signup creates a row even when enrolment is closed (`SIGNUP_CREATES_WHEN_ENROLMENT_IS_CLOSED_ASSUMED`). A store fault sends nothing |
+| signup (55/1) | Ack 55/1 with the new account number at words 6 and 8, before Login, and the session stays logged out. The form has no password, so the row keeps `SIGNUP_PASSWORD_ASSUMED` until that first Login (`SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED`). Numbers start at `SIGNUP_FIRST_ACCOUNT_ASSUMED`. An explicit signup creates a row even when enrolment is closed (`SIGNUP_CREATES_WHEN_ENROLMENT_IS_CLOSED_ASSUMED`). The new account is given 500 CasinoBucks unless that number already has a balance. A store fault sends nothing |
 | 54/27, 54/25, 54/24, 54/26 | The gate launches Shop (`MALL_LAUNCHES_SHOP_ASSUMED`): one 54/19, then 54/17 and a 54/16 kind 1 that says the mall is closed (`MALL_CLOSED_TEXT_ASSUMED`, `MALL_NOTICE_FOLLOWS_JOIN_ASSUMED`). Word 2 of each reply is `MALL_HEADER_SLOT_ASSUMED`. A typed `/EXIT` also gets 54/20 kind `0x1A`. 54/26 gets 54/19 kind `0x1A`. There is no mall back end |
 | 41/0 | `ObjectLocated` with the SID at word 6. Zero means the name is free; the bound object's SID means it is taken. The check does not create the conference. The key is the raw tail (`CONFERENCE_KEY_IS_THE_RAW_TAIL_ASSUMED`) |
 | 49/1, 49/2 | one reply to the requester. `whichCmd` echoes the sub, `toSID` is 0, and `w count` is at byte 4. Sub 1 echoes the account words before the records; sub 2 does not. Each record is `b host, b landType, b landNumber, s persona`. The search is logged-in players. A name matches the persona, and the Login name (`FIND_ALSO_MATCHES_LOGIN_NAME_ASSUMED`); the printed name is the persona. `host` is this world's host number. The land is the player's place only while they still hold a member of that land's waiting room; otherwise both are 0, so the client prints "the Map". Count 0 means not found. Order is connection order (`FIND_RESULTS_IN_CONNECTION_ORDER_ASSUMED`) |
@@ -206,7 +207,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand and CasinoLand, land number 1, on host 7 |
 | 47/1 | occupancy for the same lands: maximum 64, current the number of members in the land's waiting room (0 for a land nobody entered; the room itself holds 128, the size of the stock joinNet) |
 | 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`); the name replaces the account's persona for the session and is not written to the store |
-| 40/3 | the bankroll from the store as `HostMessage::Money`; 1,000,000 (`MONEY_STARTING_BALANCE_ASSUMED`) for an account with no balance yet, and nothing at all when the store fails, so the client keeps its own copy |
+| 40/3 | the bankroll from the store as `HostMessage::Money`; 500 (`MONEY_STARTING_BALANCE`) for an account with no balance yet, and nothing at all when the store fails, so the client keeps its own copy |
 | 40/2 | Ack 40/2 after the bankroll is stored, because the client waits for a reply naming command 40; Nak 40/2 with a text when the store fails |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |

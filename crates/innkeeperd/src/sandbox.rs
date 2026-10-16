@@ -439,8 +439,40 @@ mod tests {
         ] {
             assert!(!allowed.contains(&number), "syscall {number} is allowed");
         }
-        assert!(allowed.contains(&libc::SYS_futex));
+        for number in [
+            libc::SYS_openat,
+            libc::SYS_newfstatat,
+            libc::SYS_ppoll,
+            libc::SYS_epoll_pwait,
+            libc::SYS_dup3,
+            libc::SYS_read,
+            libc::SYS_write,
+            libc::SYS_close,
+            libc::SYS_futex,
+        ] {
+            assert!(allowed.contains(&number), "syscall {number} is missing");
+        }
         assert!(!allowed.contains(&libc::SYS_execve));
+        // x86_64 keeps glibc's legacy names. open, stat and dup2 are on neither list.
+        #[cfg(target_arch = "x86_64")]
+        {
+            for number in [
+                libc::SYS_access,
+                libc::SYS_arch_prctl,
+                libc::SYS_epoll_wait,
+                libc::SYS_mkdir,
+                libc::SYS_poll,
+                libc::SYS_unlink,
+            ] {
+                assert!(allowed.contains(&number), "syscall {number} is missing");
+            }
+            for number in [libc::SYS_open, libc::SYS_stat, libc::SYS_dup2] {
+                assert!(!allowed.contains(&number), "syscall {number} is allowed");
+            }
+            assert_eq!(allowed.len(), 104);
+        }
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(allowed.len(), 98);
         let arch = match std::env::consts::ARCH {
             "x86_64" => seccompiler::TargetArch::x86_64,
             "aarch64" => seccompiler::TargetArch::aarch64,

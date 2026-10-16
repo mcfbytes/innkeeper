@@ -150,7 +150,9 @@ save upload used after the filter was installed, plus `exit`, `exit_group`, `rt_
 allows the legacy names glibc still emits there (`access`, `arch_prctl`, `epoll_wait`, `mkdir`,
 `poll`, `unlink`); aarch64 has no such constants. `readlink`, the `landlock_*` calls and `seccomp`
 ran only while the jail was being built, so they are not allowed afterwards. On x86_64 the
-allowlist is 104 numbers.
+allowlist is 104 numbers. On aarch64 it is the same calls without those six legacy names, 98 numbers.
+`open`, `stat` and `dup2` are on neither list: both architectures allow `openat`, `newfstatat` and
+`dup3`.
 
 ## 6. Debugging
 

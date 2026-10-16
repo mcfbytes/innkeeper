@@ -8,6 +8,7 @@ use crate::assumptions::{
     SIGNUP_FIRST_ACCOUNT_ASSUMED, SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED, SIGNUP_PASSWORD_ASSUMED,
 };
 use crate::message::Command;
+use crate::money::grant_starting_balance;
 use crate::{
     AccountId, AccountRecord, Ack, EncodedPassword, HostMessage, Sid, Signup, StoreError, World,
 };
@@ -40,7 +41,10 @@ fn create(world: &World) -> Result<AccountId, StoreError> {
     for _ in 0..ATTEMPTS {
         let id = next_id(world.store.highest_account_id()?)?;
         match world.store.create_account(id, record.clone()) {
-            Ok(()) => return Ok(id),
+            Ok(()) => {
+                grant_starting_balance(world.store.as_ref(), id)?;
+                return Ok(id);
+            }
             Err(StoreError::AccountExists(_)) => continue,
             Err(error) => return Err(error),
         }
@@ -77,11 +81,13 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::assumptions::{SIGNUP_FIRST_ACCOUNT_ASSUMED, SIGNUP_PASSWORD_ASSUMED};
+    use crate::assumptions::{
+        MONEY_STARTING_BALANCE, SIGNUP_FIRST_ACCOUNT_ASSUMED, SIGNUP_PASSWORD_ASSUMED,
+    };
     use crate::message::Command;
     use crate::{
         AccountBook, AccountId, AccountRecord, ClientMessage, ClientVersion, ConnectionId,
-        EncodedPassword, Enrolment, HostMessage, LandType, Login, MemoryStore, ObjectStore,
+        EncodedPassword, Enrolment, HostMessage, LandType, Login, MemoryStore, Money, ObjectStore,
         PasswordSource, PlayerSession, Sid, Signup, Store, StoreError, World,
     };
 
@@ -148,6 +154,7 @@ mod tests {
         let record = store.account(id).unwrap().unwrap();
         assert_eq!(record.password.0, SIGNUP_PASSWORD_ASSUMED);
         assert_eq!(record.persona, "");
+        assert_eq!(store.money(id).unwrap(), Some(MONEY_STARTING_BALANCE));
 
         let admitted = player.handle(&world, &mut objects, ME, &login(id.0, 9));
         assert!(matches!(
@@ -161,6 +168,18 @@ mod tests {
             refused.first().map(|delivery| &delivery.message),
             Some(HostMessage::Nak(_))
         ));
+    }
+
+    #[test]
+    fn signup_keeps_a_balance_already_stored_for_that_number() {
+        let (world, store) = closed_world();
+        let id = AccountId(SIGNUP_FIRST_ACCOUNT_ASSUMED);
+        store.set_money(id, Money(1_000_000)).unwrap();
+        let mut objects = ObjectStore::new();
+        let mut player = PlayerSession::new();
+        let replies = player.handle(&world, &mut objects, ME, &signup(b""));
+        assert_eq!(ack_id(&replies[0].message), id);
+        assert_eq!(store.money(id).unwrap(), Some(Money(1_000_000)));
     }
 
     #[test]

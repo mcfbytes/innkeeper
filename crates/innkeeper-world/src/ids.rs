@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn money_splits_into_the_words_the_client_sends() {
-        // A live save carried low 0x00F7 and high 0, so 247; a live read the same words.
+        // 247 is a live save. 1_000_000 is the client's own seed (0x000F4240), not the host grant.
         assert_eq!(Money::from_words(0x00F7, 0), Money(247));
         assert_eq!(Money(1_000_000).words(), (0x4240, 0x000F));
         assert_eq!(Money::from_words(0xFFFF, 0xFFFF), Money(0xFFFF_FFFF));

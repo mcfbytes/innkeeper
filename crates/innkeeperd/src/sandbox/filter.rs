@@ -136,7 +136,12 @@ fn unconditional_syscalls() -> Vec<i64> {
         libc::SYS_writev,
     ];
     // glibc on x86_64 still issues these legacy names. aarch64 has no such constants.
-    #[cfg(target_arch = "x86_64")]
+    extend_legacy_syscalls(&mut numbers);
+    numbers
+}
+
+#[cfg(target_arch = "x86_64")]
+fn extend_legacy_syscalls(numbers: &mut Vec<i64>) {
     numbers.extend([
         libc::SYS_access,
         libc::SYS_arch_prctl,
@@ -145,5 +150,7 @@ fn unconditional_syscalls() -> Vec<i64> {
         libc::SYS_poll,
         libc::SYS_unlink,
     ]);
-    numbers
 }
+
+#[cfg(not(target_arch = "x86_64"))]
+fn extend_legacy_syscalls(_numbers: &mut Vec<i64>) {}

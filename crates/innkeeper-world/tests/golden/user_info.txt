@@ -8,4 +8,5 @@
 > read money, as seen live | 28 03 05 01 01 00 01 00
 > save money, 247 | 28 02 05 01 01 00 01 00 f7 00 00 00
 < money reply, 247 | 28 03 05 01 01 00 01 00 f7 00 00 00
-< money reply, the starting 1,000,000 | 28 03 05 01 01 00 01 00 40 42 0f 00
+< money reply, the starting 500 | 28 03 05 01 01 00 01 00 f4 01 00 00
+< money reply, 1,000,000 | 28 03 05 01 01 00 01 00 40 42 0f 00

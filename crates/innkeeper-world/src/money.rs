@@ -6,8 +6,11 @@
 
 use tracing::{info, warn};
 
-use crate::assumptions::MONEY_STARTING_BALANCE_ASSUMED;
-use crate::{Account, Ack, HostMessage, MoneyReply, Nak, ReadMoney, SaveMoney, World};
+use crate::assumptions::MONEY_STARTING_BALANCE;
+use crate::{
+    Account, AccountId, Ack, HostMessage, MoneyReply, Nak, ReadMoney, SaveMoney, Store, StoreError,
+    World,
+};
 
 /// The `whichCmd` and `whichSub` the client's save waits for, as an Ack or a Nak (`proc_14`).
 const MONEY_SAVED: (u8, u8) = (40, 2);
@@ -18,7 +21,7 @@ const MONEY_SAVED: (u8, u8) = (40, 2);
 pub(crate) fn read(world: &World, account: &Account, request: ReadMoney) -> Vec<HostMessage> {
     let amount = match world.store.money(account.id) {
         Ok(Some(amount)) => amount,
-        Ok(None) => MONEY_STARTING_BALANCE_ASSUMED,
+        Ok(None) => MONEY_STARTING_BALANCE,
         Err(error) => {
             warn!(%error, account = account.id.0, "no reply: the client keeps its own bankroll");
             return Vec::new();
@@ -59,4 +62,13 @@ pub(crate) fn save(world: &World, account: &Account, request: SaveMoney) -> Vec<
             })]
         }
     }
+}
+
+/// Stores the starting CasinoBucks when the account has no balance yet.
+/// A balance already stored, including 0, is left as it is.
+pub(crate) fn grant_starting_balance(store: &dyn Store, id: AccountId) -> Result<(), StoreError> {
+    if store.money(id)?.is_some() {
+        return Ok(());
+    }
+    store.set_money(id, MONEY_STARTING_BALANCE)
 }

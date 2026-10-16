@@ -602,7 +602,7 @@ pub mod conformance {
         store.set_money(ALICE, Money(247)).unwrap();
         assert_eq!(store.money(ALICE).unwrap(), Some(Money(247)));
         assert_eq!(store.money(BOB).unwrap(), None);
-        // A repeated save replaces, and 0 is a balance of its own, not an absent one.
+        // A repeated save replaces. An amount above the start, and 0, are stored as given.
         store.set_money(ALICE, Money(1_000_000)).unwrap();
         assert_eq!(store.money(ALICE).unwrap(), Some(Money(1_000_000)));
         store.set_money(ALICE, Money(0)).unwrap();
