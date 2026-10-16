@@ -69,8 +69,10 @@ full 32 bits (SQLite's `INTEGER` is 64-bit and the values that reach it are `u32
 
 A save has no parent either (like the bankroll): it is a file under an account number. `save_write` hashes the content (SHA-256 hex), numbers the version per file without reusing a number, and trims to three versions with the current one always kept; the rules about what is stored and who wins are the save channel's ([saves.md](saves.md)). The `saves` table is likewise new, created on open, and gets the same in-place upgrade (`a_database_from_before_the_saves_table_gains_it`).
 
-The schema has no version column yet; the first change that alters a table adds one together with its
-migration. The bankroll did not need one: it is a new table, so a database the host wrote before it
+The schema version is SQLite's `user_version`: 1 added `deleted_at` and the sealed audit tables, 2 the
+sign-in tables (`identities`, `identity_accounts`, `sessions`; [privacy.md](privacy.md) section 1;
+`a_version_1_database_gains_the_sign_in_tables`). Those tables are the daemon's own and are not part of the `Store`
+trait. The bankroll did not need a version: it is a new table, so a database the host wrote before it
 existed simply gains it on the next open and keeps every row it had
 (`a_database_from_before_the_bankroll_table_gains_it` in `crates/innkeeperd/src/sqlite_store.rs`).
 
