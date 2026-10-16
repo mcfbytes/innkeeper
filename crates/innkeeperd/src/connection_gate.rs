@@ -48,6 +48,7 @@ pub(crate) fn admit(uri: &Uri, settings: &ConnectionSettings) -> Result<Option<B
         Ok(None) => Err(Refusal::DeadSession),
         Err(error) => {
             tracing::warn!(%error, "the session store failed");
+            crate::metrics::counters().store_error();
             Err(Refusal::StoreFailed)
         }
     }

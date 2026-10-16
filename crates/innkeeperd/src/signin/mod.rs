@@ -173,6 +173,7 @@ impl SignIn {
         };
         check().unwrap_or_else(|error| {
             warn!(%error, "the sign-in store failed; the Login is refused");
+            crate::metrics::counters().store_error();
             false
         })
     }

@@ -224,10 +224,18 @@ impl Admin {
                 &rows,
             )
         };
+        let seen = crate::metrics::counters().totals();
         let status = format!(
-            "<ul><li>{}</li><li>{}</li></ul><p class=\"muted\">The first answers for the players' door through the proxy; the second is this office.</p>",
+            "<ul><li>{}</li><li>{}</li></ul><p class=\"muted\">The first answers for the players' door through the proxy; the second is this office.</p>\
+             <p class=\"muted\">Since the server started: {} logins, {} sign-ins, {} accounts opened, {} refused sockets, {} messages in, {} store errors.</p>",
             link("/healthz", "Players' door: /healthz"),
             link("/admin/healthz", "This office: /admin/healthz"),
+            seen.logins,
+            seen.signins,
+            seen.accounts_created,
+            seen.ws_refused,
+            seen.messages_in,
+            seen.store_errors,
         );
         let body = format!(
             "<div class=\"grid\">{}{}</div>{}",

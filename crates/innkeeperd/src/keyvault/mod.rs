@@ -343,7 +343,7 @@ impl VaultClient {
     }
 }
 
-fn join(base: &Url, path: &str) -> Result<Url, String> {
+pub(crate) fn join(base: &Url, path: &str) -> Result<Url, String> {
     let mut base = base.clone();
     if !base.path().ends_with('/') {
         let with_slash = format!("{}/", base.path());

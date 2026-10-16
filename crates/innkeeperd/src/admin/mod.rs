@@ -397,6 +397,7 @@ impl Admin {
 
     fn unavailable(&self, error: &innkeeper_world::StoreError) -> Reply {
         warn!(%error, "the portal store failed");
+        crate::metrics::counters().store_error();
         html_reply(
             StatusCode::INTERNAL_SERVER_ERROR,
             html::bare_page(
@@ -585,6 +586,7 @@ impl Admin {
             Ok(decision) => decision,
             Err(error) => {
                 warn!(%error, "the portal store failed");
+                crate::metrics::counters().store_error();
                 return self.sign_in_failed();
             }
         };
@@ -612,6 +614,7 @@ impl Admin {
         );
         if let Err(error) = stored {
             warn!(%error, "the portal store failed");
+            crate::metrics::counters().store_error();
             return self.sign_in_failed();
         }
         info!(handle = %keys::handle(key), "portal sign-in");
@@ -761,6 +764,7 @@ impl Admin {
 
     pub(crate) fn failed(&self, req: &Req, error: &innkeeper_world::StoreError) -> Reply {
         warn!(%error, "the portal store failed");
+        crate::metrics::counters().store_error();
         let body = html::narrator(
             html::Tone::Bad,
             "The store could not answer. Nothing was changed that you were told about.",
