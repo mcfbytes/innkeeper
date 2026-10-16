@@ -148,6 +148,8 @@ account window. After that the command reports that the window has closed.
 **`--purge-now`** also requires `--yes`. It hard-deletes what the account owns at once (its mailbox
 and every letter in it or sent by it, its posts other than complaints and Member Services messages,
 its money, its saves and its identity link) and leaves the account row as a tombstone (section 1).
+When it was the identity's last live account, the identity is stamped and its sessions end, as on a
+delete.
 It refuses, even on the dry run, while a hold applies to that account. Sealed connection records,
 complaints it wrote or that name it, and portal audit entries stay and age out on their own clocks.
 

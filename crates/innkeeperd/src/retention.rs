@@ -203,6 +203,14 @@ pub(crate) fn purge_now(
         )
         .map_err(StoreError::backend)?,
     );
+    // A purge of a live account is also its deletion: stamp it first, so an identity left with no
+    // live account is retired and its sessions end, as `disable_account` does, before the link goes.
+    tx.execute(
+        "UPDATE accounts SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![account, now],
+    )
+    .map_err(StoreError::backend)?;
+    disable_identity(&tx, account, now)?;
     let erased = erase_personal_rows(&tx, account)?;
     tx.execute("DELETE FROM mailboxes WHERE account = ?1", [account])
         .map_err(StoreError::backend)?;

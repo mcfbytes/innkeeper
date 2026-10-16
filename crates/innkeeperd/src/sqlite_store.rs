@@ -603,8 +603,10 @@ impl Store for SqliteStore {
         require_live(&connection, id)?;
         connection
             .execute(
-                "INSERT INTO mailboxes (account, created_at) VALUES (?1, ?2)
-                 ON CONFLICT (account) DO NOTHING",
+                // Not `ON CONFLICT DO NOTHING`: a refused AUTOINCREMENT insert still spends a
+                // number, and a player sees the box number.
+                "INSERT INTO mailboxes (account, created_at) SELECT ?1, ?2
+                 WHERE NOT EXISTS (SELECT 1 FROM mailboxes WHERE account = ?1)",
                 params![id.0, dates::now_ms()],
             )
             .map_err(backend)?;

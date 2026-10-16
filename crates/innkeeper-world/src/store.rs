@@ -766,9 +766,12 @@ pub mod conformance {
     fn mailbox_numbers_are_per_account(store: &dyn Store) {
         two_accounts(store);
         let alice = store.assign_mailbox(ALICE).unwrap();
-        let bob = store.assign_mailbox(BOB).unwrap();
-        assert_ne!(alice, bob);
-        assert_eq!(store.assign_mailbox(ALICE).unwrap(), alice);
+        assert_eq!(alice, MailboxNumber(1), "numbers count from 1");
+        for _ in 0..3 {
+            assert_eq!(store.assign_mailbox(ALICE).unwrap(), alice);
+        }
+        // Asking again for a box an account has uses up no number.
+        assert_eq!(store.assign_mailbox(BOB).unwrap(), MailboxNumber(2));
     }
 
     fn letters_keep_order_and_isolation(store: &dyn Store) {

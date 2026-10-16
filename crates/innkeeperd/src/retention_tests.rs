@@ -554,6 +554,30 @@ fn deleting_the_last_account_retires_the_identity_and_ends_its_sessions() {
 }
 
 #[test]
+fn purging_a_live_account_now_retires_its_identity_and_ends_its_sessions() {
+    let store = memory();
+    let now = dates::now_ms();
+    add_account(&store, 1, "one");
+    add_identity(&store, 1, Some(1), now);
+    add_session(&store, 1, 1, Some(1), now + DAY);
+    assert!(matches!(
+        purge_now(&store, 1, now).unwrap(),
+        PurgeNow::Done { .. }
+    ));
+    consistent(&store, "purge now");
+    assert_eq!(
+        count(
+            &store,
+            "SELECT COUNT(*) FROM identities WHERE deleted_at IS NULL"
+        ),
+        0
+    );
+    let open = format!("SELECT COUNT(*) FROM sessions WHERE expires_at > {now}");
+    assert_eq!(count(&store, &open), 0, "the session ended with the purge");
+    assert_eq!(count(&store, "SELECT COUNT(*) FROM identity_accounts"), 0);
+}
+
+#[test]
 fn the_admin_audit_is_kept_a_year_unless_a_hold_covers_the_account() {
     let store = memory();
     let now = 1_800_000_000_000;
