@@ -234,23 +234,34 @@ The same engine extended to `FATES.EXE` and `TWGENN.EXE`. Diff the binaries and 
   provider identity maps to an account record (`accounts` gains linked identities); the page then hands
   the client its INN id and password (written into the drive's `LSCI.CFG` and password file) so the
   original logon runs unchanged. Local accounts keep working; the provider list is configuration.
-  Design (2026-10-16):
+  The server half is not implemented yet. Design (2026-10-16, PII-free 2026-10-16):
+  - **Scope.** Request only the `openid` scope, never `email` or `profile`. For plain-OAuth providers
+    (Discord), use only the stable user id from the profile response and discard the rest in memory.
   - `innkeeperd` is an OIDC relying party (the `openidconnect` crate, MIT/Apache) with its own HTTP
-    endpoints (`/auth/login`, `/auth/callback`, `/auth/logout`) next to the WebSocket. Providers with
-    plain OAuth 2.0 only (Discord) use their profile endpoint. An identity broker (Keycloak, Authentik,
-    Auth0) can stand in for the provider list as one issuer.
-  - A new `identities` table maps (issuer, subject) to an account; first sign-in creates the account,
-    and one identity may own several accounts (personas).
+    endpoints (`/auth/login`, `/auth/callback`, `/auth/logout`) next to the WebSocket. An identity
+    broker (Keycloak, Authentik, Auth0) can stand in for the provider list as one issuer.
+  - **Identity key.** The `identities` table stores `identity_key = HMAC-SHA256(server_secret, issuer
+    || 0x00 || subject)`. The raw `sub` is never stored. The secret is configuration, outside the
+    database. Rotating the secret orphans every linked identity: those players must sign in again and
+    get a new account unless the operator keeps the old secret long enough to re-HMAC. This is
+    pseudonymous, not anonymous: no email, name or profile is kept. First sign-in creates the account;
+    one identity may own several accounts.
+  - **Attestation.** Columns `adult_attested_at` (date) and `terms_version`, set from the page's
+    `attest=<age>+v<version>` login parameter. The session response exposes `{attested: {age, terms}}`
+    and a pseudonymous `handle`, never a name.
+  - **Contract.** The page↔server contract lives in the INN-Decomp repo, `docs/web.md`, section
+    "Sign-in (server contract)".
   - The INN password is weak by design (6 to 10 of A-Z and 0-9, fixed XOR), so it is not the web
     credential: the server generates a random one per account and the page writes it with the account
     number into the browser's `LSCI.CFG` and `PASS_SET.DTA` before the client starts.
-  - **Connection session:** sign-in issues a session token (a `sessions` table: token hash, identity,
-    expiry). The page opens the WebSocket with it; `innkeeperd` binds that connection to the identity
-    and accepts a Login on it only for an account the identity owns. A stolen INN password then opens
-    nothing over the web.
+  - **Connection session:** sign-in issues a session token (a `sessions` table: token hash,
+    `identity_key`, expiry). The page opens the WebSocket with it; `innkeeperd` binds that connection
+    to the identity and accepts a Login on it only for an account the identity owns. A stolen INN
+    password then opens nothing over the web.
   - Enrolment modes (configuration): open (today: an unknown account is created at its first Login),
     web-only (new accounts only through sign-in; TCP clients log on to existing accounts), closed.
-    Account creation is rate-limited per identity and per address.
+    Account creation is rate-limited per identity.
+  - **Public mode.** Public deployments run with `--public` ([privacy.md](server/privacy.md)).
   - Development works on `http://localhost` redirect URIs, which Google, Microsoft and GitHub accept. A
     public host needs HTTPS: a free host subdomain or a tunnel works, and a custom domain becomes useful
     when Google's consent screen leaves testing mode (homepage, privacy policy, verified domain).
