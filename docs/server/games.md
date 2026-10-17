@@ -2,7 +2,8 @@
 
 How `innkeeperd` lets two or more INN clients start a multiplayer game together: SierraLand's own games
 (Stratego, Graffiti, MiniGolf, NTN Trivia, PaintBall, RocketQuiz, SneakATac and the hub's board and card
-games) and Red Baron. The code is `crates/innkeeper-world/src/objects/games.rs` (the model),
+games) and Red Baron. MiniGolf is SierraLand's own LSCI game (`SL/script.779`); 3-D Golf is the DOS program
+`GOLF.EXE` ([golf.md](../protocol/int14h-census/golf.md)). The code is `crates/innkeeper-world/src/objects/games.rs` (the model),
 `objects.rs` (groups, locks, `register`), `presence.rs` (waiting rooms) and `red_baron.rs` (the DOS game's
 service); the byte layouts are in [messages.md](../protocol/messages.md) sections 3.2 and 8. Labels as in
 [yserbius.md](../protocol/yserbius.md): **CONFIRMED** (client code and a live two-client run agree),
@@ -93,10 +94,12 @@ expose both, for tests and for the operator's log. Nothing here is persisted.
    members still in it hear `GrpDel` and `ObjFree`. Command 30 on anything else is only logged.
 4. **A player who leaves or drops** leaves every group it is in: the others get `GrpDel` for each of its
    members, then `ObjFree` for each object that goes with it ([objects.md](objects.md) section 4.2).
-5. **A Send to a game group** goes once to every connection that holds a member, the sender's included
-   (`GROUP_SEND_ECHOES_SENDER_ASSUMED`), with the real sender in `fromSID`. A multicast is one such relay
-   per listed recipient, so Red Baron's `{group, own SID}` list returns the update to its sender
-   (section 6).
+5. **A Send to a game group** goes once to every connection that holds a member, except the sender's
+   (`GROUP_SEND_SKIPS_SENDER_ASSUMED`), with the real sender in `fromSID`. A Send to one of the sender's own
+   objects does reach it. A multicast is one such relay per listed recipient, so Red Baron's `{group, own
+   SID}` list gives the other pilots the group copy and the sender the own-SID copy (section 6). MiniGolf
+   replays its own shots when its copy comes back (section 5.1). The rule holds for every group, not only
+   game groups; the RPG lands skip the sender for any target (`RPG_SENDS_ECHO_SENDER_ASSUMED`).
 6. **Waiting rooms** tell a newcomer who is there (section 2, point 1). Land groups of the RPG titles are
    exempt: DARKSTRT and FATES tell their own roster with game messages and were verified without it.
 
@@ -109,11 +112,44 @@ Nothing beyond sections 3 and 4. Verified live (section 8) against `innkeeperd` 
 |---|---|
 | Stratego | invitation delivered, accepted, both clients load Stratego (the coin toss dialog) |
 | Graffiti | both clients load the paint room |
+| MiniGolf | alone and with two players: the start, the turn barrier and several strokes each (section 5.1) |
 | Red Baron | section 6 |
 
 The others use the same invite rooms (`slInviteRoom` 906 for Stratego, MiniGolf, Graffiti, SneakATac,
 Boogers, NTN Trivia and RocketQuiz; `pbInviteRoom` 907 PaintBall; `WPSinviteRoom` 909) and the same
-group calls, so they need nothing else from the host; only the two above were exercised.
+group calls, so they need nothing else from the host; only the three above were exercised.
+
+### 5.1 MiniGolf (`SL/script.779`)
+
+`GameInfo` "MiniGolf" in `SL/script.001`: script number `0x30B` (779), land type `0x17` (23, the `game` of
+the session), one or two players. A player alone still makes a game group (kind 2, own, size 2) and sends
+to it; with two the group is made for 64. Every message is a `Send` to the game group (`global119`) from
+the player's SID (`global125`), except the barrier answer below. `MiniGolf::handleMsg` queues each command 2
+that is not chat (types 1 and 36) and `proc_161` works the queue; neither compares `fromSID` with the
+player's own SID. CONFIRMED (bytecode; sizes and order from live captures, 2026-10-16).
+
+| Type | Size | Sent by, when | The sender itself | A receiver | What a copy back to the sender does |
+|---|---|---|---|---|---|
+| 23 | 16 | the leader, at the start (`PlayMiniGolfScript` state 2): up to four player SIDs, 0 for none | builds the hole and marks the game started, right after sending | the same, from the list | builds the hole again (INFERRED from code) |
+| 40 | 10 | `aimBox`, when the player aims: the angle | applies it | applies it | nothing (the same value; INFERRED) |
+| 41 | 10 | turn barrier (`proc_160`, `proc_161`), two players or more: 1 to the group by the player on the tee; 2 back to the sender of 1 (`to` = its `fromSID`); 3 to the group by the sender of 1 once its count equals the player count | counts itself (the count starts at 1) and moves its own script on after sending 3 | answers 1 with 2; counts 2; moves on at 3 | the sender of 1 answers its own 1, counts itself twice and sends 3 before the other player has answered; its own 3 moves it on a second time. CONFIRMED live |
+| 42, 43 | array, 12 | `playGameScript`, by the player on the tee (INFERRED): positions on the hole | shows them | shows them | shows them again (INFERRED) |
+| 44 | 32 | the shooter, once its ball stops (`movingScript`): twelve words, the shot and its result, the stroke count and the player number last | has played it | stores it for the replay | see 45 |
+| 45 | 20 | the shooter, after 44: one per event of the shot (`GolfEvent`), then event 99 | nothing more | adds the event to its replay list; event 99 starts the replay (`movingScript`) when the player number is the one on the tee | the shooter replays its own shot; at the end of the replay it is the shooter again, so it sends 44 and its list once more, now with the copies added: one 45 more each time. CONFIRMED live |
+
+So no MiniGolf message wants its own copy, and the host gives none (rule 5). The operator's log of a solo
+round (one 16, then per stroke a 32 and a growing run of 20-byte Sends, the stroke counter rising, then a
+hang-up) is the 44/45 loop. With two players the copies also desynchronise the courses and stop the turns
+(section 8).
+
+The same rule fits every other client that was read, which is why it is not a MiniGolf exception:
+
+| Client | What it does | Status |
+|---|---|---|
+| PaintBall (`SL/script.780`) | `SendMyUpdate::doit` sends the update to the group, then a type 102 `Send` to its own player SID and sets a busy flag; `PaintBall::handleMsg` (`+0x0103`) clears the flag on 102, and `startGame::doit` (`+0x0469`) sends the next update only when it is clear | CONFIRMED code; not run live |
+| GOLF (`GOLF.EXE`) | the `CC` update goes to `{group, own SID}`; `gcOnShot` (image `0x14E9B`) queues every `CB` shot with no test of the sender, so a copy of its own would be queued too (its use not traced) | CONFIRMED code |
+| Red Baron | the `0xC9` update goes to `{group, own SID}` (section 6) | CONFIRMED live |
+| land chat (`script.005` export 2) | drops a line whose `fromSID` is its own | CONFIRMED code; either rule works |
 
 ## 6. Red Baron
 
@@ -132,9 +168,9 @@ Program side ([redbaron.md of the client project](../protocol/int14h-census/redb
 | 36/2 | host time, as for every client | `host_time` |
 | joinNet kind 3, type 101, size 1 | `ObjID` for the player's in-game object | `ObjectStore::join_within` |
 | GrpJoin `group, player` | echo to every member's connection **including the joiner's** | `ObjectStore::join_group` |
-| GrpMem | the member list (land objects and game objects both, in joining order) | `list_members` |
-| Send 0xC8 to the group | to every connection with a member, `fromSID` the real sender | `router::send` |
-| multicast `{group, own SID}` with 0xC9 | one Send per recipient; the own-SID copy is the echo that releases the next update | `router::multicast` |
+| GrpMem | the member list in joining order (in the 2026-10-16 run the pilots' game objects only; the host also lists land objects that join) | `list_members` |
+| Send 0xC8 to the group | to every other pilot's connection, `fromSID` the real sender | `router::send` |
+| multicast `{group, own SID}` with 0xC9 | one Send per recipient: the group copy to the other pilots, the own-SID copy to the sender (the echo that releases the next update) | `router::multicast` |
 | 50 (status 0 playing, 1 leaving) | none; logged | `PlayStatus` |
 | GrpDel, ObjFree, or a hang-up | `GrpDel` to the others, `ObjFree` for the player's object | `ObjectStore::disconnect` |
 
@@ -146,13 +182,14 @@ section 4 exists for this reason).
 
 - `crates/innkeeper-world/tests/games.rs`: byte-exact transcripts with two and three clients: invitation,
   lock conflict, accept, decline, start, the newcomer's roster, relay in the game group, a player
-  dropping mid-game, and the Red Baron program's whole start-up.
-- Live: [section 8](#8-live-results-2026-10-15).
+  dropping mid-game, MiniGolf strokes alone and with two players (bytes of the 2026-10-16 runs), and the Red
+  Baron program's whole start-up.
+- Live: [section 8](#8-live-results).
 
-## 8. Live results (2026-10-15)
+## 8. Live results
 
-Two headless `dosrt` clients (accounts 100001 and 100002, players Ann and Bob, from the public build of the
-client with no lifted code) against `innkeeperd --no-int14h` on a private port:
+2026-10-15. Two headless `dosrt` clients (accounts 100001 and 100002, players Ann and Bob, from the public
+build of the client with no lifted code) against `innkeeperd --no-int14h` on a private port:
 
 | Scenario | Result |
 |---|---|
@@ -161,8 +198,20 @@ client with no lifted code) against `innkeeperd --no-int14h` on a private port:
 | Graffiti: same | both load the paint room |
 | Red Baron: Ann invites, Bob accepts, "Join Line" | both switch to RB.EXE and reach the cockpit ("Time Left 09:08"); pilot state is exchanged |
 
-Not exercised live: MiniGolf, NTN Trivia, PaintBall, RocketQuiz, SneakATac (same invite rooms), three or
-four Red Baron pilots, a pilot dropping mid-flight, Red Baron's return to the land. Scripted live runs of
+2026-10-16, MiniGolf and rule 5. The same setup on private ports with `--capture-dir`. The MiniGolf rows of
+the right-hand column were run with both the client build with lifted code and a build with none; the rest
+with the lifted build. A stroke is a drag of the club in the power bar.
+
+| Scenario | Host before (sender's copy) | Host now (rule 5) |
+|---|---|---|
+| MiniGolf alone, one stroke | the stroke is sent again and again, the run of 20-byte Sends growing by one each time (1 to 6 within the run), the stroke counter in the 44 rising: the operator's report | one type 44 and one type 45 per stroke; four strokes, counter 0 to 3 |
+| MiniGolf, Ann invites Bob, Bob accepts, Ann starts | Ann answers her own barrier 1 and sends 3 before Bob's 2; after one stroke each the two courses show the balls in different places and no further stroke is sent | barrier 1, 2, 3 in order; three strokes each, alternating, one 44 and one 45 each; both screens show the same balls |
+| Stratego start (regression) | both load Stratego, coin toss | the same |
+| Red Baron start (regression) | (2026-10-15 above) | both reach the cockpit (Bob sees Ann's aircraft); both pilots multicast `0xC9` until the run ends (about 370 in all), each update released by its own-SID copy |
+
+Not exercised live: NTN Trivia, PaintBall, RocketQuiz, SneakATac (same invite rooms), the hub's board and
+card games under rule 5, a MiniGolf hole played to the cup, Stratego past the coin toss, three or four Red
+Baron pilots, a pilot dropping mid-flight, Red Baron's return to the land. Scripted live runs of
 two emulated clients are timing sensitive: the processes run at different wall speeds, and one that ends
 its run disconnects, which the other then sees as "just left the room".
 
@@ -173,3 +222,6 @@ its run disconnects, which the other then sees as "just left the room".
 - The meaning of the type 12 words after the game number, and of the multicast type 57 (the guest side
   reads it as cancel or "started without you").
 - Whether the host ever refused a second game on a busy group; no client path reads such a Nak.
+- Whether the original host left out the sender's connection (rule 5) or only the member named in
+  `fromSID`. They differ only for a connection with two members in the group, such as a land player and a
+  DOS game's object; GOLF's `CB` handler (section 5.1) favours leaving out the connection.

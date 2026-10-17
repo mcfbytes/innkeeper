@@ -384,6 +384,8 @@ What innkeeper must do for RB, in order of use:
 - What the host's service object for game type 101 is, and what its properties 9 (`0x0201`) and 0xF (5..30) mean.
 - How the host forms the group: which messages make several land clients share one group SID, and who sets the player count.
 - Whether the host echoes a group `Send` to its sender, and whether a multicast to a group SID also reaches the sender.
+  `innkeeperd` answers no to both and delivers the own-SID entry; RB reaches the cockpit and keeps sending
+  `0xC9` that way (`docs/server/games.md` section 8, 2026-10-16).
 - What 50 (0x32) state 0 and 1 are used for on the host, and whether the host expects a reply.
 - The meaning of parameter bytes `+7`, `+8`, `+9`, `+10` and the score word at `+0x80` after exit.
 - Whether the `(Poll)`/`(Doit)` label swap and the `2841+1` count are bugs or intended.

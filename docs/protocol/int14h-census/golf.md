@@ -333,7 +333,10 @@ Sender and flow:
 sends the next `CC` only while DS:`1AD7` is set, and clears it on each send. DS:`1AD7` starts at 1. A host that does
 not deliver a multicast copy to the sender stops the position updates after the first one. Also, `gcOnPlayerInfo`
 ignores a `CA` from its own SID and every `CA` after the join, so a Send to the group may or may not echo to the sender (INFERRED: the explicit own SID in the
-multicast suggests it does not).
+multicast suggests it does not). `gcOnShot` has no such test: it queues every `CB` it receives, its own included
+(CONFIRMED, image `0x14E9B`), so a copy of its own shot would be queued like another player's (what the game loop then
+does with it was not traced). `innkeeperd` does not return
+a group `Send` to its sender (`docs/server/games.md` section 4, rule 5).
 
 ### 7.2 Handshake (`gcJoinGame`, image `0x157EC`)
 
@@ -381,7 +384,7 @@ The list assumes the INT 14h transport (`int14h-transport.md`) or the link layer
 | 3 | Treat the group SID from the shared block (+4) as an existing group; on GrpAdd add the member and send a GrpAdd event (`group`, `who`) to **every member including the joiner**, within 120 s | step 2 needs the joiner's own event | CONFIRMED |
 | 4 | Answer GrpMem with the current member SIDs from +6 | step 3; the answer must come within 120 s | CONFIRMED |
 | 5 | Deliver later GrpAdd events from other players | step 4 waits for the expected count | CONFIRMED |
-| 6 | Relay Send to a SID or group SID unchanged (bytes 6 onward), setting `to` and `from`; never interpret game state | all four peer types | CONFIRMED relay; "never interprets" INFERRED |
+| 6 | Relay Send to a SID or group SID unchanged (bytes 6 onward), setting `to` and `from`; never interpret game state. A group copy does not go back to the sender (7.1) | all four peer types | CONFIRMED relay; "never interprets" and the sender rule INFERRED |
 | 7 | Split multicast `1C` into one Send per recipient SID (group SID expands to its members) and **deliver the sender's own copy** when its SID is listed | echo rule, section 7.1 | CONFIRMED |
 | 8 | Broadcast GrpDel to the remaining members when a player leaves (cmd 11, or the object dies with the connection) | departures, section 7.3 | CONFIRMED handler |
 | 9 | Accept GrpDel (11) and leaveNet (9) at exit without a reply; tolerate that the land frees the same group afterwards | exit | CONFIRMED sends; INFERRED tolerance |
@@ -409,8 +412,8 @@ table is for their censuses to confirm.
 
 ## 11. Open questions
 
-- Does the host echo a Send to a group SID back to the sender? GOLF drops its own `CA` and relies on an explicit
-  own SID in the `CC` multicast.
+- Does the host echo a Send to a group SID back to the sender? GOLF drops its own `CA`, would queue its own `CB`,
+  and relies on an explicit own SID in the `CC` multicast. `innkeeperd` does not echo (`docs/server/games.md` 5.1).
 - What the land does with the result word at +0x80, and whether it expects the +4 word to be left alone.
 - Meaning of launch bytes 0..3, 5, 6, 7 and of the `CA`/`CB`/`CC` fields beyond the structure above; the game-state
   variables behind DS:`4A58`, `4A5A`, `4A6A`, `75E8`, `7530` were not traced.
