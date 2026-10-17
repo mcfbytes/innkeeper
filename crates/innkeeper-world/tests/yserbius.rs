@@ -1,4 +1,4 @@
-//! Yserbius and Twinion transcripts: DARKSTRT's join sequence, two players meeting on a map and in a
+//! Yserbius, Twinion and Cawdor transcripts: DARKSTRT's join sequence, two players on a map and in a
 //! party, the version gate, and the bulletin board. Bytes from docs/protocol/int14h-census/yserbius.md
 //! sections 4 and 5 and twinion.md section 4; the line syntax is in common/mod.rs.
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)] // test helpers may abort
@@ -164,6 +164,82 @@ fn twinion_maps_of_the_same_number_are_other_groups() {
     assert_eq!(table.objects.member_count(map(8)), 0);
 }
 
+/// C follows A into Cawdor (land type 6, GrpJoin 1.1.5). Map 5 is a different group from A's.
+const C_ENTERS_CAWDOR: &str = "
+    C > login | {login}
+    C < login ack | {login ack}
+    C > joinNet player | 07 00 00 00 00 03 01 8b ff ff 01 00
+    C < player SID | 08 00 00 03 00 00 04 01
+    C > 41/2 service lookup | 29 02 00 00 04 01 8b 00 00
+    C < service located | 29 00 04 01 00 00 8b 00
+    C > joinNet land 6 place 1 | 07 03 00 00 04 01 05 06 01 00 64 00
+    C < Cawdor's land group | 08 00 04 01 00 00 05 01
+    C > GrpJoin land v1.1.5 | 0a 03 05 01 04 01 01 01 05
+    C < joined | 0a 00 05 01 04 01
+    C > joinNet personal party | 07 00 00 00 04 01 04 8b fd ff 04 00
+    C < own party | 08 00 04 01 00 00 06 01
+    C > GrpJoin party | 0a 00 06 01 04 01
+    C < joined | 0a 00 06 01 04 01
+    C > joinNet map 5 | 07 00 00 00 04 01 02 8b 05 00 50 00
+    C < Cawdor's map group | 08 00 04 01 00 00 07 01
+    C > GrpJoin map | 0a 00 07 01 04 01
+    C < joined | 0a 00 07 01 04 01
+    C > 207 chat to the land | 02 00 05 01 04 01 cf 53 69 72 00 00 00 00 00 00 00 00 68 69 00
+";
+
+#[test]
+fn cawdor_joins_land_6_at_1_1_5_and_keeps_its_own_map_and_party() {
+    let mut table = Table::new();
+    table.run(&script(&[A_ENTERS_MAP_5, C_ENTERS_CAWDOR]));
+    let map = |land_type| GroupKey {
+        kind: ObjectKind::Group,
+        land_type: LandType(0x8B),
+        parameter: 5,
+        within: Some(Place {
+            land_type: LandType(land_type),
+            land_number: 1,
+        }),
+    };
+    assert_eq!(table.objects.member_count(map(4)), 1);
+    assert_eq!(table.objects.member_count(map(6)), 1);
+    assert_eq!(table.objects.member_count(map(8)), 0);
+}
+
+#[test]
+fn cawdor_version_1_1_5_is_refused_on_yserbius_and_twinion() {
+    let refused = |land_type: &str| {
+        format!(
+            "
+        B > login | {{login}}
+        B < login ack | {{login ack}}
+        B > joinNet player | 07 00 00 00 00 02 01 8b ff ff 01 00
+        B < player SID | 08 00 00 02 00 00 00 01
+        B > joinNet land {land_type} place 1 | 07 03 00 00 00 01 05 {land_type} 01 00 64 00
+        B < the land group | 08 00 00 01 00 00 01 01
+        B > GrpJoin land v1.1.5 | 0a 03 01 01 00 01 01 01 05
+        B < Nak 10, Incompatible Land Version | 01 00 01 01 0a 06 00 00 00
+        "
+        )
+    };
+    Table::new().run(&refused("04"));
+    Table::new().run(&refused("08"));
+}
+
+#[test]
+fn twinion_version_1_0_22_is_refused_on_cawdor() {
+    let wrong = "
+        B > login | {login}
+        B < login ack | {login ack}
+        B > joinNet player | 07 00 00 00 00 02 01 8b ff ff 01 00
+        B < player SID | 08 00 00 02 00 00 00 01
+        B > joinNet land 6 place 1 | 07 03 00 00 00 01 05 06 01 00 64 00
+        B < the land group | 08 00 00 01 00 00 01 01
+        B > GrpJoin land v1.0.22 | 0a 03 01 01 00 01 01 00 16
+        B < Nak 10, Incompatible Land Version | 01 00 01 01 0a 06 00 00 00
+    ";
+    Table::new().run(wrong);
+}
+
 #[test]
 fn a_land_join_with_another_titles_version_gets_code_6() {
     let wrong = "
@@ -224,6 +300,20 @@ fn another_player_reads_the_post_and_twinion_does_not_see_it() {
 }
 
 #[test]
+fn cawdor_does_not_see_a_yserbius_post() {
+    let steps = "
+        A > 27/0 post | 1b 00 59 00 00 01 01 00 53 69 72 7c 68 69 00
+        C > login | {login}
+        C < login ack | {login ack}
+        C > joinNet land 6 place 1 | 07 03 00 00 00 03 05 06 01 00 64 00
+        C < Cawdor's land group | 08 00 00 03 00 00 04 01
+        C > 27/13 tavern directory | 1b 0d 00 00 00 03 59 00
+        C < an empty board | 1b 0d 01 00 00 03 59 00 01 00 00 59 00 01 00 00 00 00 00 00 00 00 00 00 00 54 61 76 65 72 6e 5f 50 6f 73 74 73 00
+    ";
+    Table::new().run(&script(&[A_ENTERS_MAP_5, steps]));
+}
+
+#[test]
 fn an_unknown_location_has_no_boards_and_a_request_outside_a_land_is_offline() {
     let steps = "
         A > 27/13 unknown location | 1b 0d 00 00 00 01 22 00
@@ -250,7 +340,7 @@ fn a_privileged_reader_gets_the_text_four_bytes_later() {
         A > 27/1 message 1 | 1b 01 59 00 00 01 01 00 01 00
         A < four more bytes | 1b 01 59 00 00 01 01 00 01 00 00 c0 00 00 00 00 00 00 00 00 00 00 53 69 72 7c 68 69 00
     ";
-    let privileged_ack = "00 00 00 00 16 04 00 00 8f 00";
+    let privileged_ack = "00 00 00 00 16 04 00 00 af 00";
     let script = script(&[A_ENTERS_MAP_5, steps]).replacen("{login ack}", privileged_ack, 1);
     table.run(&script);
 }

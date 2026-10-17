@@ -1,5 +1,5 @@
-//! The RPG titles (Yserbius, Twinion): their lands, the service lookup and map groups per place.
-//! What the clients need and how it was established: docs/protocol/yserbius.md.
+//! The RPG titles (Yserbius, Twinion, Cawdor): their lands, the service lookup and map groups per place.
+//! What the clients need and how it was established: docs/protocol/yserbius.md and cawdor.md.
 
 use tracing::info;
 
@@ -12,7 +12,7 @@ use crate::{
     ObjectLocated, ObjectStore, Place,
 };
 
-/// The land type of every player object, map group and party both titles create.
+/// The land type of every player object, map group and party the RPG titles create.
 pub(crate) const RPG_OBJECT_LAND_TYPE: LandType = LandType(0x8B);
 
 /// One title: the land `LAND.CFG` gives it and what its game program sends.
@@ -27,11 +27,17 @@ pub(crate) struct RpgTitle {
     pub(crate) land_capacity: u8,
 }
 
-pub(crate) const RPG_TITLES: [RpgTitle; 2] = [
+pub(crate) const RPG_TITLES: [RpgTitle; 3] = [
     RpgTitle {
         land_type: LandType(4),
         description: "Yserbius",
         client_version: ClientVersion::new(1, 1, 7),
+        land_capacity: 100,
+    },
+    RpgTitle {
+        land_type: LandType(6),
+        description: "Cawdor",
+        client_version: ClientVersion::new(1, 1, 5),
         land_capacity: 100,
     },
     RpgTitle {
@@ -144,7 +150,12 @@ mod tests {
     fn a_title_land_admits_its_own_client_version_only() {
         assert!(admits(LandType(4), ClientVersion::new(1, 1, 7)));
         assert!(!admits(LandType(4), ClientVersion::new(1, 0, 22)));
+        assert!(!admits(LandType(4), ClientVersion::new(1, 1, 5)));
+        assert!(admits(LandType(6), ClientVersion::new(1, 1, 5)));
+        assert!(!admits(LandType(6), ClientVersion::new(1, 0, 22)));
+        assert!(!admits(LandType(6), ClientVersion::new(1, 1, 7)));
         assert!(admits(LandType(8), ClientVersion::new(1, 0, 22)));
+        assert!(!admits(LandType(8), ClientVersion::new(1, 1, 5)));
         assert!(admits(LandType(1), ClientVersion::new(2, 3, 18)));
     }
 
@@ -152,6 +163,8 @@ mod tests {
     fn only_sends_to_rpg_objects_skip_the_sender() {
         assert!(!echoes_sender(Some(RPG_OBJECT_LAND_TYPE)));
         assert!(!echoes_sender(Some(LandType(4))));
+        assert!(!echoes_sender(Some(LandType(6))));
+        assert!(!echoes_sender(Some(LandType(8))));
         assert!(echoes_sender(Some(LandType(0x66))));
         assert!(echoes_sender(None));
     }

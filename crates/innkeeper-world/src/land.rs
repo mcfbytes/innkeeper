@@ -70,7 +70,7 @@ impl Land {
 }
 
 impl LandCatalog {
-    /// Every land of the stock `LAND.CFG`: the three LSCI lands, then Yserbius and Twinion.
+    /// Every land of the stock `LAND.CFG`: the three LSCI lands, then the RPG titles.
     pub fn stock() -> Self {
         let mut catalog = LandCatalog::lsci();
         catalog.lands.extend(RPG_TITLES.iter().map(Land::of_title));
@@ -176,7 +176,22 @@ mod tests {
     fn directory_and_occupancy_list_every_land_on_this_host() {
         let table = LandCatalog::stock();
         let directory = table.directory(HostNumber(7));
-        assert_eq!(directory.lands.len(), 5);
+        let names: Vec<_> = directory
+            .lands
+            .iter()
+            .map(|land| land.description.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "Clubhouse",
+                "SierraLand",
+                "CasinoLand",
+                "Yserbius",
+                "Cawdor",
+                "Twinion"
+            ]
+        );
         assert!(directory
             .lands
             .iter()
@@ -185,10 +200,12 @@ mod tests {
         assert_eq!(occupancy[0].land_type, LandType(1));
         assert_eq!(occupancy[0].maximum, 64);
         assert!(occupancy.iter().all(|row| row.current == 0));
-        assert!(table.runs(LandType(3)) && table.runs(LandType(4)));
+        assert!(table.runs(LandType(3)) && table.runs(LandType(4)) && table.runs(LandType(6)));
         assert!(!table.runs(LandType(0x8B)));
         assert_eq!(occupancy[3].maximum, 100);
-        assert_eq!(table.rights(), 0x008F);
+        assert_eq!(occupancy[4].land_type, LandType(6));
+        assert_eq!(occupancy[4].maximum, 100);
+        assert_eq!(table.rights(), 0x00AF);
         assert_eq!(LandCatalog::lsci().rights(), 0x0007);
     }
 }

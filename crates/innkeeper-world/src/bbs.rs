@@ -336,7 +336,7 @@ impl Boards<'_> {
         self.world.store.posts(self.board_id(board))
     }
 
-    /// The land type in the top byte keeps Yserbius and Twinion boards of one location apart.
+    /// The land type in the top byte keeps each RPG title's boards of one location apart.
     fn board_id(&self, board: BoardRef) -> BoardId {
         match is_topic_board(board) {
             true => board_id(LandType(0), board),
