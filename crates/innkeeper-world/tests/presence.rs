@@ -14,8 +14,8 @@ use innkeeper_world::{
 
 const CLUBHOUSE: LandType = LandType(1);
 const OCCUPANCY_REQUEST: &str = "2f 01 00 00 00 00";
-/// The 47/1 header: two unread words, then the row count 6.
-const OCCUPANCY_HEADER: &str = "2f 01 00 00 00 00 00 00 00 00 06 00";
+/// The 47/1 header: two unread words, then the row count 7.
+const OCCUPANCY_HEADER: &str = "2f 01 00 00 00 00 00 00 00 00 07 00";
 const WAITING_ROOM_SIZE: u64 = 128;
 const WAITING_ROOM: GroupKey = GroupKey {
     kind: ObjectKind::LandGroup,
@@ -31,17 +31,19 @@ fn hex(text: &str) -> Vec<u8> {
         .collect()
 }
 
-/// The 47/1 reply: the three LSCI lands with maximum 64, the Clubhouse holding `clubhouse` players,
-/// then Yserbius, Cawdor and Twinion with maximum 100.
-fn occupancy(clubhouse: u8) -> String {
-    let lsci = format!("07 01 01 40 {clubhouse:02x} 07 02 01 40 00 07 03 01 40 00");
+/// The 47/1 reply: Clubhouse, SierraLand, CasinoLand and the Arena at maximum 64 (the Clubhouse
+/// holding `clubhouse` players, the Arena holding `arena`), then the three RPG titles at 100.
+fn occupancy(clubhouse: u8, arena: u8) -> String {
+    let lsci = format!(
+        "07 01 01 40 {clubhouse:02x} 07 02 01 40 00 07 03 01 40 00 07 05 01 40 {arena:02x}"
+    );
     let rows = format!("{lsci} 07 04 01 64 00 07 06 01 64 00 07 08 01 64 00");
     format!("{OCCUPANCY_HEADER} {rows}")
 }
 
 /// `who` asks for the land occupancy and is told `clubhouse` players are in the Clubhouse.
 fn occupancy_is(who: char, clubhouse: u8) -> String {
-    let reply = occupancy(clubhouse);
+    let reply = occupancy(clubhouse, 0);
     format!("{who} > land occupancy | {OCCUPANCY_REQUEST}\n{who} < {clubhouse} present | {reply}")
 }
 
@@ -57,6 +59,40 @@ fn log_in_and_join_player(who: char, player: u8) -> String {
         {who} < object id | 08 00 c0 01 00 00 01 01
         "
     )
+}
+
+/// Arena login is land type 5 at the game object's version 1.4.46, then the kind-5 waiting room.
+const ARENA_LOGIN: &str =
+    "35 00 00 00 05 01 04 2e a1 86 01 00 01 1d 7a 01 66 16 66 18 73 03 00 00 \
+                           67 75 79 62 72 75 73 68 00";
+
+#[test]
+fn an_arena_client_at_1_4_46_logs_in_and_enters_the_waiting_room() {
+    let mut table = Table::new();
+    let present = occupancy(0, 1);
+    table.run(&format!(
+        "
+        A > arena login 1.4.46 | {ARENA_LOGIN}
+        A < login ack | {{login ack}}
+        A > join player | 07 00 00 00 8c 09 01 05 ff ff 1e 00
+        A < object id | 08 00 8c 09 00 00 00 01
+        A > join arena waiting room | 07 00 00 00 c0 01 05 05 01 00 80 00
+        A < object id | 08 00 c0 01 00 00 01 01
+        A > add player, version 1.4.46 | 0a 00 01 01 00 01 01 04 2e
+        A < group joined | 0a 00 01 01 00 01
+        A > land occupancy | {OCCUPANCY_REQUEST}
+        A < one player in the arena | {present}
+        "
+    ));
+    assert_eq!(
+        table.objects.member_count(GroupKey {
+            kind: ObjectKind::LandGroup,
+            land_type: LandType(5),
+            parameter: 1,
+            within: None,
+        }),
+        1
+    );
 }
 
 #[test]

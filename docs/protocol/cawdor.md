@@ -38,8 +38,8 @@ stamp 2). A land GrpJoin is admitted only when the three version bytes are that 
 Nak 10 code 6.
 
 The login Ack's `rating` word has one bit per catalog land, bit `landType − 1`. Type 6 is bit 5
-(`0x20`). An account whose stored rating is 0 therefore logs in with `0x00AF` (types 1, 2, 3, 4, 6
-and 8) rather than the old `0x008F`.
+(`0x20`). An account whose stored rating is 0 logs in with `0x00BF` (types 1, 2, 3, 4, 5, 6 and 8).
+Type 5, the Arena, is the bit that takes the word from the six-land `0x00AF` to `0x00BF`.
 
 Everything else is the Twinion path. The 41/2 lookup of type `0x8B` still returns `Sid(0x008B)`.
 17/2 is absorbed. A map group (kind 2, type `0x8B`) is shared inside the place the land joinNet

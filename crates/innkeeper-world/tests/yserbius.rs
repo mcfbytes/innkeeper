@@ -340,7 +340,7 @@ fn a_privileged_reader_gets_the_text_four_bytes_later() {
         A > 27/1 message 1 | 1b 01 59 00 00 01 01 00 01 00
         A < four more bytes | 1b 01 59 00 00 01 01 00 01 00 00 c0 00 00 00 00 00 00 00 00 00 00 53 69 72 7c 68 69 00
     ";
-    let privileged_ack = "00 00 00 00 16 04 00 00 af 00";
+    let privileged_ack = "00 00 00 00 16 04 00 00 bf 00";
     let script = script(&[A_ENTERS_MAP_5, steps]).replacen("{login ack}", privileged_ack, 1);
     table.run(&script);
 }
