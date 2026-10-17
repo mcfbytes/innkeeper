@@ -1,7 +1,9 @@
 //! Host behaviour the original client does not pin down; each names its section in
 //! docs/protocol/messages.md.
 
-use crate::{ClientVersion, LandFlags, LoginNakReason, MailboxNumber, Money, ObjectKind, Sid};
+use crate::{
+    ClientVersion, LandFlags, LoginNakReason, MailboxNumber, Money, ObjectKind, Sid, Stamp,
+};
 
 /// The version range of a land directory row (section 6); a range this wide admits every client.
 pub(crate) const ANY_VERSION_MIN_ASSUMED: ClientVersion = ClientVersion::new(0, 0, 0);
@@ -25,10 +27,13 @@ pub(crate) const NOTICE_UNREAD_BYTE_ASSUMED: u8 = 0;
 /// This constant exists to document the assumption; its value is true and not used in code.
 #[allow(dead_code)]
 pub(crate) const HOST_TIME_ZONE_UTC_ASSUMED: bool = true;
-/// The host keeps the client's LAND.CFG / GAMEINFO.CFG; it answers with the client's own
-/// stamp, which the client takes as current (messages.md 3.3 and 4.2).
+/// The host keeps the client's LAND.CFG; 36/7 answers with the client's own stamp, which the
+/// client takes as current (messages.md 3.3 and 4.2). GAMEINFO.CFG is this host's table.
 #[allow(dead_code)]
 pub(crate) const CLIENT_CONFIG_FILES_KEPT_ASSUMED: bool = true;
+/// The stamp written into `gameinfo.tim`. A fresh client sends 0, so 1 makes the first 36/8
+/// carry the file (messages.md 3.3). The original host's stamp is unknown.
+pub(crate) const GAME_INFO_STAMP_ASSUMED: Stamp = Stamp(1);
 /// A Login for a land type the catalog lacks gets this Nak reason: only 9 is special to the client,
 /// every other value shows error 100 + reason (section 4.2).
 pub(crate) const UNLISTED_LAND_NAK_ASSUMED: LoginNakReason = LoginNakReason::UnlistedLand;

@@ -7,6 +7,7 @@ mod assumptions;
 mod bbs;
 mod conference;
 mod error;
+mod game_info;
 mod hint_board;
 mod host_time;
 mod ids;
