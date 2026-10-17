@@ -6,7 +6,7 @@ use crate::message::{
     HintRequest, InvokeMethod, LockRequest, MailRequest, MailboxRequest, MallRequest, Multicast,
     ObjExists, ObjFreeList, ObjNewList, ObjectKind, PlayStatus, PropertyRequest, ReadMoney,
     SaveMoney, SendMessage, ServicePropertyRequest, SetInt, SetPersona, SetStr, Signup,
-    Unexplained, UserFind,
+    TriviaRequest, Unexplained, UserFind, NTN_SERVER,
 };
 use crate::{AccountId, ClientVersion, Cookie, LandType, MessageError, Sid, Stamp};
 
@@ -47,8 +47,10 @@ pub enum ClientMessage {
     ServiceProperties(ServicePropertyRequest),
     /// Red Baron and GOLF tell the host a player started or stopped playing (50).
     PlayStatus(PlayStatus),
-    /// Shoppers Advantage (54).
+    /// Shoppers Advantage (54, server word 5).
     Mall(MallRequest),
+    /// NTN Trivia (54, server word 4).
+    Trivia(TriviaRequest),
     /// Online signup (55/1). Sent before Login.
     Signup(Signup),
     /// PaintBall `placeMen`: create `count` objects (51/0).
@@ -220,7 +222,7 @@ impl ClientMessage {
                 ClientMessage::ServiceProperties(ServicePropertyRequest::parse(&mut reader)?)
             }
             Command::PlayStatus => ClientMessage::PlayStatus(PlayStatus::parse(&mut reader)?),
-            Command::Mall => ClientMessage::Mall(MallRequest::parse(&mut reader)?),
+            Command::Mall => parse_pms(&mut reader)?,
             Command::Signup => ClientMessage::Signup(Signup::parse(&mut reader)?),
             Command::ObjNewList => ClientMessage::ObjNewList(ObjNewList::parse(&mut reader)?),
             Command::ObjFreeList => ClientMessage::ObjFreeList(ObjFreeList::parse(&mut reader)?),
@@ -284,6 +286,7 @@ impl ClientMessage {
             ClientMessage::ServiceProperties(request) => request.write(&mut writer),
             ClientMessage::PlayStatus(status) => status.write(&mut writer),
             ClientMessage::Mall(request) => request.write(&mut writer),
+            ClientMessage::Trivia(request) => request.write(&mut writer),
             ClientMessage::Signup(signup) => signup.write(&mut writer),
             ClientMessage::ObjNewList(list) => list.write(&mut writer),
             ClientMessage::ObjFreeList(list) => list.write(&mut writer),
@@ -326,6 +329,7 @@ impl ClientMessage {
             ClientMessage::ServiceProperties(_) => "ServiceProperties",
             ClientMessage::PlayStatus(_) => "PlayStatus",
             ClientMessage::Mall(_) => "Mall",
+            ClientMessage::Trivia(_) => "Trivia",
             ClientMessage::Signup(_) => "Signup",
             ClientMessage::ObjNewList(_) => "ObjNewList",
             ClientMessage::ObjFreeList(_) => "ObjFreeList",
@@ -508,6 +512,16 @@ impl HostInfoRequest {
                 write_stamp(writer.byte(GAME_INFO_FILE), stamp);
             }
         }
+    }
+}
+
+/// Command 54 is two services. The server word selects which: 4 is NTN, anything else is the mall.
+fn parse_pms(reader: &mut WireReader) -> Result<ClientMessage, MessageError> {
+    // Sub-command, then the server word. Mall frames keep their own parser.
+    let trivia = reader.peek_word(1) == Some(NTN_SERVER);
+    match trivia {
+        true => Ok(ClientMessage::Trivia(TriviaRequest::parse(reader)?)),
+        false => Ok(ClientMessage::Mall(MallRequest::parse(reader)?)),
     }
 }
 

@@ -639,6 +639,8 @@ pub mod conformance {
     }
 
     /// Writes through one handle, drops it, and expects a handle from `reopen` to see everything.
+    /// The daemon's sqlite tests are the caller; this crate's own suite never opens a file.
+    #[allow(dead_code)]
     pub fn run_persistence<S: Store>(reopen: impl Fn() -> S) {
         let (mailbox, letter) = {
             let store = reopen();

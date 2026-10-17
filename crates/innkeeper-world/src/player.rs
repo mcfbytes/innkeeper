@@ -167,6 +167,10 @@ impl PlayerSession {
             ClientMessage::Mall(ref request) => {
                 self.when_logged_in(|_| reply(mall::answer(request)))
             }
+            ClientMessage::Trivia(_) => {
+                info!(message = %self.log.debug(message), "decoded, no handler yet: ignored");
+                Vec::new()
+            }
             ClientMessage::ObjNewList(ref request) => self.when_logged_in(|_| {
                 reply(vec![object_list::created(objects, connection, request)])
             }),

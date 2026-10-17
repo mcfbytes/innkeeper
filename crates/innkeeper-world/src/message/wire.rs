@@ -64,6 +64,15 @@ impl<'a> WireReader<'a> {
         self.rest.len()
     }
 
+    /// The word at `offset` in the unread tail, without consuming it.
+    pub(crate) fn peek_word(&self, offset: usize) -> Option<u16> {
+        let tail = self.rest.get(offset..)?;
+        let bytes = tail.get(..2)?;
+        let low = bytes.first().copied()?;
+        let high = bytes.get(1).copied()?;
+        Some(u16::from_le_bytes([low, high]))
+    }
+
     pub(crate) fn finish(self) -> Result<(), MessageError> {
         match self.rest.len() {
             0 => Ok(()),
