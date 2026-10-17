@@ -358,6 +358,11 @@ fn answer_host_info(world: &World, request: HostInfoRequest) -> Vec<HostMessage>
             info!(request = %world.log.debug(&request), "no reply: the client keeps what it has");
             Vec::new()
         }
+        // Six-byte stamp echo: the client keeps its file (CLIENT_CONFIG_FILES_KEPT_ASSUMED).
+        HostInfoRequest::LandConfigFile { stamp } => {
+            vec![HostMessage::LandConfigFile { stamp }]
+        }
+        HostInfoRequest::GameInfoFile { stamp } => vec![HostMessage::GameInfoFile { stamp }],
     }
 }
 
@@ -369,7 +374,7 @@ mod tests {
     use crate::{
         AccountBook, AccountId, AccountRecord, ClientVersion, Cookie, EncodedPassword, Enrolment,
         IntProperty, JoinNet, LandCatalog, LandType, LoginNakReason, MemoryStore, ObjectKind,
-        PasswordSource, SendMessage, SetInt, Sid, Store, StoreError,
+        PasswordSource, SendMessage, SetInt, Sid, Stamp, Store, StoreError,
     };
 
     const ME: ConnectionId = ConnectionId(1);
@@ -531,5 +536,29 @@ mod tests {
         let sent = ClientMessage::Send(relay.clone());
         let replies = messages(player.handle(&world, &mut objects, ME, &sent));
         assert_eq!(replies, vec![HostMessage::Send(relay)]);
+    }
+
+    #[test]
+    fn a_land_config_request_is_answered_with_the_clients_own_stamp() {
+        let world = World::stock();
+        let mut objects = ObjectStore::new();
+        let mut player = PlayerSession::new();
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
+        let stamp = Stamp::from_words(0xA853, 0x21DF);
+        let request = ClientMessage::HostInfo(HostInfoRequest::LandConfigFile { stamp });
+        let replies = messages(player.handle(&world, &mut objects, ME, &request));
+        assert_eq!(replies, vec![HostMessage::LandConfigFile { stamp }]);
+        assert_eq!(replies[0].encode(), [0x24, 0x07, 0x53, 0xa8, 0xdf, 0x21]);
+        assert_eq!(replies[0].encode(), request.encode());
+
+        let game_stamp = Stamp::from_words(0x0002, 0);
+        let game = ClientMessage::HostInfo(HostInfoRequest::GameInfoFile { stamp: game_stamp });
+        let replies = messages(player.handle(&world, &mut objects, ME, &game));
+        assert_eq!(
+            replies,
+            vec![HostMessage::GameInfoFile { stamp: game_stamp }]
+        );
+        assert_eq!(replies[0].encode(), [0x24, 0x08, 0x02, 0x00, 0x00, 0x00]);
+        assert_eq!(replies[0].encode(), game.encode());
     }
 }

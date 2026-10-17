@@ -139,16 +139,30 @@ pub struct GroupJoin {
 /// Command 36 from the client: one of the host's service tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostInfoRequest {
-    HostAddressFile { stamp: Stamp },
+    HostAddressFile {
+        stamp: Stamp,
+    },
     HostTime,
     HostNumber,
-    LandDirectory { stamp: Stamp },
+    LandDirectory {
+        stamp: Stamp,
+    },
+    /// Sub 7: the stamp the client stored for `land.cfg`.
+    LandConfigFile {
+        stamp: Stamp,
+    },
+    /// Sub 8: the stamp the client stored for `gameinfo.cfg`.
+    GameInfoFile {
+        stamp: Stamp,
+    },
 }
 
 const HOST_ADDRESS_FILE: u8 = 1;
 const HOST_TIME: u8 = 2;
 const HOST_NUMBER: u8 = 5;
 const LAND_DIRECTORY: u8 = 6;
+const LAND_CONFIG_FILE: u8 = 7;
+const GAME_INFO_FILE: u8 = 8;
 const LAND_OCCUPANCY: u8 = 1;
 
 impl ClientMessage {
@@ -458,6 +472,12 @@ impl HostInfoRequest {
             LAND_DIRECTORY => HostInfoRequest::LandDirectory {
                 stamp: read_stamp(reader)?,
             },
+            LAND_CONFIG_FILE => HostInfoRequest::LandConfigFile {
+                stamp: read_stamp(reader)?,
+            },
+            GAME_INFO_FILE => HostInfoRequest::GameInfoFile {
+                stamp: read_stamp(reader)?,
+            },
             sub => {
                 let command = Command::HostInfo.byte();
                 return Err(MessageError::UnsupportedSub { command, sub });
@@ -480,6 +500,12 @@ impl HostInfoRequest {
             }
             HostInfoRequest::LandDirectory { stamp } => {
                 write_stamp(writer.byte(LAND_DIRECTORY), stamp);
+            }
+            HostInfoRequest::LandConfigFile { stamp } => {
+                write_stamp(writer.byte(LAND_CONFIG_FILE), stamp);
+            }
+            HostInfoRequest::GameInfoFile { stamp } => {
+                write_stamp(writer.byte(GAME_INFO_FILE), stamp);
             }
         }
     }
@@ -527,6 +553,12 @@ mod tests {
             HostInfoRequest::LandDirectory {
                 stamp: Stamp(0x0102_0304),
             },
+            HostInfoRequest::LandConfigFile {
+                stamp: Stamp::from_words(0xA853, 0x21DF),
+            },
+            HostInfoRequest::GameInfoFile {
+                stamp: Stamp::from_words(0x0002, 0x0000),
+            },
         ];
         for request in requests {
             let message = ClientMessage::HostInfo(request);
@@ -539,6 +571,20 @@ mod tests {
                 sub: 9
             })
         );
+    }
+
+    #[test]
+    fn land_and_game_config_requests_are_the_stamp_words() {
+        let land = ClientMessage::HostInfo(HostInfoRequest::LandConfigFile {
+            stamp: Stamp::from_words(0xA853, 0x21DF),
+        });
+        let game = ClientMessage::HostInfo(HostInfoRequest::GameInfoFile {
+            stamp: Stamp::from_words(0x0002, 0x0000),
+        });
+        assert_eq!(land.encode(), [0x24, 0x07, 0x53, 0xa8, 0xdf, 0x21]);
+        assert_eq!(game.encode(), [0x24, 0x08, 0x02, 0x00, 0x00, 0x00]);
+        assert_eq!(ClientMessage::parse(&land.encode()), Ok(land));
+        assert_eq!(ClientMessage::parse(&game.encode()), Ok(game));
     }
 
     #[test]

@@ -219,17 +219,20 @@ fn the_captured_login_decodes_to_the_persona() {
     assert_eq!(login.prodigy_id, None);
 }
 
-#[test]
-fn the_player_session_answers_like_the_capture() {
+fn session_bytes(name: &str) -> (Vec<Vec<u8>>, Vec<Vec<u8>>) {
+    let (_, text) = golden_files()
+        .into_iter()
+        .find(|(file, _)| file == name)
+        .unwrap_or_else(|| panic!("missing golden {name}"));
     let world = World {
         lands: LandCatalog::lsci(),
         ..World::stock()
     };
     let mut objects = ObjectStore::new();
     let mut player = PlayerSession::new();
-    let mut expected: Vec<Vec<u8>> = Vec::new();
-    let mut answered: Vec<Vec<u8>> = Vec::new();
-    for row in logon_rows() {
+    let mut expected = Vec::new();
+    let mut answered = Vec::new();
+    for row in parse_rows(&text) {
         if row.from_client {
             let message = ClientMessage::parse(&row.bytes).unwrap();
             let replies = player.handle(&world, &mut objects, ConnectionId(1), &message);
@@ -238,5 +241,20 @@ fn the_player_session_answers_like_the_capture() {
             expected.push(row.bytes);
         }
     }
+    (answered, expected)
+}
+
+#[test]
+fn the_player_session_answers_like_the_capture() {
+    let (answered, expected) = session_bytes("logon");
     assert_eq!(answered, expected);
+}
+
+#[test]
+fn the_1995_logon_is_answered_including_the_land_config() {
+    let (answered, expected) = session_bytes("logon_2446");
+    assert_eq!(answered, expected);
+    assert!(expected
+        .iter()
+        .any(|bytes| bytes.as_slice() == [0x24, 0x07, 0x53, 0xa8, 0xdf, 0x21]));
 }

@@ -120,6 +120,8 @@ Byte 1 of an LSCI object command is 0: `notify` is never set (messages.md sectio
 | 36/2 | host time | RB live. Ysv, Twn and Golf builders dead | part | `HostInfo::HostTime` | `HostInfo` type 2, six time bytes from `World.clock` (`player.rs:244`). | RB: fatal "get host time timeout" at 119.6 s (redbaron.md 6 step 6 and 8.2, CONFIRMED). Golf never asks (golf.md 9 item 13, CONFIRMED). | DONE |
 | 36/5 | host number | LSCI at logon, and again on a land arrival | yes | `HostInfo::HostNumber` | `HostInfo` type 5, the world's host number (`player.rs:243`). | Logon state 4 waits on the land directory, not on this (messages.md 4.2, CONFIRMED). The number is what a later land switch compares (messages.md 5.2, CONFIRMED). With the reply, that compare works. | DONE |
 | 36/6 | land directory | LSCI at logon, stamps from `landaddr.tim` | yes | `HostInfo::LandDirectory` | The stamp is not compared. Reply is `WaitGrpRequest` msgType 2 for the catalog (`player.rs:245`). | State 4 waits for that reply or a Nak 36/6. Without either, logon stays there (messages.md 4.2 steps 7 and 8, CONFIRMED). | DONE |
+| 36/7 | LAND.CFG | 1995 LSCI (2.4.46) at logon, after SetPersona, stamp from `landcfg.tim` | yes | `HostInfo::LandConfigFile` | `HostInfo` type 7: the request's stamp and no file, six bytes (`CLIENT_CONFIG_FILES_KEPT_ASSUMED`, `answer_host_info`). | The 1995 dial script waits on type 7 or Nak 36/7 after occupancy. Silence holds the client on the map with land clicks paused (messages.md 4.2, CONFIRMED). A reply longer than 10 bytes would replace `land.cfg` (messages.md 3.3, CONFIRMED). | DONE |
+| 36/8 | GAMEINFO.CFG | 1995 LSCI attach, when a directory row's flags have bit `0x10`, stamp from `gameinfo.tim` | no | `HostInfo::GameInfoFile` | `HostInfo` type 8: the request's stamp and no file, six bytes (same assumption, `answer_host_info`). | Attach state 9 waits on type 8 or Nak 36/8 when that flag is set (messages.md 5.2, CONFIRMED). Stock rows use flags 1, so current clients do not send it. | DONE |
 | 37/17 | boxes of an account | LSCI Mail Room | yes | `Mail` `Boxes` | The account's one box, or a Nak. Another account's number is fault 12 (mail.md section 2, `mail.rs:114`). | Until this reply existed the Mail Room said "You do not have a mail box attached to this ID" (mail.md section 7, CONFIRMED live). With it, the room opens. | DONE |
 | 37/18 | new mail | LSCI at logon once `mail.cfg` exists, and from the map icon | yes | `Mail` `NewMail` | Status word: bits 0 and 1 while the box holds any letter (mail.md section 5). | Logon does not wait on it (messages.md 4.2, CONFIRMED). The icon stays off without the reply. Not a hang. | DONE |
 | 37/19 | list a box | LSCI Mail Room | yes | `Mail` `List` | Up to 64 rows (mail.md section 3). | The empty box was shown live after this reply (mail.md section 7, CONFIRMED). **INFERRED**: without it the list does not draw. | DONE |
@@ -184,6 +186,8 @@ These are the commands a client dispatches on. "Sends?" is whether any productio
 | 36/1 | `HostInfo` file | LSCI saves the bytes as HOSTADDR (messages.md section 6). | No. The 36/1 request is absorbed (section 1.2). | CONFIRMED |
 | 36/2 | `HostInfo` time | RB stores all six bytes; the month and day are the scenario date (redbaron.md 8.2). Golf's dead sender has the same reader (golf.md 6.2). Ysv and Twn ignore type 2 (yserbius.md 4.2). | Yes, the reply to 36/2 (`player.rs:244`). | CONFIRMED |
 | 36/5 | `HostInfo` host number | LSCI stores the word at byte 2 (messages.md 3.3). | Yes, the reply to 36/5 (`player.rs:243`). | CONFIRMED |
+| 36/7 | `HostInfo` land file | The 1995 dial script releases its wait. A message longer than 10 bytes is written to `land.cfg` (messages.md 3.3). | Yes, the reply to 36/7 (`answer_host_info`). | CONFIRMED |
+| 36/8 | `HostInfo` game file | The 1995 attach script, when land flags have bit `0x10`, releases its wait. A message longer than 10 bytes is written to `gameinfo.cfg` (messages.md 3.3). | Yes, the reply to 36/8 (`answer_host_info`). | CONFIRMED |
 | 37 | `EMMsg` | LSCI Mail Room and `RoomZeroHandler` (mail.md section 3). | Yes: subs 17, 18, 19, 25, 32 and the Acks and Naks in section 1.2. Not a push when a letter arrives (mail.md section 8). | CONFIRMED |
 | 38 | `HintMsg` | LSCI hint room (messages.md 3.3). | Yes, the reply to 38 (`hint_board.rs`). | CONFIRMED |
 | 39 | `HostFile` | LSCI class, no script handler (messages.md 11). | No. | CONFIRMED |
@@ -250,11 +254,11 @@ These have no live sender. Decoding them would not change a session. The DOS cop
 
 ## 4. Counts
 
-Client-to-host rows in section 1: **81**.
+Client-to-host rows in section 1: **83**.
 
 | Status | Rows |
 |---|---|
-| DONE | 72 |
+| DONE | 74 |
 | STUB | 1 (37/31) |
 | GAP | 0 |
 | N/A | 8 (3, 5, 18, 19, 20, 21, 22, 27/8) |
@@ -263,8 +267,8 @@ There are no GAPs left.
 
 Still open, and not a row of their own: the hub bulletin board's directory at location 66 (empty, so the board and 27/6 erase cannot be reached live), and the SL and LL top-score boards, read empty and written nowhere ([hub-services.md](hub-services.md) section 8).
 
-Of the 72 DONE rows, the ones that deliberately send nothing to the sender are 6, 27/6, 27/9, 9, 11, 13, 14, 17/2, 25, 26, 30, 36/1, 37/26, 40/4, 50/0, 50/1 and 52/0. Each cites a client that does not read a reply. 52/0 still tells peers with command 9.
+Of the 74 DONE rows, the ones that deliberately send nothing to the sender are 6, 27/6, 27/9, 9, 11, 13, 14, 17/2, 25, 26, 30, 36/1, 37/26, 40/4, 50/0, 50/1 and 52/0. Each cites a client that does not read a reply. 52/0 still tells peers with command 9.
 
-Host-to-client rows in section 2: **40**. **28** are sent (0, 1, 2, 8, 9, 10, 11, 12, 13, 14, 25, 27, 31, 33, 36/2, 36/5, 37, 40, 41, 45, 47/1, 47/2, 49, 51, 54/16, 54/17, 54/19, 54/20). **12** are never sent, including 48, 52, 54/18, 147, 23, 29 and 39.
+Host-to-client rows in section 2: **42**. **30** are sent (0, 1, 2, 8, 9, 10, 11, 12, 13, 14, 25, 27, 31, 33, 36/2, 36/5, 36/7, 36/8, 37, 40, 41, 45, 47/1, 47/2, 49, 51, 54/16, 54/17, 54/19, 54/20). **12** are never sent, including 48, 52, 54/18, 147, 23, 29 and 39.
 
 A logged-in LSCI client can finish logon, enter the Clubhouse, invite a SierraLand game and play Red Baron on the messages those paths send (games.md sections 5 and 6, yserbius.md section 7, CONFIRMED live for Yserbius, the Clubhouse, Stratego, Graffiti and Red Baron). Signup creates an account before Login. The mall launches Shop and tells it the store is closed. A conference name check answers, and a free name is SID 0. PaintBall's object list is created and freed. The phone book (49) names who is logged in.

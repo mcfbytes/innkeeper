@@ -166,7 +166,9 @@ the two framed replies are in `crates/innkeeper-session/tests/golden/host_replie
 
 The four requests the host left unanswered (34/4, 45/1, 37/32, 40/4) did not hold anything up. No 37/18 was
 sent; INFERRED: it needs the mailbox number of `mail.cfg`, which a reply to 45/1 would have written. The stamp in 36/6 was 0 on the first run
-and 1, the value the host sent, on every later run, so `landaddr.tim` round-trips.
+and 1, the value the host sent, on every later run, so `landaddr.tim` round-trips. This capture is the
+Feb 1994 client (2.3.18). The 1995 client (2.4.46) adds HostInfo 36/7 after the 40/4 SetPersona and waits
+on that reply before the map takes a land click (messages.md section 4.2).
 
 ## 10. The map
 
