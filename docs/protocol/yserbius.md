@@ -20,8 +20,8 @@ exercised live), **INFERRED** (a host choice the client does not pin down; each 
 |---|---|---|
 | The programs never dial or log in; they inherit the land's session | `PlayerSession` stays logged in across the program switch; without a hub, `tools/dosbox/launcher` logs in and writes the shared block (`docs/dosbox.md` section 6) | CONFIRMED |
 | Shared block `+0` user SID (joinNet cookie), `+2` userFlags, `+6` land number, `+8` land type | the hub writes them; the launcher's YSERBIUS / TWINION blocks name place 1 of land type 4 / 8 | CONFIRMED |
-| `LAND.CFG`: Yserbius is land type 4, Twinion 8 | `LandCatalog::stock()` lists both after the three LSCI lands (place 1, maximum 100, description `Yserbius` / `Twinion`, any version), directory stamp 2 | CONFIRMED (data); row values INFERRED |
-| The hub lets a player into a land only if bit `landType - 1` of the login Ack's `rating` word is set (`hub/script.050 proc_310`; 0 counts as 1, the Clubhouse alone): otherwise "Sorry, but you do not have access rights for …" | an account whose stored rating is 0 logs in with one bit per land the catalog lists (`0x8F` for the stock five) | CONFIRMED (code and live); the default INFERRED (`UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED`) |
+| `LAND.CFG`: Yserbius is land type 4, Cawdor 6, Twinion 8 | `LandCatalog::stock()` lists the three after the LSCI lands (place 1, maximum 100, descriptions `Yserbius`, `Cawdor`, `Twinion`, any version), directory stamp 2. Cawdor's version gate is [cawdor.md](cawdor.md) | CONFIRMED (data); row values INFERRED |
+| The hub lets a player into a land only if bit `landType - 1` of the login Ack's `rating` word is set (`hub/script.050 proc_310`; 0 counts as 1, the Clubhouse alone): otherwise "Sorry, but you do not have access rights for …" | an account whose stored rating is 0 logs in with one bit per land the catalog lists (`0xAF` for the stock six: types 1, 2, 3, 4, 6 and 8) | CONFIRMED (code and live); the default INFERRED (`UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED`) |
 | Characters live in `MYCHARS.DAT` on the client; no message uploads one | nothing is stored per character; boards are the only persistent RPG state | CONFIRMED (code: no sender); INFERRED that the host never stored them |
 
 ## 2. Commands from the client
@@ -80,7 +80,7 @@ message appears the next time the section is opened (seen live; the client's own
 ## 4. Game messages (msgType 200 to 219)
 
 The host relays them unread (census section 5). It does **not** return a group `Send` to the sender's
-own connection for RPG objects (land types `0x8B`, 4 and 8): DARKSTRT prints its own chat line
+own connection for RPG objects (land types `0x8B`, 4, 6 and 8): DARKSTRT prints its own chat line
 locally after sending it (overlay dispatch at file `0x3C7EF`, print at `0x3C81C`), so an echo would
 show every line twice, and with the echo the client answered its own 200/1 and 217/1 hellos (seen
 live before the change). INFERRED; LSCI, GOLF and Red Baron keep the echo.
@@ -89,6 +89,7 @@ live before the change). INFERRED; LSCI, GOLF and Red Baron keep the echo.
 
 Land type 8, land GrpJoin version 1.0.22, map capacity 80 (the client sends it), 17/2 after the
 service lookup (absorbed), game type 219 (relayed). Separate land, map groups and boards from Yserbius.
+Cawdor is the same engine on land type 6 at version 1.1.5 ([cawdor.md](cawdor.md)).
 Live: TWGENN reaches its gallery against `innkeeperd`; FATES was not driven further.
 
 ## 6. Open questions

@@ -2,8 +2,8 @@ use crate::message::wire::{WireReader, WireWriter};
 use crate::message::Command;
 use crate::{MessageError, Sid};
 
-/// Command 17 from the DOS games: integer properties of a service object. Twinion sends sub 2 with
-/// props 8 to 11 and waits for nothing; Red Baron sends sub 0 with one prop (docs/protocol/messages.md).
+/// Command 17 from the DOS games: integer properties of a service object. Twinion and Cawdor send
+/// sub 2 with props 8 to 11 and wait for nothing; Red Baron sends sub 0 (docs/protocol/messages.md).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ServicePropertyRequest {
     pub sub: u8,

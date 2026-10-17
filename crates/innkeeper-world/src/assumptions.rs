@@ -109,10 +109,10 @@ pub(crate) const PRIVILEGED_UNREAD_BYTES_ASSUMED: [u8; 4] = [0; 4];
 /// first allocated one are free for well-known objects (yserbius.md 4).
 pub(crate) const RPG_SERVICE_SID_ASSUMED: Sid = Sid(0x008B);
 /// A map group (kind 2, land type 0x8B) carries only the map number, so it is shared within the
-/// requester's land place: Yserbius and Twinion maps, and two places of one land, stay apart.
+/// requester's land place: Yserbius, Cawdor and Twinion maps of one number stay apart.
 pub(crate) const MAP_GROUPS_PER_PLACE_ASSUMED: bool = true;
 /// The land GrpJoin (10/3) of an RPG title is refused with code 6 unless it carries that title's
-/// own client version (1.1.7, 1.0.22); the original host's range is unknown.
+/// own client version (1.1.7, 1.1.5, 1.0.22); the original host's range is unknown.
 pub(crate) const RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED: bool = true;
 /// A `Send` to an RPG object or group skips the sender: DARKSTRT prints its own chat line when it
 /// sends it, so an echo would show it twice (yserbius.md 5).

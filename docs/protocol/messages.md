@@ -210,10 +210,10 @@ The joinNet `kind` byte says how the host scopes the object; the codec names it 
 decides what it stands for (`ObjectKind`). Whether a kind is a group is a host decision per land, not a
 property of the codec. CONFIRMED layouts, per-land meaning from the census documents:
 
-| Kind | Role name | LSCI | Yserbius and Twinion | Red Baron | GOLF |
+| Kind | Role name | LSCI | Yserbius, Cawdor and Twinion | Red Baron | GOLF |
 |---|---|---|---|---|---|
 | 1 | `Object` | player object (param `0xFFFF`, size 30) | player object (type `0x8B`, size 1) | none | player object (type `0x66`, size 1) |
-| 2 | `Group` | game group (`GameGroup::joinNet`) | map group (type `0x8B`, param map number, size 104, Twinion 80) | linked, never called | none |
+| 2 | `Group` | game group (`GameGroup::joinNet`) | map group (type `0x8B`, param map number, size 104, Twinion and Cawdor 80) | linked, never called | none |
 | 3 | `SoloObject` | none seen | none (the client's own enum calls its party slot 3, never sent) | the player's in-game object (type 101, size 1) | none |
 | 4 | `PrivateGroup` | `SL/script.120 runRedBaronScript` | personal party (type `0x8B`, param `0xFFFD`, size 4) | none | none |
 | 5 | `LandGroup` | waiting-room group (param land number, size = maximum) | land group (param land number, size 100) | none | none |

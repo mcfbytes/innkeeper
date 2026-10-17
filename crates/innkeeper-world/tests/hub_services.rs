@@ -213,7 +213,7 @@ fn a_privileged_reader_may_erase_anyones_message() {
         ",
         hex(b"Sir|hi\0"),
     );
-    let privileged_ack = "00 00 00 00 16 04 02 00 8f 00";
+    let privileged_ack = "00 00 00 00 16 04 02 00 af 00";
     table.run(&steps.replacen("{login ack}", privileged_ack, 1));
     assert!(bodies(&store, 0x59, 1 | 4 << 24).is_empty());
 }
@@ -283,7 +283,7 @@ fn a_moderators_topic_text_replaces_the_last_and_is_what_the_conference_list_rea
         A < the current text, a privileged reader's layout | 1b 01 00 00 02 01 43 00 01 00 00 c0 00 00 00 00 00 00 00 00 00 00 {reply_text} 00
         "
     );
-    let privileged_ack = "00 00 00 00 16 04 02 00 8f 00";
+    let privileged_ack = "00 00 00 00 16 04 02 00 af 00";
     table.run(&steps.replacen("{login ack}", privileged_ack, 1));
 }
 
