@@ -48,9 +48,10 @@ pub enum HostMessage {
     LandConfigFile {
         stamp: Stamp,
     },
-    /// HostInfo type 8: the client's GAMEINFO.CFG stamp, with no file after it.
+    /// HostInfo type 8: the host's GAMEINFO.CFG stamp, and the file when the client's differs.
     GameInfoFile {
         stamp: Stamp,
+        file: Vec<u8>,
     },
     LandOccupancy(Vec<Occupancy>),
     Mail(MailReply),
@@ -255,11 +256,12 @@ impl HostMessage {
                     *stamp,
                 );
             }
-            HostMessage::GameInfoFile { stamp } => {
+            HostMessage::GameInfoFile { stamp, file } => {
                 write_stamp(
                     writer.byte(Command::HostInfo.byte()).byte(GAME_INFO_TYPE),
                     *stamp,
                 );
+                writer.array(file);
             }
             HostMessage::LandDirectory(directory) => {
                 let lands = fitting_count(&directory.lands);
@@ -365,9 +367,13 @@ impl HostMessage {
                     LAND_CONFIG_TYPE => HostMessage::LandConfigFile {
                         stamp: read_stamp(&mut reader)?,
                     },
-                    GAME_INFO_TYPE => HostMessage::GameInfoFile {
-                        stamp: read_stamp(&mut reader)?,
-                    },
+                    GAME_INFO_TYPE => {
+                        let stamp = read_stamp(&mut reader)?;
+                        HostMessage::GameInfoFile {
+                            stamp,
+                            file: reader.rest(),
+                        }
+                    }
                     sub => Err(MessageError::UnsupportedSub {
                         command: Command::HostInfo.byte(),
                         sub,
@@ -603,11 +609,22 @@ mod tests {
         };
         let game = HostMessage::GameInfoFile {
             stamp: Stamp::from_words(0x0002, 0x0000),
+            file: Vec::new(),
+        };
+        let file = b"5 0 Red_Baron 2 4 0 910 910 101 0\r\n".to_vec();
+        let with_file = HostMessage::GameInfoFile {
+            stamp: Stamp(1),
+            file: file.clone(),
         };
         // b 36, b type, then the two stamp words. Six bytes stays under the client's length test.
         assert_eq!(land.encode(), [0x24, 0x07, 0x53, 0xa8, 0xdf, 0x21]);
         assert_eq!(game.encode(), [0x24, 0x08, 0x02, 0x00, 0x00, 0x00]);
+        let encoded = with_file.encode();
+        assert_eq!(&encoded[..6], &[0x24, 0x08, 0x01, 0x00, 0x00, 0x00]);
+        assert_eq!(&encoded[6..], file.as_slice());
+        assert!(encoded.len() > 10);
         assert_eq!(HostMessage::parse(&land.encode()), Ok(land));
         assert_eq!(HostMessage::parse(&game.encode()), Ok(game));
+        assert_eq!(HostMessage::parse(&encoded), Ok(with_file));
     }
 }

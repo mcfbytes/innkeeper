@@ -235,7 +235,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
 | 36/1 | nothing; the client keeps its files |
 | 36/7 | `HostInfo` type 7: the client's own stamp and no file, so the client keeps `LAND.CFG` (`CLIENT_CONFIG_FILES_KEPT_ASSUMED`) |
-| 36/8 | `HostInfo` type 8: the client's own stamp and no file, so the client keeps `GAMEINFO.CFG` (same assumption) |
+| 36/8 | `HostInfo` type 8: stamp 1 (`GAME_INFO_STAMP_ASSUMED`). A different client stamp, including 0, gets the Arena game file after the stamp words; a matching stamp is six bytes and the client keeps `GAMEINFO.CFG` |
 | 45/1 | the account's mailbox number (status 1), assigned once and then stable; status 2 on the open book and 4 when the store fails |
 | 37/17, 18, 19, 25 | the account's box, the new-mail status, the listing and the letter's text; Nak 37 with a fault number for another account's box, a missing letter or box |
 | 37/20, 21, 24, 27 | Ack 37 naming the box that received the letter; the letter is stored for the addressee's box |

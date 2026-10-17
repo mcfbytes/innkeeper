@@ -228,27 +228,54 @@ its run disconnects, which the other then sees as "just left the room".
 
 ## 10. Arena
 
-Land type 5, place 1, description `Arena`, capacity 64, directory flags `0x01`. Bit `0x10` stays clear,
-so a client that already has `GAMEINFO.CFG` does not ask the host for 36/8. `LandCatalog::stock` lists
-the row after Clubhouse, SierraLand and CasinoLand and before the RPG titles. `lsci()` is still the
-three-land capture the golden logon replays. An account whose stored rating is 0 logs in with `0x00BF`.
-The waiting room is the ordinary kind-5 group, and a 1.4.46 GrpJoin is admitted because the row's
-version range is any version. The place list is that one occupancy row.
+Land type 5, place 1, description `Arena`, capacity 64. The directory flags are `0x11`:
+`OPEN_LAND_FLAGS_ASSUMED` (`0x01`) with `GAMES_LAND_FLAG` (`0x10`). Bit `0x10` is what makes the
+1995 attach script load the game lists and send HostInfo 36/8 (messages.md section 6, CONFIRMED).
+Every other stock row stays at `0x01`. `LandCatalog::stock` lists the Arena after Clubhouse,
+SierraLand and CasinoLand and before the RPG titles. `lsci()` is still the three-land capture the
+golden logon replays, and those three rows stay at flags `0x01`. An account whose stored rating is
+0 logs in with `0x00BF`. The waiting room is the ordinary kind-5 group, and a 1.4.46 GrpJoin is
+admitted because the row's version range is any version. The place list is that one occupancy row.
 
-Live, 2026-10-17, one headless 2.4.46 client (account 100001, hub persona guybrush) against this host.
-The Fall Map showed the Arena and accepted the click into it. The place dialog listed Arena at
-0 of 64. Choosing it started `LSCITV` in the Arena directory. Select Player has no shipped persona
-(`PLAYER.LST`, `name.LND`, `name.PER`). Create took the name form (Guybrush) and the appearance screen,
-and Go On drew Game Skills for Red Baron, 3-D Golf and Football. The Arena program then terminated with
-DOS code 1 (`INN Exec: Error 1 in Arena`) and wrote no persona files. The want-to-play list, the waiting
-room, an invite, the join line and Top Scores were not reached. A second client was not started.
+With flags `0x01` the Arena dies at the persona Game Skills screen, before any slider is drawn.
+`SkillInterest::init` sends to the games list, and `script.001` export 13 fills that list only when
+bit `0x10` is set (or the land type is at least 100). The PMachine error is `Not an object: $0`
+and the program exits with DOS code 1. An earlier note that Go On drew Game Skills was that crash.
 
-Every client message on that path decoded. Two requests were absorbed, both the same as every other
-hub logon: 34/4 rates (left unanswered) and 36/1 `HostAddressFile` (the client keeps its files).
-Nothing was logged as not decoded or unexplained. The link ended when the program exited: a CR
-between frames, which the PAD reads as escape.
+36/8 is the host's game table. `game_info.rs` writes `GAMEINFO.CFG` from `ARENA_GAMES`: land 5,
+relative positions 0, 1 and 2.
 
-The games themselves were not on the wire. Red Baron (invite 910, start 926, chain 101) and 3-D Golf
-(invite 911, start 927, chain 102) use the same invite, queue and `Send` path as SierraLand. Football's
-play channel is unicast 2/1, which the router already delivers; its invite is 912. Top Scores is an
-LSCI command 27 read, and those boards are still empty ([coverage.md](coverage.md) section 3.2).
+| Name | Min | Max | Queue | Invite | Score | Chain | Add |
+|---|---|---|---|---|---|---|---|
+| Red Baron | 2 | 4 | 0 | 910 | 910 | 101 | 0 |
+| 3-D Golf | 1 | 4 | 0 | 911 | -911 | 102 | 0 |
+| Football | 2 | 2 | 0 | 912 | -912 | 104 | 0 |
+
+The file is two comment lines of our own and those rows, one space between fields, `_` where the
+slider shows a space. `ARENA/script.144` splits on space and tab, skips a line whose first byte is
+`;`, and stops at a blank line. A missing name token becomes `?`. `_` becomes a space later, in
+`script.001` export 11, not in the tokenizer. Each line stays inside the 80-byte read. The stamp
+is `GAME_INFO_STAMP_ASSUMED` (1). A client whose `gameinfo.tim` differs, including a fresh install
+that sends 0, gets HostInfo type 8 as the host stamp plus the file (more than 10 bytes, so the
+client writes `.\GAMEINFO.CFG` and `gameinfo.tim`). A matching stamp gets the six-byte reply and
+the client keeps the file. The reply is one message, under the 65535-byte limit (link-layer.md
+6.8). 36/7 is still the client's own stamp and no file.
+
+Red Baron (invite 910, start 926, chain 101) and 3-D Golf (invite 911, start 927, chain 102) use
+the same invite, queue and `Send` path as SierraLand. Football's play channel is unicast 2/1,
+which the router already delivers; its invite is 912. A positive score is a high-score board
+(`scoreType` 1); a negative score is a low-score board. Top Scores is an LSCI command 27 read, and
+those boards are still empty ([coverage.md](coverage.md) section 3.2).
+
+Live, 2026-10-17, one headless 2.4.46 client (account 100001, hub persona guybrush) against
+this host on 127.0.0.1:2896. The drive copy had no `GAMEINFO.CFG` in the Arena directory.
+Create took the name Guybrush. Game Skills listed Red Baron, 3-D Golf and Football, each with
+a skill slider, and the persona was written (`PLAYER.LST`, `GUYBRUSH.PER`, `ARENA/GUYBRUSH.LND`).
+Select Player showed Guybrush. The want-to-play list offered the same three games. The client
+entered the Arena Waiting Room; occupancy for land type 5 went to 1. The first 36/8 carried
+stamp 0 and was answered with stamp 1 plus the file. The client wrote `.\GAMEINFO.CFG` and
+`gameinfo.tim` (`01 00 00 00`). The next 36/8 carried stamp 1 and was answered with six bytes.
+The on-disk file matches that reply and then has one extra line, `04 0`, which the reply did
+not contain. One 24-byte `setInt` after the waiting-room join was logged as not decoded
+("message ended inside value"); the client still reached the room and hung up when the run
+ended. A second client was not started. The DOS games themselves were not launched.

@@ -4,9 +4,12 @@ use crate::assumptions::{
 use crate::presence::waiting_room;
 use crate::rpg::{RpgTitle, RPG_TITLES};
 use crate::{
-    ClientVersion, HostNumber, LandDirectory, LandEntry, LandNumber, LandType, ObjectStore,
-    Occupancy, Stamp,
+    ClientVersion, HostNumber, LandDirectory, LandEntry, LandFlags, LandNumber, LandType,
+    ObjectStore, Occupancy, Stamp,
 };
+
+/// Directory bit 0x10: the client loads its game lists and fetches GAMEINFO.CFG (messages.md).
+pub(crate) const GAMES_LAND_FLAG: LandFlags = LandFlags(0x10);
 
 /// One land this host runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,6 +21,7 @@ pub(crate) struct Land {
     maximum: u8,
     min_version: ClientVersion,
     max_version: ClientVersion,
+    flags: LandFlags,
 }
 
 /// The Arena runs in `LSCITV` like SierraLand (land type 5, one waiting room). It is not part of
@@ -29,6 +33,7 @@ const ARENA: Land = Land {
     maximum: 64,
     min_version: ANY_VERSION_MIN_ASSUMED,
     max_version: ANY_VERSION_MAX_ASSUMED,
+    flags: LandFlags(OPEN_LAND_FLAGS_ASSUMED.0 | GAMES_LAND_FLAG.0),
 };
 
 /// The lands of the stock CD client's `LAND.CFG` that run in `LSCITV` itself.
@@ -40,6 +45,7 @@ const LSCI_LANDS: [Land; 3] = [
         maximum: 64,
         min_version: ANY_VERSION_MIN_ASSUMED,
         max_version: ANY_VERSION_MAX_ASSUMED,
+        flags: OPEN_LAND_FLAGS_ASSUMED,
     },
     Land {
         land_type: LandType(2),
@@ -48,6 +54,7 @@ const LSCI_LANDS: [Land; 3] = [
         maximum: 64,
         min_version: ANY_VERSION_MIN_ASSUMED,
         max_version: ANY_VERSION_MAX_ASSUMED,
+        flags: OPEN_LAND_FLAGS_ASSUMED,
     },
     Land {
         land_type: LandType(3),
@@ -56,6 +63,7 @@ const LSCI_LANDS: [Land; 3] = [
         maximum: 64,
         min_version: ANY_VERSION_MIN_ASSUMED,
         max_version: ANY_VERSION_MAX_ASSUMED,
+        flags: OPEN_LAND_FLAGS_ASSUMED,
     },
 ];
 
@@ -76,6 +84,7 @@ impl Land {
             maximum: title.land_capacity,
             min_version: ANY_VERSION_MIN_ASSUMED,
             max_version: ANY_VERSION_MAX_ASSUMED,
+            flags: OPEN_LAND_FLAGS_ASSUMED,
         }
     }
 }
@@ -139,7 +148,7 @@ impl LandCatalog {
             land_number: land.land_number,
             min_version: land.min_version,
             max_version: land.max_version,
-            flags: OPEN_LAND_FLAGS_ASSUMED,
+            flags: land.flags,
             description: land.description.to_owned(),
         };
         LandDirectory {
@@ -209,7 +218,10 @@ mod tests {
             .lands
             .iter()
             .all(|land| land.host == HostNumber(7)));
-        assert!(directory.lands.iter().all(|land| land.flags.0 == 0x01));
+        let flags: Vec<_> = directory.lands.iter().map(|land| land.flags.0).collect();
+        assert_eq!(flags, [0x01, 0x01, 0x01, 0x11, 0x01, 0x01, 0x01]);
+        let lsci = LandCatalog::lsci().directory(HostNumber(7));
+        assert!(lsci.lands.iter().all(|land| land.flags.0 == 0x01));
         let occupancy = table.occupancy(HostNumber(7), &ObjectStore::new());
         assert_eq!(occupancy[0].land_type, LandType(1));
         assert_eq!(occupancy[0].maximum, 64);

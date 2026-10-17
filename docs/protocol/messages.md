@@ -253,10 +253,16 @@ offset 6 when the host is replacing it. `Dialing::handleMsg` (sub 7) and the att
 write bytes 2..5 back to the tim file and bytes 6.. into `land.cfg` or `gameinfo.cfg` only when the
 whole message is longer than 10 bytes. A reply of any length on that type releases the wait, and so
 does a Nak whose `whichCmd` is 36 and whose `whichSub` is that sub. CONFIRMED from the 1995 client.
-This host answers with the client's own stamp and no file (`CLIENT_CONFIG_FILES_KEPT_ASSUMED`): six
-bytes, addressed like the other HostInfo replies, to the game object. The client keeps the file it
-has. Sub 7 is part of the 1995 logon (section 4.2). Sub 8 is sent only when the chosen land's flags
-have bit `0x10`, and the attach script waits on it (section 5.2).
+This host answers sub 7 with the client's own stamp and no file
+(`CLIENT_CONFIG_FILES_KEPT_ASSUMED`): six bytes, so the client keeps `LAND.CFG`. Sub 8 is this
+host's Arena game table (`GAME_INFO_STAMP_ASSUMED`, stamp 1, `game_info.rs`). When the client's
+stamp differs, the reply is the host's stamp words plus the file from offset 6: longer than 10
+bytes, so the client writes `.\GAMEINFO.CFG` and `gameinfo.tim`, and shorter than 65535 bytes, the
+longest message the link carries (link-layer.md section 6.8; the client accepts that size,
+`int14h-census/lsci.md`). When the stamps match, the reply is those six bytes and the client keeps
+its file. Sub 7 is part of the 1995 logon (section 4.2). Sub 8 is sent when the chosen land's
+flags have bit `0x10`. The Arena row carries that bit (`0x11`); the other stock rows stay at 1
+and do not ask (section 5.2, section 6).
 
 ### 3.3.1 The CasinoLand bankroll (40/3 and 40/2)
 
@@ -403,7 +409,8 @@ SetPersona and waits on the answer before the map takes a land click.
 4. State 4 sends joinNet for the game object (`+0x0335`); state 6 sends `36/5` (`+0x0373`); state 9
    sends `40/4 name` (`+0x04A4`). CONFIRMED. The 1995 client's attach script also sends HostInfo 36/8
    when the land flags include bit `0x10`, and its state 9 waits for HostInfo type 8 or Nak 36/8.
-   CONFIRMED. Stock directory rows use flags 1, so they do not take that branch.
+   CONFIRMED. The Arena row is flags `0x11`, so entering the Arena takes that branch. The other
+   stock rows use flags 1 and do not.
 
 ### 5.3 Shared block (written by export 1, read by `proc_125`)
 
@@ -472,8 +479,9 @@ Reading the `LandAddr` file back (`hub/script.055` export 1 and `proc_20`), CONF
   a directory with zero flags gave "There are no places available right now for this land." The default
   of the land object (`class_97`) is 1.
 - Flag bits `0x0C` choose the CasinoLand disclaimer: 4 "Unrestricted", 0 "Restricted" (`hub/script.055
-  proc_37`). Bit `0x10` makes the 1995 attach script request `gameinfo.cfg` (36/8) and wait
-  (section 3.3). Other bits are unknown.
+  proc_37`). Bit `0x10` (`GAMES_LAND_FLAG`) makes the 1995 attach script load its game lists and
+  request `gameinfo.cfg` (36/8) and wait (section 3.3). The Arena row is `0x11`; every other stock
+  row is 1. Other bits are unknown.
 
 `innkeeperd` counts `current` as the members of the land's waiting room (the shared kind 5 group of the land
 type and number, `captures.md` section 11) and keeps the catalog's `maximum` of 64, although the room's own
@@ -584,7 +592,7 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
   (INFERRED).
 - The meaning of `userFlags`, `status` and `rating` in the login Ack beyond the bits the client tests;
   all zero works.
-- The two unread bytes of a land directory row, and the land flags beyond bits `0x0C`.
+- The two unread bytes of a land directory row, and the land flags other than bits `0x0C` and `0x10`.
 - What command 26 asks for; the client sends it for its player object and needs no reply.
 - Which object the interpreter variable behind `SID(3, 0)` holds; the game object is INFERRED.
 - Field meanings of `GrpGetProp` (31) and `SetMsg` (33) replies, and the record format of the system
