@@ -273,7 +273,9 @@ Client-to-host rows in section 1: **83**.
 
 There are no GAPs left.
 
-Still open, and not a row of their own: the hub bulletin board's directory at location 66 (empty, so the board and 27/6 erase cannot be reached live), and the SL and LL top-score boards, read empty and written nowhere ([hub-services.md](hub-services.md) section 8).
+Still open, and not a row of their own: the hub bulletin board's directory at location 66 (empty, so the board and 27/6 erase cannot be reached live), and the SL and LL top-score boards, read empty and written nowhere ([hub-services.md](hub-services.md) section 8). Arena's Top Scores room reads the same kind of board.
+
+Arena is a stock catalog row (land type 5, [games.md](games.md) section 10), not a new command. A 2.4.46 hub that enters it sends the same logon messages as the other LSCI lands. Directory flags are `0x01`, so the client does not ask for 36/8. The 2026-10-17 run drew the place list and the local facemaker, then the Arena program exited, so the waiting-room GrpJoin, the game invites and command 27 were not on the wire. Version 1.4.46 joining that waiting room is the presence test.
 
 Of the 74 DONE rows, the ones that deliberately send nothing to the sender are 6, 27/6, 27/9, 9, 11, 13, 14, 17/2, 25, 26, 30, 36/1, 37/26, 40/4, 50/0, 50/1 and 52/0. Each cites a client that does not read a reply. 52/0 still tells peers with command 9.
 

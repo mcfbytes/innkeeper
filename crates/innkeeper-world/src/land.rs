@@ -20,6 +20,17 @@ pub(crate) struct Land {
     max_version: ClientVersion,
 }
 
+/// The Arena runs in `LSCITV` like SierraLand (land type 5, one waiting room). It is not part of
+/// the three-land capture `lsci()` serves.
+const ARENA: Land = Land {
+    land_type: LandType(5),
+    land_number: LandNumber(1),
+    description: "Arena",
+    maximum: 64,
+    min_version: ANY_VERSION_MIN_ASSUMED,
+    max_version: ANY_VERSION_MAX_ASSUMED,
+};
+
 /// The lands of the stock CD client's `LAND.CFG` that run in `LSCITV` itself.
 const LSCI_LANDS: [Land; 3] = [
     Land {
@@ -70,9 +81,10 @@ impl Land {
 }
 
 impl LandCatalog {
-    /// Every land of the stock `LAND.CFG`: the three LSCI lands, then the RPG titles.
+    /// Every land of the stock `LAND.CFG`: the three LSCI lands, the Arena, then the RPG titles.
     pub fn stock() -> Self {
         let mut catalog = LandCatalog::lsci();
+        catalog.lands.push(ARENA);
         catalog.lands.extend(RPG_TITLES.iter().map(Land::of_title));
         // A client that kept the three-land directory under stamp 1 must not keep it.
         catalog.stamp = Stamp(2);
@@ -187,6 +199,7 @@ mod tests {
                 "Clubhouse",
                 "SierraLand",
                 "CasinoLand",
+                "Arena",
                 "Yserbius",
                 "Cawdor",
                 "Twinion"
@@ -196,16 +209,20 @@ mod tests {
             .lands
             .iter()
             .all(|land| land.host == HostNumber(7)));
+        assert!(directory.lands.iter().all(|land| land.flags.0 == 0x01));
         let occupancy = table.occupancy(HostNumber(7), &ObjectStore::new());
         assert_eq!(occupancy[0].land_type, LandType(1));
         assert_eq!(occupancy[0].maximum, 64);
         assert!(occupancy.iter().all(|row| row.current == 0));
-        assert!(table.runs(LandType(3)) && table.runs(LandType(4)) && table.runs(LandType(6)));
+        assert!(table.runs(LandType(3)) && table.runs(LandType(5)));
+        assert!(table.runs(LandType(4)) && table.runs(LandType(6)));
         assert!(!table.runs(LandType(0x8B)));
-        assert_eq!(occupancy[3].maximum, 100);
-        assert_eq!(occupancy[4].land_type, LandType(6));
+        assert_eq!(occupancy[3].land_type, LandType(5));
+        assert_eq!(occupancy[3].maximum, 64);
         assert_eq!(occupancy[4].maximum, 100);
-        assert_eq!(table.rights(), 0x00AF);
+        assert_eq!(occupancy[5].land_type, LandType(6));
+        assert_eq!(occupancy[5].maximum, 100);
+        assert_eq!(table.rights(), 0x00BF);
         assert_eq!(LandCatalog::lsci().rights(), 0x0007);
     }
 }

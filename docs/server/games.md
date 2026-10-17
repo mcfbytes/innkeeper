@@ -225,3 +225,30 @@ its run disconnects, which the other then sees as "just left the room".
 - Whether the original host left out the sender's connection (rule 5) or only the member named in
   `fromSID`. They differ only for a connection with two members in the group, such as a land player and a
   DOS game's object; GOLF's `CB` handler (section 5.1) favours leaving out the connection.
+
+## 10. Arena
+
+Land type 5, place 1, description `Arena`, capacity 64, directory flags `0x01`. Bit `0x10` stays clear,
+so a client that already has `GAMEINFO.CFG` does not ask the host for 36/8. `LandCatalog::stock` lists
+the row after Clubhouse, SierraLand and CasinoLand and before the RPG titles. `lsci()` is still the
+three-land capture the golden logon replays. An account whose stored rating is 0 logs in with `0x00BF`.
+The waiting room is the ordinary kind-5 group, and a 1.4.46 GrpJoin is admitted because the row's
+version range is any version. The place list is that one occupancy row.
+
+Live, 2026-10-17, one headless 2.4.46 client (account 100001, hub persona guybrush) against this host.
+The Fall Map showed the Arena and accepted the click into it. The place dialog listed Arena at
+0 of 64. Choosing it started `LSCITV` in the Arena directory. Select Player has no shipped persona
+(`PLAYER.LST`, `name.LND`, `name.PER`). Create took the name form (Guybrush) and the appearance screen,
+and Go On drew Game Skills for Red Baron, 3-D Golf and Football. The Arena program then terminated with
+DOS code 1 (`INN Exec: Error 1 in Arena`) and wrote no persona files. The want-to-play list, the waiting
+room, an invite, the join line and Top Scores were not reached. A second client was not started.
+
+Every client message on that path decoded. Two requests were absorbed, both the same as every other
+hub logon: 34/4 rates (left unanswered) and 36/1 `HostAddressFile` (the client keeps its files).
+Nothing was logged as not decoded or unexplained. The link ended when the program exited: a CR
+between frames, which the PAD reads as escape.
+
+The games themselves were not on the wire. Red Baron (invite 910, start 926, chain 101) and 3-D Golf
+(invite 911, start 927, chain 102) use the same invite, queue and `Send` path as SierraLand. Football's
+play channel is unicast 2/1, which the router already delivers; its invite is 912. Top Scores is an
+LSCI command 27 read, and those boards are still empty ([coverage.md](coverage.md) section 3.2).
