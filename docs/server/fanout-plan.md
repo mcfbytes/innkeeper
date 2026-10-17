@@ -164,7 +164,7 @@ item id) and its gates: `cargo fmt --all --check`, `cargo clippy --workspace --a
 - **Behaviour.** A `Send` to an object SID goes to every holder of it. A `Send` to a group SID goes once to each
   connection holding a member of the group, with `to` the group SID and `from` and the payload unchanged; whether the
   sender's own connection is among them is `GROUP_SEND_ECHOES_SENDER_ASSUMED` (true: the GOLF CC and Red Baron `0xC9`
-  handlers count their own copy). A multicast becomes one `Send` per recipient SID in list order, the multicast body being the
+  handlers count their own copy; replaced on 2026-10-16 by `GROUP_SEND_SKIPS_SENDER_ASSUMED`, `games.md` section 5.1). A multicast becomes one `Send` per recipient SID in list order, the multicast body being the
   payload. An unknown SID is dropped with a warning and no Nak. The host never originates a game message (Red Baron's
   "group sent init!" is never triggered). One connection receives in request order; several in ascending `ConnectionId`.
 - **Tests.** `tests/routing.rs` transcripts with bytes hand-built from `golf.md` 7, `redbaron.md` 5.1 and
@@ -337,7 +337,7 @@ item id) and its gates: `cargo fmt --all --check`, `cargo clippy --workspace --a
 
 | Question | Blocks | Source |
 |---|---|---|
-| Is a group `Send` echoed to its sender? Assumed yes (`GROUP_SEND_ECHOES_SENDER_ASSUMED`, C3); a multicast to {group, own SID} then reaches the sender twice (`router.md` section 4) | R4, D2, D3 | every census; `messages.md` 11 |
+| Is a group `Send` echoed to its sender? First assumed yes; since 2026-10-16 no (`GROUP_SEND_SKIPS_SENDER_ASSUMED`): MiniGolf replays its own shots otherwise (`games.md` section 5.1) | R4, D2, D3 | every census; `messages.md` 11 |
 | What 41/2 looks up and what SID it must return | R1, D3 (any stable SID works for the clients) | yserbius.md, twinion.md, redbaron.md open questions |
 | How map groups are scoped (land number is not in the kind-2 request) | R2 | yserbius.md 8 |
 | How the land forms game groups and who sets the player count | D1 | redbaron.md 12, golf.md 11 |

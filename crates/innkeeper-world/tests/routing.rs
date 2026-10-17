@@ -55,16 +55,14 @@ fn script(room: &str, steps: &str) -> String {
 }
 
 #[test]
-fn a_golf_group_send_reaches_both_players_of_the_waiting_room() {
+fn a_golf_group_send_reaches_the_other_player_of_the_waiting_room() {
     let steps = "
-        # CA, the 32-byte player announcement, goes to the group; the sender hears its own copy.
+        # CA, the 32-byte player announcement, goes to the group; the sender gets no copy of its own.
         A > CA to the group | 02 00 00 01 01 01 ca 41 6e 6e 00 00 00 00 00 00 00 00 01 02 03 04 09 09 09 09 34 12 05 06 01 01
-        A < own copy | 02 00 00 01 01 01 ca 41 6e 6e 00 00 00 00 00 00 00 00 01 02 03 04 09 09 09 09 34 12 05 06 01 01
         B < B's copy | 02 00 00 01 01 01 ca 41 6e 6e 00 00 00 00 00 00 00 00 01 02 03 04 09 09 09 09 34 12 05 06 01 01
-        # CD, chat from B: ascending connection order, so A before B.
+        # CD, chat from B, to A alone.
         B > CD to the group | 02 00 00 01 02 01 cd 66 6f 72 65 21 00
         A < A's copy | 02 00 00 01 02 01 cd 66 6f 72 65 21 00
-        B < own copy | 02 00 00 01 02 01 cd 66 6f 72 65 21 00
         # A Send to one player object reaches its holder only.
         A > CD to B's player | 02 00 02 01 01 01 cd 66 6f 72 65 21 00
         B < only B | 02 00 02 01 01 01 cd 66 6f 72 65 21 00
@@ -93,10 +91,9 @@ fn yserbius_game_messages_arrive_byte_for_byte() {
 
 #[test]
 fn a_red_baron_state_multicast_to_the_group_and_the_sender_comes_back_to_both() {
-    // 0xC9, 35 bytes, to {group, own player}; the host sends no message of its own.
+    // 0xC9, 35 bytes, to {group, own player}: B by the group, A by its own SID; nothing else.
     let steps = "
         A > C9 multicast | 1c 01 01 02 00 00 01 01 01 c9 01 08 0f 16 1d 24 2b 32 39 40 47 4e 55 5c 63 6a 71 78 7f 86 8d 94 9b a2 a9 b0 b7 be c5 cc d3 da e1 e8
-        A < group copy | 02 00 00 01 01 01 c9 01 08 0f 16 1d 24 2b 32 39 40 47 4e 55 5c 63 6a 71 78 7f 86 8d 94 9b a2 a9 b0 b7 be c5 cc d3 da e1 e8
         B < group copy | 02 00 00 01 01 01 c9 01 08 0f 16 1d 24 2b 32 39 40 47 4e 55 5c 63 6a 71 78 7f 86 8d 94 9b a2 a9 b0 b7 be c5 cc d3 da e1 e8
         A < own copy | 02 00 01 01 01 01 c9 01 08 0f 16 1d 24 2b 32 39 40 47 4e 55 5c 63 6a 71 78 7f 86 8d 94 9b a2 a9 b0 b7 be c5 cc d3 da e1 e8
     ";
@@ -105,11 +102,10 @@ fn a_red_baron_state_multicast_to_the_group_and_the_sender_comes_back_to_both() 
 
 #[test]
 fn a_multicast_is_one_send_per_recipient_in_list_order() {
-    // Recipients: B's player, the group, A's player.
+    // Recipients: B's player, the group (B only: the sender is skipped), A's player.
     let steps = "
         A > multicast | 1c 01 01 03 00 02 01 00 01 01 01 c9 03 08 0d 12 17 1c 21 26 2b 30 35 3a 3f 44 49 4e 53 58 5d 62 67 6c 71 76 7b 80 85 8a 8f 94 99 9e a3 a8
         B < to B's player | 02 00 02 01 01 01 c9 03 08 0d 12 17 1c 21 26 2b 30 35 3a 3f 44 49 4e 53 58 5d 62 67 6c 71 76 7b 80 85 8a 8f 94 99 9e a3 a8
-        A < to the group | 02 00 00 01 01 01 c9 03 08 0d 12 17 1c 21 26 2b 30 35 3a 3f 44 49 4e 53 58 5d 62 67 6c 71 76 7b 80 85 8a 8f 94 99 9e a3 a8
         B < to the group | 02 00 00 01 01 01 c9 03 08 0d 12 17 1c 21 26 2b 30 35 3a 3f 44 49 4e 53 58 5d 62 67 6c 71 76 7b 80 85 8a 8f 94 99 9e a3 a8
         A < to A's player | 02 00 01 01 01 01 c9 03 08 0d 12 17 1c 21 26 2b 30 35 3a 3f 44 49 4e 53 58 5d 62 67 6c 71 76 7b 80 85 8a 8f 94 99 9e a3 a8
     ";

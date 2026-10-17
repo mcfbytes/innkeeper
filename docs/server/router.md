@@ -18,13 +18,17 @@ and return `Delivery` values that `innkeeperd` hands to the switchboard.
 
 ## 2. Who receives what
 
-`ObjectStore::recipients(sid)` names the connections:
+`ObjectStore::recipients(sid)` names the connections that hold the target; the router then leaves the
+sender out where the table says so:
 
 | Target | Recipients |
 |---|---|
-| an object | every connection that holds it |
-| a group | every connection that holds a member of it, once however many members it holds |
+| an object | every connection that holds it, the sender's included |
+| a group | every connection that holds a member of it, once however many members it holds, except the sender's |
 | a SID nobody holds (never given out, freed, a group without members) | nobody |
+
+A sender that wants a copy of its own update names its own SID, as GOLF, Red Baron and PaintBall do; RPG
+land types leave the sender out for any target (`rpg::echoes_sender`).
 
 Every copy has `to` the SID the sender named (the group SID for a group), `from` as sent, and the payload
 byte for byte, so the receiver sees what the sender built. A connection gets its copies in request order,
@@ -41,16 +45,13 @@ group SID itself, and nothing here sets `from` but the sender.
 
 | Constant | Value | Why | Source |
 |---|---|---|---|
-| `GROUP_SEND_ECHOES_SENDER_ASSUMED` | true | the GOLF `CC` and Red Baron `0xC9` handlers set a flag when they receive their own copy, and GOLF stops sending position updates without it | `messages.md` 11, `int14h-census/golf.md` 7.1 |
+| `GROUP_SEND_SKIPS_SENDER_ASSUMED` | true | MiniGolf replays and sends again every shot of its own that comes back; GOLF, Red Baron and PaintBall address their own SID when they need their copy, which would be redundant if a group sent it | [games.md](games.md) section 5.1 |
 
-The constant covers the sender's own connection for any target it holds. With `false` the router would
-leave it out of every set.
+With `false` a group `Send` would reach the sender's connection too, as it did before 2026-10-16.
 
 ## 4. Open
 
-- GOLF and Red Baron address their multicast to `{group, own player SID}`. With the echo on, the sender
-  receives two copies, one to the group SID and one to its own SID, both with its own SID in `from`. Both
-  handlers test only `from`, so one is probably enough, but the original host's behaviour is unknown; a
-  capture of a two-player round would settle it (and the echo question with it).
+- Whether the original host left out the sender's connection or only the member named in `from`; the
+  two differ only for a connection with more than one member in the group ([games.md](games.md) section 9).
 - `GrpGetProp`, `getProp`, locks and property replication are not routed here; they belong to the object
   store's lock and mirror tables.

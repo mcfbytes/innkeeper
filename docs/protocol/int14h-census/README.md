@@ -130,8 +130,9 @@ C→H lists live senders only. Full layouts and dead builders are in each progra
 Common to every DOS game (CONFIRMED): no Connect or Login; the group joiner must receive its own
 GrpJoin echo; a group `Send` is relayed untouched with the real sender in `fromSid`; multicast 28 must
 loop back to the sender when its own SID is listed (GOLF, RB); Unsolicited 48 is shown as operator text.
-Open across programs: whether a group `Send` is echoed to its sender, what 41/2 resolves to, and how the
-host scopes Yserbius/Twinion map groups (each doc's open questions).
+Open across programs: whether the original host echoed a group `Send` to its sender (`innkeeperd` does not,
+`docs/server/games.md` section 5.1), what 41/2 resolves to, and how the host scopes Yserbius/Twinion map
+groups (each doc's open questions).
 
 **Does a DOS game need a Login first?** The games never send one, so on the original service the land's
 Login covered them. A host may require a Login before game traffic: the DOSBox launcher

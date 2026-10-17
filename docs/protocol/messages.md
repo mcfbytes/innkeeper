@@ -545,9 +545,10 @@ From `tools/tsn_messages.py work/res` (2026-10-04). CONFIRMED.
   known, and 3, 5, 18–21 and 22 are never sent.
 - `notify`: a `class_61` flag ORed into byte 1 of object commands; never set by any script.
 - Whether the host fans a `Send` to a group SID out to every member, and whether it echoes it to the
-  sender. Game handlers suggest every member including the sender gets it, so `innkeeperd` sends one copy
-  to each connection with a member, the sender's included (INFERRED, `GROUP_SEND_ECHOES_SENDER_ASSUMED`,
-  `docs/server/router.md` section 3); a capture would settle it.
+  sender. `innkeeperd` sends one copy to each connection with a member except the sender's (INFERRED,
+  `GROUP_SEND_SKIPS_SENDER_ASSUMED`, `docs/server/router.md` section 3): MiniGolf replays its own shots
+  when its copy comes back, and GOLF, Red Baron and PaintBall send to their own SID when they want a copy
+  (`docs/server/games.md` section 5.1). No capture of the original host exists.
 - Whether a `GrpJoin` reaches the other members of the group as well as the joiner, and a `GrpDel` the
   remaining members. The waiting room fetches a newcomer's name in `addMember`
   (`hub/script.003 WaitingRoomGroup::addMember`) and the DOS games drop a remote player on `GrpDel`

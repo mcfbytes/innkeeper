@@ -174,6 +174,12 @@ impl ObjectStore {
         }
     }
 
+    /// Whether `sid` is a group (a shared or an own one) now.
+    pub(crate) fn is_group(&self, sid: Sid) -> bool {
+        let object = self.objects.get(&sid);
+        object.is_some_and(|object| matches!(object.role, Role::Group { .. }))
+    }
+
     /// The members of a group in joining order; none for an object or a free SID.
     pub(crate) fn members(&self, group: Sid) -> &[Sid] {
         self.members_of(group)

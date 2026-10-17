@@ -1,7 +1,8 @@
 //! Game groups and invitations: SierraLand's invite rooms with two and three players (invite, lock
-//! conflict, accept, decline, cancel, start, relay, one player dropping) and Red Baron's whole path from
-//! the invitation to the cockpit. Bytes are the ones the stock clients sent against `innkeeperd` on
-//! 2026-10-15 (docs/server/games.md section 2); the line syntax is in common/mod.rs.
+//! conflict, accept, decline, cancel, start, relay, one player dropping), MiniGolf strokes alone and in
+//! pairs, and Red Baron's whole path from the invitation to the cockpit. Bytes are the ones the stock
+//! clients sent against `innkeeperd` on 2026-10-15 and 16 (docs/server/games.md sections 2 and 5.1); the
+//! line syntax is in common/mod.rs.
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)] // test helpers may abort
 
 mod common;
@@ -146,7 +147,7 @@ fn an_invitation_locks_both_players_and_forms_a_game_group_of_two() {
 }
 
 #[test]
-fn game_messages_reach_every_player_of_the_group_the_sender_included() {
+fn game_messages_reach_every_other_player_of_the_group() {
     let mut table = table_with(&[
         TWO_IN_THE_ROOM,
         A_SPARE_OBJECT,
@@ -159,18 +160,170 @@ fn game_messages_reach_every_player_of_the_group_the_sender_included() {
         # Each sets property 9 of its own player (the room number, here 530) for the other's replica.
         A > setInt on A's own player | 0d 00 00 01 ff ff 09 00 12 02
         B < the replica is told | 0d 00 00 01 ff ff 09 00 12 02
-        # Graffiti's type 55 to the group, from the player.
+        # Graffiti's type 55 to the group, from the player: the sender gets no copy (rule 5).
         A > Send to the group | 02 00 06 01 00 01 37 00 fd 2a 00
-        A < own copy | 02 00 06 01 00 01 37 00 fd 2a 00
         B < copy | 02 00 06 01 00 01 37 00 fd 2a 00
         B > Send to the group | 02 00 06 01 02 01 37 00 f0 07 02 00
         A < copy | 02 00 06 01 02 01 37 00 f0 07 02 00
-        B < own copy | 02 00 06 01 02 01 37 00 f0 07 02 00
         # A Send to one player goes only to its holder.
         A > Send to B's player | 02 00 02 01 00 01 64 00 01 00
         B < copy | 02 00 02 01 00 01 64 00 01 00
         ",
     );
+}
+
+/// MiniGolf (`SL/script.779`, game 23): A plays alone. Bytes from a live round of the stock client
+/// (docs/server/games.md section 5.1): player 0x0100, room 0x0101, invitation 0x0102, group 0x0103.
+const MINIGOLF_ALONE: &str = "
+    A > login | {login}
+    A < login ack | {login ack}
+    A > joinNet player | 07 00 00 00 ec 13 01 02 ff ff 20 00
+    A < SID 0x0100 | 08 00 ec 13 00 00 00 01
+    A > joinNet waiting room | 07 00 00 00 b4 01 05 02 01 00 80 00
+    A < SID 0x0101 | 08 00 b4 01 00 00 01 01
+    A > add the player to the room | 0a 00 01 01 00 01 02 03 12
+    A < echo | 0a 00 01 01 00 01
+    A > joinNet invitation object, 19 properties | 07 00 00 00 34 1d 01 02 ff ff 13 00
+    A < SID 0x0102 | 08 00 34 1d 00 00 02 01
+    A > lock A alone | 04 00 02 01 00 01
+    A < granted | 00 00 02 01 04 00
+    A > joinNet game group, kind 2, game 23, own, 2 players | 07 00 00 00 f4 1f 02 17 fe ff 02 00
+    A < SID 0x0103 | 08 00 f4 1f 00 00 03 01
+    A > GrpJoin | 0a 00 03 01 00 01
+    A < echo | 0a 00 03 01 00 01
+    A > register the group | 1e 03 01
+    A > unlock | 06 00 02 01 00 01
+    A > leaves its invitation object | 09 00 02 01 00 00
+";
+
+/// One MiniGolf stroke of `from` to `group`: type 44, the shot (12 words, the stroke count and the
+/// player number last), then type 45 with event 99, which ends it.
+fn minigolf_stroke(group: &str, from: &str, shot: &str, player: &str) -> [String; 2] {
+    [
+        format!("02 00 {group} {from} 2c 00 00 00 00 00 00 00 {shot} {player} 00"),
+        format!("02 00 {group} {from} 2d 00 63 00 00 00 00 00 00 00 00 00 {player} 00"),
+    ]
+}
+
+#[test]
+fn a_minigolf_player_alone_gets_none_of_its_strokes_back() {
+    // With its own copies MiniGolf replayed each shot and sent it again, one more type 45 each time.
+    let [shot1, end1] = minigolf_stroke(
+        "03 01",
+        "00 01",
+        "0c 00 60 00 56 00 60 00 4b 00 00 00 5a 00 00 00",
+        "01",
+    );
+    let [shot2, end2] = minigolf_stroke(
+        "03 01",
+        "00 01",
+        "56 00 60 00 54 00 60 00 0e 01 00 00 5a 00 01 00",
+        "01",
+    );
+    let round = format!(
+        "
+        A > type 23: the players, A alone | 02 00 03 01 00 01 17 00 00 01 00 00 00 00 00 00
+        A > stroke 1, type 44 | {shot1}
+        A > type 45, event 99 | {end1}
+        A > stroke 2, type 44 | {shot2}
+        A > type 45, event 99 | {end2}
+        "
+    );
+    table_with(&[MINIGOLF_ALONE, &round]);
+}
+
+/// A invites B to MiniGolf (game 779 in the invitation, game 23 for the group of 64) and starts.
+const MINIGOLF_INVITE_AND_START: &str = "
+    A > joinNet invitation object, 25 properties | 07 00 00 00 e8 20 01 02 ff ff 19 00
+    A < SID 0x0104 | 08 00 e8 20 00 00 04 01
+    A > lock A and B | 04 00 04 01 00 01 02 01
+    A < granted | 00 00 04 01 04 00
+    A > invitation to B, type 12, game 779 | 02 00 02 01 00 01 0c 00 0b 03 01 00 04 01 02 01 00 01 07 00 2a 00
+    B < the invitation | 02 00 02 01 00 01 0c 00 0b 03 01 00 04 01 02 01 00 01 07 00 2a 00
+    B > joinNet its invitation object | 07 00 00 00 ec 20 01 02 ff ff 19 00
+    B < SID 0x0105 | 08 00 ec 20 00 00 05 01
+    B > type 56 to A's object | 02 00 04 01 02 01 38 00 05 01
+    A < relayed | 02 00 04 01 02 01 38 00 05 01
+    A > type 30: no answer yet | 02 00 05 01 00 01 1e 00 03 00 01 00
+    B < relayed | 02 00 05 01 00 01 1e 00 03 00 01 00
+    B > accept, type 13 | 02 00 04 01 02 01 0d 00
+    A < relayed | 02 00 04 01 02 01 0d 00
+    A > type 30: accepted | 02 00 05 01 00 01 1e 00 01 00 01 00
+    B < relayed | 02 00 05 01 00 01 1e 00 01 00 01 00
+    A > multicast type 57 to nobody | 1c 00 01 00 00 39 00 04 01 0b 03 01 00
+    A > joinNet game group, kind 2, game 23, own, 64 | 07 00 00 00 4c 22 02 17 fe ff 40 00
+    A < SID 0x0106 | 08 00 4c 22 00 00 06 01
+    A > unlock A and B | 06 00 04 01 00 01 02 01
+    A > type 58: group 0x0106, 2 players | 02 00 05 01 00 01 3a 00 06 01 02 00
+    B < relayed | 02 00 05 01 00 01 3a 00 06 01 02 00
+";
+
+#[test]
+fn two_minigolf_players_each_get_the_others_strokes_once() {
+    let mut table = table_with(&[
+        TWO_IN_THE_ROOM,
+        A_SPARE_OBJECT,
+        MINIGOLF_INVITE_AND_START,
+        BOTH_JOIN_THE_GAME,
+    ]);
+    // A deals the player list (type 23) and holds the barrier (type 41): 1 to the group, B answers 2
+    // to A's player, A releases with 3. Then the strokes alternate, A first.
+    let (a, b) = ("00 01", "02 01");
+    let [a_shot1, a_end1] = minigolf_stroke(
+        "06 01",
+        a,
+        "0c 00 60 00 40 00 60 00 c3 00 00 00 5a 00 00 00",
+        "01",
+    );
+    let [b_shot1, b_end1] = minigolf_stroke(
+        "06 01",
+        b,
+        "0c 00 60 00 74 00 60 00 69 00 00 00 5a 00 00 00",
+        "02",
+    );
+    let [a_shot2, a_end2] = minigolf_stroke(
+        "06 01",
+        a,
+        "40 00 60 00 3f 00 60 00 0e 01 00 00 5a 00 01 00",
+        "01",
+    );
+    let [b_shot2, b_end2] = minigolf_stroke(
+        "06 01",
+        b,
+        "74 00 60 00 7f 00 60 00 1d 01 00 00 5a 00 01 00",
+        "02",
+    );
+    table.run(&format!(
+        "
+        A > type 23: players A and B | 02 00 06 01 00 01 17 00 00 01 02 01 00 00 00 00
+        B < copy | 02 00 06 01 00 01 17 00 00 01 02 01 00 00 00 00
+        A > type 41/1 to the group | 02 00 06 01 00 01 29 00 01 00
+        B < copy | 02 00 06 01 00 01 29 00 01 00
+        B > type 41/2 to A's player | 02 00 00 01 02 01 29 00 02 00
+        A < copy | 02 00 00 01 02 01 29 00 02 00
+        A > type 41/3 to the group | 02 00 06 01 00 01 29 00 03 00
+        B < copy | 02 00 06 01 00 01 29 00 03 00
+        A > stroke 1 | {a_shot1}
+        B < copy | {a_shot1}
+        A > event 99 | {a_end1}
+        B < copy | {a_end1}
+        B > stroke 1 | {b_shot1}
+        A < copy | {b_shot1}
+        B > event 99 | {b_end1}
+        A < copy | {b_end1}
+        A > stroke 2 | {a_shot2}
+        B < copy | {a_shot2}
+        A > event 99 | {a_end2}
+        B < copy | {a_end2}
+        B > stroke 2 | {b_shot2}
+        A < copy | {b_shot2}
+        B > event 99 | {b_end2}
+        A < copy | {b_end2}
+        "
+    ));
+    let session = table.objects.game_session(Sid(0x0106)).unwrap();
+    assert_eq!(session.game, GameType(23));
+    assert_eq!(session.phase, GamePhase::Gathered);
 }
 
 #[test]
@@ -312,7 +465,6 @@ fn three_players_share_a_group_and_the_last_to_leave_closes_it() {
         "
         B > Send to the group | 02 00 05 01 02 01 37 00 01
         A < copy | 02 00 05 01 02 01 37 00 01
-        B < own copy | 02 00 05 01 02 01 37 00 01
         C < copy | 02 00 05 01 02 01 37 00 01
         C ! hang up
         A < C leaves the waiting room | 0b 00 01 01 03 01
@@ -323,7 +475,6 @@ fn three_players_share_a_group_and_the_last_to_leave_closes_it() {
         B < C's player is gone | 09 00 03 01
         B > Send to the group | 02 00 05 01 02 01 37 00 02
         A < copy | 02 00 05 01 02 01 37 00 02
-        B < own copy | 02 00 05 01 02 01 37 00 02
         ",
     );
     assert_eq!(
@@ -421,24 +572,20 @@ fn red_baron_starts_up_joins_the_queue_and_trades_aircraft_state() {
     table.run(&b);
     table.run(
         "
-        # sendPlayerInfo: 0xC8 to the group with the real sender, once from each.
+        # sendPlayerInfo: 0xC8 to the group with the real sender, once from each, to the other pilot.
         A > 0xC8 to the group | 02 00 04 01 05 01 c8 01 41 6e 6e 00
-        A < own copy, ignored by RB | 02 00 04 01 05 01 c8 01 41 6e 6e 00
         B < copy | 02 00 04 01 05 01 c8 01 41 6e 6e 00
         B > 0xC8 to the group | 02 00 04 01 06 01 c8 00 42 6f 62 00
         A < copy | 02 00 04 01 06 01 c8 00 42 6f 62 00
-        B < own copy | 02 00 04 01 06 01 c8 00 42 6f 62 00
         # status 0: playing. Nothing comes back.
         A > 50 playing | 32 00 00 00 00 01
         B > 50 playing | 32 00 00 00 02 01
-        # broadcastState: a multicast to {group, own SID}; the update reaches the other and returns to the sender.
+        # broadcastState: a multicast to {group, own SID}; the group copy reaches the other, the own-SID copy the sender.
         A > 0xC9 state | 1c 05 01 02 00 04 01 05 01 c9 00 00 00 02
-        A < to the group, own copy | 02 00 04 01 05 01 c9 00 00 00 02
         B < to the group | 02 00 04 01 05 01 c9 00 00 00 02
         A < to its own SID: the echo that frees the next update | 02 00 05 01 05 01 c9 00 00 00 02
         B > 0xC9 state | 1c 06 01 02 00 04 01 06 01 c9 00 00 00 02
         A < to the group | 02 00 04 01 06 01 c9 00 00 00 02
-        B < to the group, own copy | 02 00 04 01 06 01 c9 00 00 00 02
         B < to its own SID | 02 00 06 01 06 01 c9 00 00 00 02
         ",
     );
