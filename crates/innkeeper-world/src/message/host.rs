@@ -44,6 +44,14 @@ pub enum HostMessage {
     HostNumber(HostNumber),
     HostTime(HostTime),
     LandDirectory(LandDirectory),
+    /// HostInfo type 7: the client's LAND.CFG stamp, with no file after it.
+    LandConfigFile {
+        stamp: Stamp,
+    },
+    /// HostInfo type 8: the client's GAMEINFO.CFG stamp, with no file after it.
+    GameInfoFile {
+        stamp: Stamp,
+    },
     LandOccupancy(Vec<Occupancy>),
     Mail(MailReply),
     Mailbox(MailboxAnswer),
@@ -149,6 +157,8 @@ pub struct Occupancy {
 const MAIL_COMMAND: u8 = Command::Mail.byte();
 const HOST_NUMBER_TYPE: u8 = 5;
 const HOST_TIME_TYPE: u8 = 2;
+const LAND_CONFIG_TYPE: u8 = 7;
+const GAME_INFO_TYPE: u8 = 8;
 const OCCUPANCY_TYPE: u8 = 1;
 const DIRECTORY_TYPE: u8 = 2;
 
@@ -173,6 +183,8 @@ impl HostMessage {
             HostMessage::HostNumber(_) => "HostNumber",
             HostMessage::HostTime(_) => "HostTime",
             HostMessage::LandDirectory(_) => "LandDirectory",
+            HostMessage::LandConfigFile { .. } => "LandConfigFile",
+            HostMessage::GameInfoFile { .. } => "GameInfoFile",
             HostMessage::LandOccupancy(_) => "LandOccupancy",
             HostMessage::Mail(_) => "Mail",
             HostMessage::Mailbox(_) => "Mailbox",
@@ -236,6 +248,18 @@ impl HostMessage {
                     .byte(time.month0)
                     .byte(time.mday);
                 writer.byte(time.hour).byte(time.minute).byte(time.second);
+            }
+            HostMessage::LandConfigFile { stamp } => {
+                write_stamp(
+                    writer.byte(Command::HostInfo.byte()).byte(LAND_CONFIG_TYPE),
+                    *stamp,
+                );
+            }
+            HostMessage::GameInfoFile { stamp } => {
+                write_stamp(
+                    writer.byte(Command::HostInfo.byte()).byte(GAME_INFO_TYPE),
+                    *stamp,
+                );
             }
             HostMessage::LandDirectory(directory) => {
                 let lands = fitting_count(&directory.lands);
@@ -338,6 +362,12 @@ impl HostMessage {
                             second,
                         })
                     }
+                    LAND_CONFIG_TYPE => HostMessage::LandConfigFile {
+                        stamp: read_stamp(&mut reader)?,
+                    },
+                    GAME_INFO_TYPE => HostMessage::GameInfoFile {
+                        stamp: read_stamp(&mut reader)?,
+                    },
                     sub => Err(MessageError::UnsupportedSub {
                         command: Command::HostInfo.byte(),
                         sub,
@@ -564,5 +594,20 @@ mod tests {
         };
         let message = HostMessage::HostTime(time);
         assert_eq!(HostMessage::parse(&message.encode()), Ok(message));
+    }
+
+    #[test]
+    fn land_and_game_config_replies_echo_the_stamp() {
+        let land = HostMessage::LandConfigFile {
+            stamp: Stamp::from_words(0xA853, 0x21DF),
+        };
+        let game = HostMessage::GameInfoFile {
+            stamp: Stamp::from_words(0x0002, 0x0000),
+        };
+        // b 36, b type, then the two stamp words. Six bytes stays under the client's length test.
+        assert_eq!(land.encode(), [0x24, 0x07, 0x53, 0xa8, 0xdf, 0x21]);
+        assert_eq!(game.encode(), [0x24, 0x08, 0x02, 0x00, 0x00, 0x00]);
+        assert_eq!(HostMessage::parse(&land.encode()), Ok(land));
+        assert_eq!(HostMessage::parse(&game.encode()), Ok(game));
     }
 }

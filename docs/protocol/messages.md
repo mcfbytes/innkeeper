@@ -229,7 +229,7 @@ Kind 6 and every other value are errors.
 | 27 | `BBSMsg` | both | C→H `b 27, b sub, w …`; H→C `b 27, b whichCmd, w number @2, w toSID @4, w type @6, body @4 or @18` | 0 post/status, 1 read, 6, 8, 9 complaint (`SL/script.530 BitchToTSNMI`), 13, 14 list (`script.199`); conference and trivia directories use 27/1 and 27/0 with class 67 and 84 (`GotoConference`, `GotoTrivia`). The RPG titles' board (subs 0, 1 to 5, 13, 14) is served as in [yserbius.md](yserbius.md) section 3 | CONFIRMED layouts Hub layouts (CONFIRMED by script, live for the complaint): complaint 27/9 `b 27, b 9, w 0, w sid, w 99, w aboutSid, text NUL`; without a named player 27/0 `b 27, b 0, w 0, w sid, w 99, text NUL`; erase 27/6 `b 27, b 6, w location, w sid, w section, w message, b 0`, no reply. See [hub-services.md](../server/hub-services.md). |
 | 29 | `GameVersion` | H→C | `b 29, w toSID @1, b number @3, b major @4, b minor @5` | — | CONFIRMED |
 | 34 | `AccountMsg` | both | C→H `b 34, b sub, w sid`; H→C `b 34, b whichCmd, w toSID, text @4` | 4 current rates (text, shown when it changed, answered with 34/8), 5 account status (`s` at 4), 8 rates seen, detailed summary 12 and 15 (`script.050 GetDetailedInfo`, `"bbwwwbw"`: sid, account low and high, `b 0`, `w 100`; reply: 12 unread bytes, `w len @16`, text @18). Host: `ClientMessage::Account`, `HostMessage::Account` (`golden/account.txt`, [services.md](../server/services.md)); the logon 34/4 is left unanswered | CONFIRMED |
-| 36 | `HostInfo` | both | C→H `b 36, b sub [, w stampLow, w stampHigh]`; H→C `b 36, b type, …` | 1 HOSTADDR file (reply type 1: `w stamp @2, w stamp @4`, file text @6), 5 host number (reply type 5: `w host @2`, at most 200), 6 land directory (reply is `WaitGrpRequest` msgType 2, or Nak 36/6), 2 host time (reply type 2: `b year-1900 @2, b month0 @3, b mday @4, b hour @5, b minute @6, b second @7`; DOS games only) | CONFIRMED |
+| 36 | `HostInfo` | both | C→H `b 36, b sub [, w stampLow, w stampHigh]`; H→C `b 36, b type, …` | 1 HOSTADDR file (reply type 1: `w stamp @2, w stamp @4`, file text @6), 5 host number (reply type 5: `w host @2`, at most 200), 6 land directory (reply is `WaitGrpRequest` msgType 2, or Nak 36/6), 2 host time (reply type 2: `b year-1900 @2, b month0 @3, b mday @4, b hour @5, b minute @6, b second @7`; DOS games only), 7 LAND.CFG and 8 GAMEINFO.CFG (below) | CONFIRMED |
 | 37 | `EMMsg` | both | C→H `b 37, b sub, w sid, w…`; H→C `b 37, b whichCmd, w toSID, w lowWord @4, w highWord @6, w status @8, …` | 17 boxes of an account (`w low, w high` of the account number; reply: boxes as word pairs from byte 8), 18 new-mail check (box; reply `w status` @8, bit 0 mail icon), 19 list a box (reply: 47-byte rows from byte 8), 20, 21, 24 send letter (`"bbwwwawwawaaa"` envelope; Ack 37/sub with `b ?, w low, w high` of the receiving box), 25 read (reply: `w idLow, w idHigh` @8, text @12), 26 delete, 27 forward (Ack 37/27), 30 form to a service box (`"AcctUpdate"`, `"MemberServ"`; Ack 37/30 with the target box words at 7 and 9, Nak 1/37 likewise), 31 services, 32 system list (H→C records from 8: `w boxLow, w boxHigh, b type`, name; types 100 Member Services, 101 Accounting, 3 menu service; saved as `syslst.dat`, each box word as its low byte); Nak 37/sub is `b 1, b ?, w toSID, b 37, b sub, b fault @6, w low @7, w high @9`. Host: `ClientMessage::Mail`, `HostMessage::Mail` (`docs/server/mail.md`; `golden/mail.txt`). Letters are the client's bytes; the host reads the addressee's box and the letter id. Own box only INFERRED, 18 status bits INFERRED, empty 31 list INFERRED, 30 acknowledged ([services.md](../server/services.md)) | CONFIRMED layouts; host replies INFERRED Subs 20 and 21 also have a short sysop form of a box and two words (and for 20 the timer word 0x7530), with no sender in the hub, SL or LL. |
 | 38 | `HintMsg` | both | C→H `b 38, b sub, w roomSID, b ×4`; H→C `b 38, b whichCmd, w toSID, b which @4, a @5` | hint room (`script.135`); sub 0..3 = menu level, replies kind 0..4 (series, games, areas, problem, answer), layouts in [hub-services.md](../server/hub-services.md) section 4 | CONFIRMED (live) |
 | 39 | `HostFile` | H→C | `b 39, b whichCmd, body @2` | — (no handler found) | CONFIRMED layout |
@@ -245,6 +245,18 @@ Kind 6 and every other value are errors.
 | 55 | signup | C→H | `b 55, b 1, w cookie, b 1, a form`. The form is demographics, not a password and not a persona (`hub/script.012`; `hub/script.004` sets global91 from a Prodigy id file) | online signup (`script.012 MakeConnection`); Ack 55/1 returns the new account number at w@6/w@8. Host: `Signup` (`golden/signup.txt`) | CONFIRMED |
 | 59 | Login with Prodigy ID | C→H | Login plus `s prodigyId` | — | CONFIRMED |
 | 147 | `SysOpCmd` | H→C | `b 0x93, b msgType, body @2`; target is always the SysOp object | operator commands | CONFIRMED layout |
+
+HostInfo 7 and 8 are the client's land files. The request is `b 36, b sub, w stampLow, w stampHigh`:
+sub 7 carries the two words from `landcfg.tim`, sub 8 the two words from `gameinfo.tim`. The reply is
+the same six bytes when the host is leaving the file alone, or those bytes plus the file itself from
+offset 6 when the host is replacing it. `Dialing::handleMsg` (sub 7) and the attach script (sub 8)
+write bytes 2..5 back to the tim file and bytes 6.. into `land.cfg` or `gameinfo.cfg` only when the
+whole message is longer than 10 bytes. A reply of any length on that type releases the wait, and so
+does a Nak whose `whichCmd` is 36 and whose `whichSub` is that sub. CONFIRMED from the 1995 client.
+This host answers with the client's own stamp and no file (`CLIENT_CONFIG_FILES_KEPT_ASSUMED`): six
+bytes, addressed like the other HostInfo replies, to the game object. The client keeps the file it
+has. Sub 7 is part of the 1995 logon (section 4.2). Sub 8 is sent only when the chosen land's flags
+have bit `0x10`, and the attach script waits on it (section 5.2).
 
 ### 3.3.1 The CasinoLand bankroll (40/3 and 40/2)
 
@@ -335,6 +347,11 @@ All CONFIRMED in `hub/script.101` unless noted.
 | 10 | H→C | `WaitGrpRequest` msgType 1 or `NakMsg` 47/1; state 6 waits for either | `+0x0275` (local 3) | CONFIRMED |
 | 11 | — | when no land is known yet (land number 0, the normal first logon) the player is sent to the map, room 50 (`proc_5`); otherwise, for example with the debug keys `landNum`/`hostNum` (`proc_48`), a land descriptor is built and `attachScript` runs (section 5.2, step 3) | state 7 `+0x028B`..`+0x0300`; live: "Fall Map" | CONFIRMED |
 
+The rows above describe the Feb 1994 client (2.3.18). The 1995 client (2.4.46) adds HostInfo 36/7
+after the 40/4 SetPersona in step 6, carrying the stamp from `landcfg.tim`. After the occupancy reply
+it waits for HostInfo type 7 or Nak 36/7, and then does what step 11 describes. CONFIRMED from the
+1995 dial script. Silence at that wait leaves the map up and ignores a land click.
+
 Fields in step 3: bit `0x04` of `userFlags` gives level 3, `0x80` level 2, `0x02` level 1 (global 82);
 `status` 11 means "Your password is out of date", which prompts for a new one and sends command 44
 (`+0x0320`..`+0x0374`); `rating` 0 is stored as 1 (global 253). CONFIRMED (code); meanings INFERRED. `rating` is a
@@ -356,7 +373,9 @@ a land directory (or `NakMsg` 36/6) for step 6, then a reply to 47/1. Replies to
 SID (Login, 36, 47) are addressed to SID 0. Missing replies stall the client in states 2, 4 or 6, and no
 Ack within 70 s ends the session. CONFIRMED live: exactly these five replies, with 34/4, 45/1, 36/1,
 37/32 and 40/4 left unanswered, took the stock client to the map (`docs/protocol/captures.md`
-sections 9 and 10). That a land directory Nak works as well is INFERRED from the code.
+sections 9 and 10). That a land directory Nak works as well is INFERRED from the code. The 1995 client
+also needs the six-byte HostInfo type 7 of section 3.3 after its 36/7: it sends that request after
+SetPersona and waits on the answer before the map takes a land click.
 
 ## 5. Land switch
 
@@ -382,7 +401,9 @@ sections 9 and 10). That a land directory Nak works as well is INFERRED from the
    (`+0x01E1`..`+0x0226`). When they match, nothing is sent. A failed SwitchHost falls back to a full
    redial (`dialScript`). CONFIRMED.
 4. State 4 sends joinNet for the game object (`+0x0335`); state 6 sends `36/5` (`+0x0373`); state 9
-   sends `40/4 name` (`+0x04A4`). CONFIRMED.
+   sends `40/4 name` (`+0x04A4`). CONFIRMED. The 1995 client's attach script also sends HostInfo 36/8
+   when the land flags include bit `0x10`, and its state 9 waits for HostInfo type 8 or Nak 36/8.
+   CONFIRMED. Stock directory rows use flags 1, so they do not take that branch.
 
 ### 5.3 Shared block (written by export 1, read by `proc_125`)
 
@@ -451,7 +472,8 @@ Reading the `LandAddr` file back (`hub/script.055` export 1 and `proc_20`), CONF
   a directory with zero flags gave "There are no places available right now for this land." The default
   of the land object (`class_97`) is 1.
 - Flag bits `0x0C` choose the CasinoLand disclaimer: 4 "Unrestricted", 0 "Restricted" (`hub/script.055
-  proc_37`). Other bits are unknown.
+  proc_37`). Bit `0x10` makes the 1995 attach script request `gameinfo.cfg` (36/8) and wait
+  (section 3.3). Other bits are unknown.
 
 `innkeeperd` counts `current` as the members of the land's waiting room (the shared kind 5 group of the land
 type and number, `captures.md` section 11) and keeps the catalog's `maximum` of 64, although the room's own

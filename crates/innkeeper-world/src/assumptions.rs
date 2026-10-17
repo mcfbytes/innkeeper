@@ -25,6 +25,10 @@ pub(crate) const NOTICE_UNREAD_BYTE_ASSUMED: u8 = 0;
 /// This constant exists to document the assumption; its value is true and not used in code.
 #[allow(dead_code)]
 pub(crate) const HOST_TIME_ZONE_UTC_ASSUMED: bool = true;
+/// The host keeps the client's LAND.CFG / GAMEINFO.CFG; it answers with the client's own
+/// stamp, which the client takes as current (messages.md 3.3 and 4.2).
+#[allow(dead_code)]
+pub(crate) const CLIENT_CONFIG_FILES_KEPT_ASSUMED: bool = true;
 /// A Login for a land type the catalog lacks gets this Nak reason: only 9 is special to the client,
 /// every other value shows error 100 + reason (section 4.2).
 pub(crate) const UNLISTED_LAND_NAK_ASSUMED: LoginNakReason = LoginNakReason::UnlistedLand;
