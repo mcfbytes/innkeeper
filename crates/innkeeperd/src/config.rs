@@ -9,6 +9,7 @@ use innkeeper_session::SessionConfig;
 use innkeeper_world::RetentionPolicy;
 use pad_thai::{HayesConfig, LineKind};
 
+use crate::limits::{Limits, LINE_QUEUE_BYTES_DEFAULT};
 use crate::signin::config::PageOrigins;
 use crate::signin::EnrolmentMode;
 
@@ -167,6 +168,12 @@ pub(crate) struct Config {
     /// Rate announced in the modem's CONNECT line on raw lines.
     #[arg(long, default_value_t = 2400)]
     pub(crate) connect_rate: u32,
+    /// KiB that may wait for one client before its line is ended (docs/server/hardening.md section 10).
+    #[arg(long, default_value_t = LINE_QUEUE_BYTES_DEFAULT / 1024, value_name = "KIB")]
+    pub(crate) line_queue_kib: usize,
+    /// How long one write to a client may stall before its line is ended.
+    #[arg(long, default_value = "60s", value_name = "DURATION")]
+    pub(crate) write_timeout: humantime::Duration,
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
 }
@@ -573,6 +580,14 @@ impl Config {
             audit_days: self.audit_retention_days,
             session_days: self.retain_session_days,
             admin_audit_days: self.retain_admin_audit_days,
+        }
+    }
+
+    /// The resource limits every line runs under.
+    pub(crate) fn limits(&self) -> Limits {
+        Limits {
+            write_timeout: self.write_timeout.into(),
+            line_queue_bytes: self.line_queue_kib.saturating_mul(1024),
         }
     }
 

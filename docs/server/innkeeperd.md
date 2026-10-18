@@ -44,14 +44,17 @@ once per call and never for a connection that had no call. `innkeeperd` answers 
 store releases what the connection held and tells the others ([objects.md](objects.md) section 5), while
 the socket stays open for a new call. When the TCP connection closes, or a transport client calls
 Disconnect, the driver does the same.
-`Session::is_transmit_idle` says whether everything sent to the client has been acknowledged.
+`Session::is_transmit_idle` says whether everything sent to the client has been acknowledged, and
+`Session::queued_len` how many bytes still wait for that. A line whose inbox or link holds more than its
+share, whose writes stall, or whose link abandons a frame is ended (`src/limits.rs`,
+[hardening.md](hardening.md) section 10).
 `Session::begin_program_switch` holds the host's new DATA frames while the client chains programs
 (`int14h-api.md` 9.3), until the client's next DATA frame or `PROGRAM_SWITCH_QUIET_MAX_ASSUMED` (10 s),
 after which they leave in order; a frame already awaiting its ACK is still resent. Nothing arms it yet.
 
 Every crate below `innkeeperd` is synchronous and deterministic: bytes and an `Instant` go in, bytes and
 events come out, and timers are a `next_deadline()` that the caller sleeps on. `innkeeperd` depends on
-`tsn-link` directly only to choose log levels for link events.
+`tsn-link` directly only to choose log levels for link events and to end a line whose frame was abandoned.
 
 ## 2. Running
 
@@ -62,6 +65,7 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
                            [--trivia-dir data/trivia] [--opentdb third_party/opentdb/opentdb.json]
                            [--audit-public-key FILE --audit-key-id KID] [--audit-retention-days 90]
                            [--line auto|hayes|pad] [--connect-rate 2400]
+                           [--line-queue-kib 2048] [--write-timeout 60s]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
                            [--ws-bind 127.0.0.1:2316]
                            [--auth-config FILE] [--page-origin ORIGIN ...]
@@ -131,6 +135,8 @@ cargo run -p innkeeperd -- db reset --data-dir DIR
 - `--line` says what the client's serial port reaches (section 4). `--connect-rate` is the rate in the
   emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes);
   the transport's GetLineRate answers the same rate.
+- `--line-queue-kib` and `--write-timeout` bound what one line may hold and how long a write to it may
+  stall; past either the line is ended ([hardening.md](hardening.md) section 10).
 
 ## 3. Connecting the stock client from DOSBox-X
 

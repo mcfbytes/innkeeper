@@ -14,6 +14,7 @@ use tsn_link::LinkError;
 
 use crate::connection::ConnectionSettings;
 use crate::connection_gate::Binding;
+use crate::limits::Limits;
 use crate::signin::{LoginGate, SignIn};
 use crate::switchboard::{Inbox, Switchboard};
 
@@ -28,6 +29,7 @@ pub(crate) struct Host<'s> {
     world: &'s World,
     objects: &'s Mutex<ObjectStore>,
     switchboard: &'s Switchboard,
+    limits: &'s Limits,
     connection: ConnectionId,
     inbox: Inbox<'s>,
     player: PlayerSession,
@@ -77,6 +79,7 @@ impl<'s> Host<'s> {
             world: &settings.world,
             objects: &settings.objects,
             switchboard: &settings.switchboard,
+            limits: &settings.limits,
             connection,
             inbox: settings.switchboard.register(connection),
             player: PlayerSession::with_log(settings.world.log),
@@ -160,9 +163,18 @@ impl<'s> Host<'s> {
         self.inbox.next().await
     }
 
-    /// Notified when the operator's portal kicks this connection.
+    /// Notified when the operator's portal kicks this connection, or its inbox fills up.
     pub(crate) fn kick_signal(&self) -> std::sync::Arc<tokio::sync::Notify> {
         self.inbox.kick_signal()
+    }
+
+    /// Whether the kick came from a full inbox rather than the operator.
+    pub(crate) fn inbox_overflowed(&self) -> bool {
+        self.inbox.overflowed()
+    }
+
+    pub(crate) fn limits(&self) -> &'s Limits {
+        self.limits
     }
 
     /// Names the transport on the switchboard, for the portal's list.

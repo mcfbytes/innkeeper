@@ -171,10 +171,11 @@ impl<'s> Executive<'s> {
                 Err(error) => exchange.push(Exchange::NotSent(error.into())),
             }
         }
-        if received.len() > RECEIVE_QUEUE_LIMIT {
+        let bytes: usize = received.iter().map(|body| body.as_bytes().len()).sum();
+        if received.len() > RECEIVE_QUEUE_LIMIT || bytes > self.host.limits().line_queue_bytes {
             warn!(
                 waiting = received.len(),
-                "client stopped receiving, call ended"
+                bytes, "client stopped receiving, call ended"
             );
             self.host.hang_up();
             self.line = Line::Dropped;
@@ -324,6 +325,21 @@ mod tests {
         assert_eq!(after, Reply::Service(LinkStatus::Ok));
         assert_eq!(status(&mut executive), reports_connected(false));
         assert_eq!(receive(&mut executive), None);
+    }
+
+    #[test]
+    fn a_client_that_leaves_too_many_bytes_unreceived_loses_the_call() {
+        let settings = settings();
+        let mut executive = connected(&settings);
+        let big = HostMessage::Notice(innkeeper_world::Notice {
+            text: "x".repeat(60_000),
+        });
+        let enough = settings.limits.line_queue_bytes / 60_000 + 1;
+        for _ in 0..enough {
+            executive.pass_on(big.clone());
+        }
+        let lost = executive.handle(Call::Poll).reply;
+        assert_eq!(lost, Reply::Poll(LinkStatus::CarrierLost));
     }
 
     #[test]

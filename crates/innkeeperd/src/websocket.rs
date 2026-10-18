@@ -26,6 +26,7 @@ use innkeeper_world::AccountId;
 use crate::connection::{serve_line, ConnectionSettings, READ_CHUNK};
 use crate::connection_gate::{self, Binding};
 use crate::http::{self, Reply};
+use crate::limits::Limits;
 use crate::save_channel::SaveChannel;
 
 /// Serial bytes arrive a few at a time; a binary message larger than this is not a modem line.
@@ -142,8 +143,9 @@ async fn run<S>(
     let (line, session_end) = tokio::io::duplex(LINE_BUFFER);
     let (logon, signed_on) = watch::channel(None);
     let saves = SaveChannel::new(Arc::clone(&settings.world.store));
+    let shared = Arc::clone(&settings);
     let (relayed, ()) = tokio::join!(
-        relay(socket, line, saves, signed_on),
+        relay(socket, line, saves, signed_on, &shared.limits),
         serve_line(
             session_end,
             addr,
@@ -172,6 +174,7 @@ async fn relay<S>(
     line: DuplexStream,
     mut saves: SaveChannel,
     mut signed_on: watch::Receiver<Option<AccountId>>,
+    limits: &Limits,
 ) -> Result<(), RelayError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -193,7 +196,7 @@ where
                     Message::Text(text) => {
                         debug!(len = text.len(), "save channel request");
                         for reply in saves.handle(&text, now_millis()) {
-                            to_browser.send(Message::text(reply)).await?;
+                            limits.write_within(to_browser.send(Message::text(reply))).await??;
                         }
                     }
                     Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
@@ -206,15 +209,15 @@ where
                 }
                 let account = *signed_on.borrow_and_update();
                 for reply in saves.set_account(account) {
-                    to_browser.send(Message::text(reply)).await?;
+                    limits.write_within(to_browser.send(Message::text(reply))).await??;
                 }
             }
             read = from_session.read(&mut chunk) => {
                 let Some(bytes) = chunk.get(..read?).filter(|bytes| !bytes.is_empty()) else {
-                    to_browser.send(Message::Close(None)).await?;
+                    limits.write_within(to_browser.send(Message::Close(None))).await??;
                     return Ok(());
                 };
-                to_browser.send(Message::binary(bytes.to_vec())).await?;
+                limits.write_within(to_browser.send(Message::binary(bytes.to_vec()))).await??;
             }
         }
     }

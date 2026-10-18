@@ -112,6 +112,14 @@ impl Session {
         }
     }
 
+    /// Bytes for the client the link holds until it is acknowledged; 0 while no call is up.
+    pub fn queued_len(&self) -> usize {
+        match &self.host {
+            HostLink::Online(link) => link.queued_len(),
+            HostLink::Offline => 0,
+        }
+    }
+
     pub fn poll_output(&mut self) -> Option<SessionOutput> {
         self.outputs.pop_front()
     }

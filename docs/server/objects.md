@@ -93,8 +93,9 @@ player and then `ObjFree`.
 
 ## 5. Delivery in `innkeeperd`
 
-`innkeeperd::switchboard::Switchboard` maps each `ConnectionId` to an unbounded tokio channel, the
-connection's `Inbox`. `Host::answer` takes the store lock, hands deliveries for other connections to the
+`innkeeperd::switchboard::Switchboard` maps each `ConnectionId` to a tokio channel, the connection's
+`Inbox`, which counts the encoded bytes it holds; a delivery that would take it past the line's share
+ends the connection instead ([hardening.md](hardening.md) section 10). `Host::answer` takes the store lock, hands deliveries for other connections to the
 switchboard while it still holds the lock, and returns its own; the transport's driver sends them (the
 legacy link with `Session::send_message` and `Session::flush`) or queues them for Receive (the INT 14h
 transport). A connection's pump loop waits on its inbox beside the socket and the timers, and treats what

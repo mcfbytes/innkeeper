@@ -15,6 +15,7 @@ mod host;
 mod http;
 mod int14h_listener;
 mod keyvault;
+mod limits;
 mod metrics;
 mod notify;
 mod peer;

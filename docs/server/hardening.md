@@ -273,3 +273,20 @@ secret `admin-identities`, or `--admin-allowlist FILE`) and a Caddy `/admin/*` r
   allowlist file's directory**, so edits and replacements by rename are seen. Nothing else is added.
 - seccomp: the end-to-end test drives the portal under `--public` with the filter in kill mode and
   needed **no new syscalls**.
+
+## 10. Resource limits
+
+A public host runs on a 1 GiB virtual machine, so every line has a bounded share of memory and time.
+The limits live in `crates/innkeeperd/src/limits.rs` (`Limits`); the flags set them, and nothing in the
+original client depends on their exact values.
+
+| Limit | Default | Flag | What happens past it | Why this value |
+|---|---|---|---|---|
+| bytes waiting for one client | 2 MiB | `--line-queue-kib` | the line is ended with a warning, its objects released as on a hang-up | the switchboard inbox and the link's unacknowledged frames are counted, each against the limit; the link sends one frame of at most 254 bytes per ACK, so 2 MiB is some ten minutes of a 2400 bps line, far more than any burst a client must take (a land directory, a full mailbox listing, a busy waiting room) |
+| one write to the client's socket | 60 s | `--write-timeout` | the line is ended | a peer that has not read for a minute has gone; the WebSocket relay, the legacy line and the INT 14h transport all write through `Limits::write_within` |
+| a DATA frame the client never acknowledges | 3 s, 10 resends | none (`tsn_link::LinkConfig`) | the line is ended | once the host abandons a frame its sequence number no longer matches the client's, which discards every later frame, so the session is over anyway; the client itself gives up after 12 resends of 5 s ([link-layer.md](../protocol/link-layer.md) section 6.6) |
+| messages a transport client leaves unreceived | 1024, or the byte share above | none | the call is ended (`LinkStatus::CarrierLost`) | [int14h-transport.md](../protocol/int14h-transport.md) section 7 |
+
+A full inbox stops taking messages at once and kicks its connection, so a client that stops
+acknowledging while others keep sending to it holds at most its share. Before these limits, a client that
+read nothing let other players' traffic pile up without end.

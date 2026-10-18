@@ -24,6 +24,7 @@ use crate::retention;
 use crate::seal::Recipient;
 use crate::signin::EnrolmentMode;
 use crate::sqlite_store::SqliteStore;
+use crate::switchboard::Switchboard;
 use crate::websocket::serve_websocket;
 
 pub(crate) const DATABASE_FILE: &str = "innkeeper.db";
@@ -200,6 +201,8 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     settings.signup_open = enrolment.login_enrols();
     settings.forwarding = config.forwarding();
     settings.seal_required = config.public;
+    settings.limits = config.limits();
+    settings.switchboard = Switchboard::with_queue_limit(settings.limits.line_queue_bytes);
     let settings = Arc::new(settings);
     let admin = match (admin_listener, opened.store.as_ref()) {
         (Some(listener), Some(store)) => {
