@@ -173,6 +173,7 @@ impl<'s> Host<'s> {
     /// The connection ended: everything it held is released and the peers are told.
     pub(crate) fn hang_up(&mut self) {
         let mut objects = lock(self.objects);
+        self.world.leave_trivia(self.connection);
         let released = objects.disconnect(self.connection);
         released
             .into_iter()

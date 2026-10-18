@@ -6,7 +6,8 @@ use crate::message::wire::{fitting_count, row_count, WireReader, WireWriter};
 use crate::message::{
     AccountReply, Ack, BbsReply, Command, GroupLeave, GroupMembers, HintReply, InvokeMethod,
     LockRefused, MailReply, MailboxAnswer, MallReply, MemberProperties, MoneyReply, Notice,
-    ObjNewListReply, ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr, UserFindReply,
+    ObjNewListReply, ObjectLocated, PropertyValues, SendMessage, SetInt, SetStr, TriviaReply,
+    UserFindReply, NTN_SERVER,
 };
 use crate::{
     ClientVersion, Cookie, HostNumber, LandFlags, LandNumber, LandType, MessageError, Sid, Stamp,
@@ -64,8 +65,10 @@ pub enum HostMessage {
     MemberProperties(MemberProperties),
     /// The RPG bulletin board (27).
     Bbs(BbsReply),
-    /// Shoppers Advantage (54).
+    /// Shoppers Advantage (54, server word 5).
     Mall(MallReply),
+    /// NTN Trivia (54, server word 4).
+    Trivia(TriviaReply),
     /// PaintBall `ObjNewList` (51): the caller's cookie and one SID per new object.
     ObjNewList(ObjNewListReply),
     /// The phone book (49): who is online.
@@ -195,6 +198,7 @@ impl HostMessage {
             HostMessage::MemberProperties(_) => "MemberProperties",
             HostMessage::Bbs(_) => "Bbs",
             HostMessage::Mall(_) => "Mall",
+            HostMessage::Trivia(_) => "Trivia",
             HostMessage::ObjNewList(_) => "ObjNewList",
             HostMessage::UserFind(_) => "UserFind",
             HostMessage::Account(_) => "Account",
@@ -284,6 +288,7 @@ impl HostMessage {
             HostMessage::MemberProperties(table) => table.write(&mut writer),
             HostMessage::Bbs(reply) => reply.write(&mut writer),
             HostMessage::Mall(reply) => reply.write(&mut writer),
+            HostMessage::Trivia(reply) => reply.write(&mut writer),
             HostMessage::ObjNewList(reply) => reply.write(&mut writer),
             HostMessage::UserFind(reply) => reply.write(&mut writer),
             HostMessage::Account(reply) => reply.write(&mut writer),
@@ -389,7 +394,7 @@ impl HostMessage {
                 HostMessage::MemberProperties(MemberProperties::parse(&mut reader)?)
             }
             Command::Bbs => HostMessage::Bbs(BbsReply::parse(&mut reader)?),
-            Command::Mall => HostMessage::Mall(MallReply::parse(&mut reader)?),
+            Command::Mall => parse_pms_reply(&mut reader)?,
             Command::ObjNewList => HostMessage::ObjNewList(ObjNewListReply::parse(&mut reader)?),
             Command::UserInfo => HostMessage::Money(MoneyReply::parse(&mut reader)?),
             Command::UserFind => HostMessage::UserFind(UserFindReply::parse(&mut reader)?),
@@ -443,6 +448,15 @@ fn parse_wait_group(reader: &mut WireReader) -> Result<HostMessage, MessageError
             command: Command::WaitGroup.byte(),
             sub,
         }),
+    }
+}
+
+/// Command 54 from the host. Server word 4 is NTN; the mall keeps every other value.
+fn parse_pms_reply(reader: &mut WireReader) -> Result<HostMessage, MessageError> {
+    let trivia = reader.peek_word(1) == Some(NTN_SERVER);
+    match trivia {
+        true => Ok(HostMessage::Trivia(TriviaReply::parse(reader)?)),
+        false => Ok(HostMessage::Mall(MallReply::parse(reader)?)),
     }
 }
 

@@ -28,7 +28,7 @@ pub fn is_complaint_board(board: BoardId) -> bool {
 pub enum PostKind {
     /// A message on a board players read.
     Post,
-    /// A moderator's conference or trivia topic text (location 0, sections 67 and 84).
+    /// A moderator's conference or trivia topic text (location 0, sections 67, 84 and 85).
     Topic,
     /// The Complaints board of any land: the hub's complaint form, or an RPG post to it.
     Complaint,
@@ -84,10 +84,14 @@ const PRIVILEGED_USER_FLAGS: u16 = 0x0006;
 /// The user flag the client's own sysop level 3 needs (`RoomZeroHandler`, `hub/script.011`), which is
 /// what shows its "Maintain Conferences" dialog.
 const MODERATOR_USER_FLAGS: u16 = 0x0004;
-/// Sections of location 0 that hold the conference (67) and trivia (84) topic texts: the hub's
-/// conference list and SL's trivia list read message 1 of them, and a moderator's "Change Topics"
-/// replaces it (`hub/script.120`, `SL/script.120`). No directory lists them.
-const TOPIC_SECTIONS: [u16; 2] = [67, 84];
+/// Location 0 sections whose one message is topic text: conference 67, SL trivia 84, hub trivia 85.
+/// A moderator's "Change Topics" replaces it (`hub/script.120`, `SL/script.120`).
+const TOPIC_SECTIONS: [u16; 3] = [67, 84, 85];
+/// Trivia pickers. An empty one is served as the three rooms below, not as a blank list.
+const TRIVIA_TOPIC_SECTIONS: [u16; 2] = [84, 85];
+/// Info line, then one topic per `\x02`. The client splits on bytes 1 and 2 (`proc_309`).
+const DEFAULT_TRIVIA_TOPICS: &[u8] =
+    b"\x01Choose a room\x02Adventure games\x02General trivia\x02Games and screens\x02";
 /// The client keeps one byte per indexed message in a 120-byte buffer.
 const INDEX_LIMIT: usize = 120;
 
@@ -233,13 +237,14 @@ impl Boards<'_> {
         message: u16,
     ) -> Result<BbsReply, StoreError> {
         let posts = self.posts(board)?;
-        let total = word(posts.len());
-        let number = step_to(step, message, total);
-        let body = usize::from(number)
+        let stored_total = word(posts.len());
+        let stored_number = step_to(step, message, stored_total);
+        let stored = usize::from(stored_number)
             .checked_sub(1)
             .and_then(|index| posts.get(index))
             .map(|post| post.body.clone())
             .unwrap_or_default();
+        let (number, total, body) = shown_topics(board, stored_number, stored_total, stored);
         Ok(BbsReply::Message {
             to,
             board,
@@ -452,6 +457,17 @@ fn is_topic_board(board: BoardRef) -> bool {
     board.location == 0 && TOPIC_SECTIONS.contains(&board.section)
 }
 
+/// An empty trivia picker (84 or 85) shows the three rooms. A stored message, including a
+/// moderator's, is returned as posted. Conference 67 is left empty until someone writes it.
+fn shown_topics(board: BoardRef, number: u16, total: u16, body: Vec<u8>) -> (u16, u16, Vec<u8>) {
+    let picker = board.location == 0 && TRIVIA_TOPIC_SECTIONS.contains(&board.section);
+    let blank = body.iter().all(|byte| *byte == 0);
+    match picker && blank {
+        true => (1, 1, DEFAULT_TRIVIA_TOPICS.to_vec()),
+        false => (number, total, body),
+    }
+}
+
 fn is_listed(board: BoardRef) -> bool {
     let mut sections = SECTIONS.iter();
     sections.any(|section| section.location == board.location && section.number == board.section)
@@ -526,6 +542,17 @@ mod tests {
         assert_eq!(post_kind(board_id(LandType(1), tavern)), PostKind::Post);
         assert_eq!(post_kind(board_id(LandType(0), topic)), PostKind::Topic);
         assert_eq!(post_kind(board_id(LandType(1), topic)), PostKind::Post);
+        let trivia = BoardRef {
+            location: 0,
+            section: 85,
+        };
+        assert_eq!(post_kind(board_id(LandType(0), trivia)), PostKind::Topic);
+        assert_eq!(post_kind(board_id(LandType(1), trivia)), PostKind::Post);
+        let elsewhere = BoardRef {
+            location: 0x59,
+            section: 85,
+        };
+        assert_eq!(post_kind(board_id(LandType(1), elsewhere)), PostKind::Post);
     }
 
     #[test]

@@ -15,7 +15,17 @@ MAX_BLOCK_LINES = 2
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FORK_DIR = REPO_ROOT / "scummvm"
 FORK_BASE_REF = "upstream/master"
-SKIPPED_DIRS = {"scummvm", ".venv", "work", "media", "target", ".git", "__pycache__", "node_modules"}
+SKIPPED_DIRS = {
+    "scummvm",
+    ".venv",
+    "work",
+    "media",
+    "target",
+    ".git",
+    "__pycache__",
+    "node_modules",
+    "third_party",
+}
 OWN_SUFFIXES = {".rs", ".py"}
 FORK_SUFFIXES = {".c", ".cc", ".cpp", ".h", ".hpp"}
 LICENSE_OPENER = "/* ScummVM"

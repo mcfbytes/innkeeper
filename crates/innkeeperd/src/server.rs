@@ -31,6 +31,8 @@ pub(crate) const LOCK_FILE: &str = "innkeeper.lock";
 const STARTUP_LINE: &str = "INT 14h hooked. Please wait while ImagiNation loads...";
 /// Pause after a failed accept, so a full descriptor table does not spin the loop.
 const ACCEPT_BACKOFF: Duration = Duration::from_millis(100);
+/// How often the trivia show looks at the clock. Question time is 20 s.
+const TRIVIA_TICK: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Error)]
 pub(crate) enum ServerError {
@@ -151,6 +153,9 @@ pub(crate) fn account_book(store: &Arc<SqliteStore>, enrolment: EnrolmentMode) -
 /// starts later.
 pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     let mut opened = open_world(config.data_dir.as_deref())?;
+    let (pools, counts) = crate::trivia::load(&config);
+    crate::trivia::log_counts(&counts);
+    opened.world.install_trivia(pools);
     opened.world.log = if config.public {
         LogPolicy::Public
     } else {
@@ -277,6 +282,7 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
     if let Some(interval) = crate::notify::watchdog_interval() {
         tokio::spawn(crate::notify::watchdog(interval, store.clone()));
     }
+    tokio::spawn(trivia_clock(Arc::clone(&settings)));
     if let Some(store) = store.clone() {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(3600));
@@ -354,6 +360,17 @@ fn adopt(listener: StdListener) -> Result<TcpListener, ServerError> {
 
 fn adopt_if(listener: Option<StdListener>) -> Result<Option<TcpListener>, ServerError> {
     listener.map(adopt).transpose()
+}
+
+async fn trivia_clock(settings: Arc<ConnectionSettings>) {
+    let mut interval = tokio::time::interval(TRIVIA_TICK);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        interval.tick().await;
+        for delivery in settings.world.tick_trivia() {
+            settings.switchboard.deliver(delivery);
+        }
+    }
 }
 
 fn run_purge(store: &SqliteStore, policy: RetentionPolicy) {

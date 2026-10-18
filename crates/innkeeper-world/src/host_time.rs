@@ -19,6 +19,8 @@ pub struct HostTime {
 pub trait Clock: std::fmt::Debug + Send + Sync {
     /// The current moment in civil time.
     fn now(&self) -> HostTime;
+    /// Monotonic-enough milliseconds for the trivia show and other timers.
+    fn millis(&self) -> u64;
 }
 
 /// The system clock: uses the wall clock via std::time::SystemTime.
@@ -50,6 +52,13 @@ impl Clock for SystemClock {
             second,
         }
     }
+
+    fn millis(&self) -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
 }
 
 /// A fixed clock for testing: always returns the same time.
@@ -61,6 +70,16 @@ pub struct FixedClock {
 impl Clock for FixedClock {
     fn now(&self) -> HostTime {
         self.time
+    }
+
+    fn millis(&self) -> u64 {
+        let t = self.time;
+        let days = u64::from(t.year_1900) * 366 + u64::from(t.month0) * 32 + u64::from(t.mday);
+        let secs = days * 86400
+            + u64::from(t.hour) * 3600
+            + u64::from(t.minute) * 60
+            + u64::from(t.second);
+        secs.saturating_mul(1000)
     }
 }
 

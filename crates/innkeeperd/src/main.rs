@@ -26,6 +26,7 @@ mod signin;
 mod sqlite_store;
 mod subject;
 mod switchboard;
+mod trivia;
 mod websocket;
 
 use std::io::{self, Write};

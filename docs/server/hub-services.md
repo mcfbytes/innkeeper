@@ -100,18 +100,20 @@ The text lives in one table, `SERIES` in `innkeeper-world/src/hint_board.rs`: se
 order, each hint a problem and an answer. Edit that table to change what the board says; a unit test keeps each
 entry within the sizes the boxes took. Checked live (section 9).
 
-## 5. Conference and trivia topic text (27/0 and 27/1, class 67 and 84)
+## 5. Conference and trivia topic text (27/0 and 27/1, class 67, 84 and 85)
 
-`GotoConference` (hub) and `GotoTrivia` (SL) read message 1 of board 0/67 or 0/84 with an ordinary 27/1 and show
-its text as the topic and info of the conference or trivia rooms (`\x01 info \x02 topic \x02 ...`, up to four
-topics). A moderator's "Change Topics" (shown only at sysop level 3) writes that text back with a 27/0. The
-host keeps one text per class, shared by every land (`TOPIC_SECTIONS`, land 0): a write from an account with
-the user flag `0x0004` replaces the stored text (the old one is deleted, so message 1 is always the latest),
-and any reader's 27/1 gets it. A write from anyone else is dropped with a warning. Until a moderator writes,
-the read answers an empty board, as before. The conference name check (41/0) and the room itself are in
-[coverage.md](coverage.md) section 3.1 and are unchanged. Not exercised live: the maintenance dialog is
-reachable only with a debug-level client configuration, so the write is tested by transcript only
-(`tests/hub_services.rs`), and a second client in a conference room (multiplayer chat) was not tried.
+`GotoConference` (hub) and `GotoTrivia` (hub class 85, SL class 84) read message 1 of board 0/67, 0/84 or
+0/85 with an ordinary 27/1 and show its text as the topic and info of the conference or trivia rooms
+(`\x01 info \x02 topic \x02 ...`, up to the buttons the dialog builds). A moderator's "Change Topics"
+(shown only at sysop level 3) writes that text back with a 27/0. The host keeps one text per class, shared
+by every land (`TOPIC_SECTIONS`, land 0): a write from an account with the user flag `0x0004` replaces the
+stored text (the old one is deleted, so message 1 is always the latest), and any reader's 27/1 gets it. A
+write from anyone else is dropped with a warning. Until a moderator writes, conference 67 answers an empty
+board; trivia 84 and 85 answer the three rooms in [trivia.md](trivia.md) section 1. The conference name
+check (41/0) and the room itself are in [coverage.md](coverage.md) section 3.1 and are unchanged. Not
+exercised live: the maintenance dialog is reachable only with a debug-level client configuration, so the
+write is tested by transcript only (`tests/hub_services.rs` and `tests/trivia.rs`), and a second client in
+a conference room (multiplayer chat) was not tried.
 
 ## 6. 27/8
 

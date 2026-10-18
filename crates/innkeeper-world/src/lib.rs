@@ -30,6 +30,7 @@ pub mod saves;
 mod signup;
 mod store;
 mod town_hall;
+mod trivia;
 mod user_find;
 mod world;
 
@@ -45,14 +46,16 @@ pub use land::LandCatalog;
 pub use log_policy::LogPolicy;
 pub use message::{
     AccountReply, AccountRequest, Ack, BbsReply, BbsRequest, BoardListing, BoardRef,
-    ChangePassword, ClientMessage, EncodedPassword, Envelope, FoundUser, GroupJoin, GroupLeave,
-    GroupMembers, GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty, JoinNet,
-    LandDirectory, LandEntry, LetterRef, ListedLetter, Login, LoginAck, LoginNakReason,
+    ChangePassword, CheckedFailure, ClientMessage, EncodedPassword, Envelope, FoundUser, GroupJoin,
+    GroupLeave, GroupMembers, GroupMembersRequest, HostInfoRequest, HostMessage, IntProperty,
+    JoinNet, LandDirectory, LandEntry, LetterRef, ListedLetter, Login, LoginAck, LoginNakReason,
     LoginStatus, MailFault, MailReply, MailRequest, MailboxAnswer, MailboxRequest, MallHeader,
-    MallReply, MallRequest, MessagePosition, MoneyReply, Multicast, Nak, Notice, ObjExists,
-    ObjFreeList, ObjNewList, ObjNewListReply, ObjectKind, ObjectLocated, Occupancy, OutgoingLetter,
-    PasswordSource, PlayStatus, ReadMoney, ReadStep, SaveMoney, SendMessage, ServiceKind, SetInt,
-    SetPersona, SetStr, Signup, SummaryKind, SystemService, UserFind, UserFindReply,
+    MallReply, MallRequest, MessagePosition, MoneyReply, Multicast, Nak, Notice, NtnMessage,
+    ObjExists, ObjFreeList, ObjNewList, ObjNewListReply, ObjectKind, ObjectLocated, Occupancy,
+    OutgoingLetter, PasswordSource, PlayStatus, ReadMoney, ReadStep, RoundWinner, SaveMoney,
+    ScoreWords, SendMessage, ServiceKind, SetInt, SetPersona, SetStr, Signup, SummaryKind,
+    SystemService, TextFraming, TriviaHeader, TriviaReply, TriviaRequest, UserFind, UserFindReply,
+    NTN_SERVER,
 };
 pub use message::{
     ComplaintText, HintKind, HintReply, HintRequest, InvokeMethod, LockId, LockRefused,
@@ -71,5 +74,8 @@ pub use store::conformance;
 pub use store::{
     not_a_complaint, AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post,
     PostId, Store, StoreError,
+};
+pub use trivia::{
+    fit, wrap, Item, OpenQuestion, PoolCounts, RawQuestion, TriviaPools, TriviaShows,
 };
 pub use world::World;
