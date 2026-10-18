@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::message::wire::{WireReader, WireWriter};
 use crate::message::Command;
 use crate::{MessageError, Sid};
@@ -8,7 +10,8 @@ use crate::{MessageError, Sid};
 pub struct SendMessage {
     pub to: Sid,
     pub from: Sid,
-    pub payload: Vec<u8>,
+    /// Shared, so the copies one relay fans out hold a single body.
+    pub payload: Arc<[u8]>,
 }
 
 impl SendMessage {
@@ -22,7 +25,7 @@ impl SendMessage {
         Ok(SendMessage {
             to: Sid(reader.word("toSID")?),
             from: Sid(reader.word("fromSID")?),
-            payload: reader.rest(),
+            payload: reader.rest().into(),
         })
     }
 
@@ -47,10 +50,10 @@ mod tests {
         let mut send = SendMessage {
             to: Sid(0x0103),
             from: Sid(0x0102),
-            payload: vec![0x32, 0x00, 0xFF],
+            payload: vec![0x32, 0x00, 0xFF].into(),
         };
         assert_eq!(send.msg_type_word(), Some(50));
-        send.payload.truncate(1);
+        send.payload = vec![0x32].into();
         assert_eq!(send.msg_type_word(), None);
     }
 }

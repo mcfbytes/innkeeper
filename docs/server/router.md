@@ -10,7 +10,7 @@ unread, so the host holds no game logic. The object store it asks is described i
 | Function | Input | Result |
 |---|---|---|
 | `router::send(objects, sender, &SendMessage)` | `to`, `from`, payload | one `HostMessage::Send` per recipient connection |
-| `router::multicast(objects, sender, &Multicast)` | `from`, a list of SIDs, body | the `Send` of the body to each listed SID, in list order |
+| `router::multicast(objects, sender, &Multicast)` | `from`, a list of SIDs, body | the `Send` of the body to each distinct listed SID, in order of first listing; nothing for a list of more than 256 distinct SIDs |
 
 `PlayerSession::handle` calls them for a logged-in connection; a connection that has not logged in is
 ignored like for every other command. Both are pure over a shared `&ObjectStore`: they change nothing
@@ -32,8 +32,13 @@ land types leave the sender out for any target (`rpg::echoes_sender`).
 
 Every copy has `to` the SID the sender named (the group SID for a group), `from` as sent, and the payload
 byte for byte, so the receiver sees what the sender built. A connection gets its copies in request order,
-and the copies of one SID go in ascending `ConnectionId`. A multicast is one such `Send` per listed SID,
-so a SID listed twice is sent twice and a group in the list is not expanded to its members' SIDs.
+and the copies of one SID go in ascending `ConnectionId`. A multicast is one such `Send` per distinct listed
+SID, so a SID listed twice is sent once and a group in the list is not expanded to its members' SIDs. The
+copies share one body in memory, so a long fan-out holds the payload once until the inboxes encode it.
+
+A multicast that lists more than `MULTICAST_RECIPIENTS_MAX_ASSUMED` distinct SIDs is dropped whole with a
+warning, like an unknown target: there is no Nak to send. Before this rule one 64 KiB multicast that named a
+SID 10,000 times queued 10,000 copies of its body (435 MiB) for its holder.
 
 An unknown target is logged as a warning and dropped with no Nak: no census handler reads a Nak for a
 `Send`, and GOLF aborts only when its own send call fails, not when nothing arrives.
@@ -46,6 +51,7 @@ group SID itself, and nothing here sets `from` but the sender.
 | Constant | Value | Why | Source |
 |---|---|---|---|
 | `GROUP_SEND_SKIPS_SENDER_ASSUMED` | true | MiniGolf replays and sends again every shot of its own that comes back; GOLF, Red Baron and PaintBall address their own SID when they need their copy, which would be redundant if a group sent it | [games.md](games.md) section 5.1 |
+| `MULTICAST_RECIPIENTS_MAX_ASSUMED` | 256 | the longest client list is a waiting-room chat line to everyone else in the room, 127 SIDs (`hub/script.005` export 1, a `WaitingRoomGroup` of maximum 128); a conference lists at most 24, the Hard Disk Cafe 16, the casino and game invitations 12 or fewer, GOLF and Red Baron 2. Twice the longest leaves room for a room this host makes larger | `hub/script.000 CC::handleEvent`, `hub/script.120 GotoConference`, [messages.md](../protocol/messages.md) section 8, INFERRED bound |
 
 With `false` a group `Send` would reach the sender's connection too, as it did before 2026-10-16.
 

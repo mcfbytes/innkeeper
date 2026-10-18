@@ -156,7 +156,7 @@ fn a_send_keeps_its_payload_and_offers_the_word_message_type() {
         panic!("a Send decodes");
     };
     assert_eq!((to, from), (Sid(0x0103), Sid(0x0102)));
-    assert_eq!(payload, [1, 0, 0x68, 0x69]);
+    assert_eq!(*payload, [1, 0, 0x68, 0x69]);
     let send = SendMessage { to, from, payload };
     assert_eq!(send.msg_type_word(), Some(1));
 }

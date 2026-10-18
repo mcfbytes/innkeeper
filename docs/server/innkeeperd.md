@@ -229,7 +229,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | delete (11) | `GrpDel` to the connections of the remaining members |
 | `GrpMem` (12) | the member list, from byte 6 in joining order |
 | `Send` (2) | the same `Send` to every connection that holds the object `to`, or a member of the group `to`, the sender's own connection included (INFERRED); nothing for a SID nobody holds, and no Nak |
-| multicast (28) | one `Send` of the body per recipient SID, in list order, under the same rules |
+| multicast (28) | one `Send` of the body per distinct recipient SID, in order of first listing, under the same rules; a list of more than 256 distinct SIDs is dropped ([router.md](router.md) section 2) |
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand, CasinoLand, Arena, Yserbius, Cawdor and Twinion, land number 1, on host 7. Arena is land type 5, listed after the three LSCI lands and before the RPG titles. `lsci()` is still the three-land capture |
 | 47/1 | occupancy for the same lands: maximum 64 for Clubhouse, SierraLand, CasinoLand and the Arena, and 100 for the three RPG titles, current the number of members in the land's waiting room (0 for a land nobody entered; the Clubhouse room itself holds 128, the size of the stock joinNet) |

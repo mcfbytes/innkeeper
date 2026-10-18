@@ -75,6 +75,9 @@ pub(crate) const REJOIN_REPLACES_KIND_ASSUMED: ObjectKind = ObjectKind::GameObje
 /// A `Send` to a group skips the sender's connection: MiniGolf replays its own shot otherwise (games.md
 /// 5.1). GOLF, Red Baron and PaintBall name their own SID when they want their copy, and get it.
 pub(crate) const GROUP_SEND_SKIPS_SENDER_ASSUMED: bool = true;
+/// The most distinct SIDs a multicast may list: twice the 127 of a full waiting room's chat line
+/// (router.md section 3). A longer list is no client's and is dropped whole.
+pub(crate) const MULTICAST_RECIPIENTS_MAX_ASSUMED: usize = 256;
 /// A 40/4 persona name gets no reply: the stock client sends it at logon and in the Clubhouse and
 /// carries on without one (section 3.3). The name renames the session; the store keeps it as the
 /// account's persona except under `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`.
