@@ -1,0 +1,4097 @@
+{
+ "rounds": {
+  "founders": [
+   {
+    "question": "Who founded On-Line Systems with Roberta Williams?",
+    "correct_answer": "Ken Williams",
+    "incorrect_answers": [
+     "Al Lowe",
+     "Ron Gilbert",
+     "Charles Cecil"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ken and Roberta Williams founded On-Line Systems, later Sierra On-Line, in 1979.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "In which California city did On-Line Systems start?",
+    "correct_answer": "Simi Valley",
+    "incorrect_answers": [
+     "Oakhurst",
+     "Bellevue",
+     "Palo Alto"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The Williamses founded On-Line Systems in Simi Valley, California.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "Which 1980 game is credited as the first graphic adventure?",
+    "correct_answer": "Mystery House",
+    "incorrect_answers": [
+     "King's Quest",
+     "Zork I",
+     "Colossal Cave"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Mystery House, released in May 1980, is credited as the first graphic adventure.",
+    "ref": "https://en.wikipedia.org/wiki/Mystery_House"
+   },
+   {
+    "question": "Who designed Mystery House and drew its pictures?",
+    "correct_answer": "Roberta Williams",
+    "incorrect_answers": [
+     "Ken Williams",
+     "Jane Jensen",
+     "Lori Cole"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Roberta Williams designed and illustrated Mystery House. Ken programmed it.",
+    "ref": "https://en.wikipedia.org/wiki/Mystery_House"
+   },
+   {
+    "question": "Who programmed Mystery House for the Apple II?",
+    "correct_answer": "Ken Williams",
+    "incorrect_answers": [
+     "Roberta Williams",
+     "Marc Blank",
+     "Richard Garriott"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Ken Williams programmed Mystery House for the Apple II, turning Roberta's drawings into line-drawing instructions.",
+    "ref": "https://en.wikipedia.org/wiki/Mystery_House"
+   },
+   {
+    "question": "Which text game hooked Roberta Williams on adventures?",
+    "correct_answer": "Colossal Cave",
+    "incorrect_answers": [
+     "Zork I",
+     "Adventureland",
+     "The Hobbit"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Ken bought Colossal Cave Adventure and the couple played it together; finding few similar games, Roberta decided to write her own.",
+    "ref": "https://en.wikipedia.org/wiki/Mystery_House"
+   },
+   {
+    "question": "Mystery House borrows from Clue and which novel?",
+    "correct_answer": "And Then There Were None",
+    "incorrect_answers": [
+     "Murder on the Orient Express",
+     "The Hound of the Baskervilles",
+     "Rebecca"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Roberta based the mansion mystery on Agatha Christie's And Then There Were None and on Clue.",
+    "ref": "https://en.wikipedia.org/wiki/Mystery_House"
+   },
+   {
+    "question": "What was the company called before it became Sierra On-Line?",
+    "correct_answer": "On-Line Systems",
+    "incorrect_answers": [
+     "Oakhurst Software",
+     "Mystery House Inc",
+     "Hi-Res Games"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ken and Roberta Williams founded the company as On-Line Systems and later renamed it Sierra On-Line.",
+    "ref": "https://historylink.org/file/20919"
+   },
+   {
+    "question": "Which Sierra Nevada foothills town was Sierra On-Line's long-time home?",
+    "correct_answer": "Oakhurst, California",
+    "incorrect_answers": [
+     "Bellevue, Washington",
+     "Eugene, Oregon",
+     "Las Vegas, Nevada"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sierra On-Line was long based in Oakhurst, California, in the Sierra Nevada foothills near Yosemite; moves there from Simi Valley via Coarsegold are dated differently by different sources.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "Sierra On-Line took its name from the Sierra Nevada.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "The company name honors the Sierra Nevada mountains beside its Oakhurst home.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "Which 1984 Roberta Williams game was built for the IBM PCjr?",
+    "correct_answer": "King's Quest",
+    "incorrect_answers": [
+     "Space Quest",
+     "Maniac Mansion",
+     "Loom"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "IBM commissioned King's Quest for the PCjr. Sierra released it in 1984.",
+    "ref": "https://en.wikipedia.org/wiki/Roberta_Williams"
+   },
+   {
+    "question": "What had Ken planned for On-Line Systems to sell at first?",
+    "correct_answer": "Business software",
+    "incorrect_answers": [
+     "Pinball machines",
+     "Sheet music",
+     "Board games"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Ken registered On-Line Systems to sell business software before Mystery House took over.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "Which 1980 Roberta Williams game brought color pictures?",
+    "correct_answer": "The Wizard and the Princess",
+    "incorrect_answers": [
+     "Mystery House",
+     "Time Zone",
+     "King's Quest II"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Wizard and the Princess, Roberta's color follow-up to Mystery House, came out in 1980.",
+    "ref": "https://en.wikipedia.org/wiki/Roberta_Williams"
+   },
+   {
+    "question": "Which 1981 text game was later remade as Leisure Suit Larry?",
+    "correct_answer": "Softporn Adventure",
+    "incorrect_answers": [
+     "Leather Goddesses",
+     "Spellcasting 101",
+     "Rex Nebular"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Chuck Benton's Softporn Adventure, published by On-Line Systems, was the basis for Larry.",
+    "ref": "https://en.wikipedia.org/wiki/Softporn_Adventure"
+   },
+   {
+    "question": "Who designed the Leisure Suit Larry series?",
+    "correct_answer": "Al Lowe",
+    "incorrect_answers": [
+     "Scott Murphy",
+     "Josh Mandel",
+     "Steve Meretzky"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Al Lowe designed Sierra's Leisure Suit Larry games, beginning with the 1987 graphic remake.",
+    "ref": "https://en.wikipedia.org/wiki/Al_Lowe"
+   },
+   {
+    "question": "What did Al Lowe do for a living before designing games?",
+    "correct_answer": "School band director",
+    "incorrect_answers": [
+     "Highway patrol officer",
+     "Cookbook editor",
+     "Airline pilot"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Al Lowe taught public school music for 15 years and worked as a band director before Sierra.",
+    "ref": "https://en.wikipedia.org/wiki/Al_Lowe"
+   },
+   {
+    "question": "What nickname did Space Quest's creators go by?",
+    "correct_answer": "Two Guys from Andromeda",
+    "incorrect_answers": [
+     "The Scummlets",
+     "The Vohaul Brothers",
+     "The Sierra Twins"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Scott Murphy and Mark Crowe, creators of Space Quest, called themselves the Two Guys from Andromeda.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest"
+   },
+   {
+    "question": "Jim Walls designed Police Quest after serving in which force?",
+    "correct_answer": "California Highway Patrol",
+    "incorrect_answers": [
+     "Scotland Yard",
+     "The Texas Rangers",
+     "A mall security desk"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Jim Walls, a former California Highway Patrol officer, designed the early Police Quest games.",
+    "ref": "https://en.wikipedia.org/wiki/Jim_Walls"
+   },
+   {
+    "question": "Who designed the Quest for Glory series?",
+    "correct_answer": "Lori and Corey Cole",
+    "incorrect_answers": [
+     "Jane Jensen",
+     "Christy Marx",
+     "Roberta Williams"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Lori Ann Cole and Corey Cole designed Quest for Glory, first released as Hero's Quest.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory"
+   },
+   {
+    "question": "Who created the Gabriel Knight mysteries?",
+    "correct_answer": "Jane Jensen",
+    "incorrect_answers": [
+     "Roberta Williams",
+     "Lorelei Shannon",
+     "Amy Briggs"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Jane Jensen designed and wrote Sierra's Gabriel Knight series.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight"
+   },
+   {
+    "question": "Hero's Quest was renamed after a clash with which product?",
+    "correct_answer": "The HeroQuest board game",
+    "incorrect_answers": [
+     "Dungeons and Dragons",
+     "The Legend of Zelda",
+     "Hero's Quest pinball"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Milton Bradley's HeroQuest trademark pushed Sierra to rename the series Quest for Glory.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory"
+   },
+   {
+    "question": "In what year did George Lucas start Lucasfilm Games?",
+    "correct_answer": "1982",
+    "incorrect_answers": [
+     "1977",
+     "1987",
+     "1990"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Lucasfilm Games was established in May 1982 as Lucasfilm's video game division.",
+    "ref": "https://en.wikipedia.org/wiki/Lucasfilm_Games"
+   },
+   {
+    "question": "Lucasfilm Games became LucasArts in which year?",
+    "correct_answer": "1990",
+    "incorrect_answers": [
+     "1982",
+     "1987",
+     "1995"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "A 1990 reorganization folded Lucasfilm Games into the LucasArts name.",
+    "ref": "https://en.wikipedia.org/wiki/Lucasfilm_Games"
+   },
+   {
+    "question": "Who created the SCUMM engine to build Maniac Mansion?",
+    "correct_answer": "Ron Gilbert",
+    "incorrect_answers": [
+     "Tim Schafer",
+     "Brian Moriarty",
+     "Hal Barwood"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ron Gilbert created SCUMM, the Script Creation Utility for Maniac Mansion.",
+    "ref": "https://en.wikipedia.org/wiki/SCUMM"
+   },
+   {
+    "question": "Where did the early Lucasfilm Games group work?",
+    "correct_answer": "Skywalker Ranch",
+    "incorrect_answers": [
+     "A Hollywood backlot",
+     "Oakhurst",
+     "The Death Star"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The games group first worked at Lucas's Skywalker Ranch near Nicasio, California.",
+    "ref": "https://en.wikipedia.org/wiki/Lucasfilm_Games"
+   },
+   {
+    "question": "Infocom's founders came out of which school?",
+    "correct_answer": "MIT",
+    "incorrect_answers": [
+     "Stanford",
+     "Caltech",
+     "Carnegie Mellon"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Infocom was founded on June 22, 1979 by staff and students tied to MIT.",
+    "ref": "https://en.wikipedia.org/wiki/Infocom"
+   },
+   {
+    "question": "Who served as Infocom's president in its early years?",
+    "correct_answer": "Joel Berez",
+    "incorrect_answers": [
+     "Marc Blank",
+     "Dave Lebling",
+     "Ken Williams"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Joel Berez was Infocom's president. Al Vezza chaired the board.",
+    "ref": "https://en.wikipedia.org/wiki/Infocom"
+   },
+   {
+    "question": "Which company bought Infocom in 1986?",
+    "correct_answer": "Activision",
+    "incorrect_answers": [
+     "Sierra On-Line",
+     "Broderbund",
+     "Electronic Arts"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Activision acquired Infocom in June 1986.",
+    "ref": "https://en.wikipedia.org/wiki/Infocom"
+   },
+   {
+    "question": "Which brothers founded Cyan, the studio behind Myst?",
+    "correct_answer": "Rand and Robyn Miller",
+    "incorrect_answers": [
+     "Ken and Roberta Williams",
+     "Brett Sperry and Louis Castle",
+     "Jeff Tunnell and Damon Slye"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Brothers Rand and Robyn Miller founded Cyan and later created Myst.",
+    "ref": "https://en.wikipedia.org/wiki/Cyan_Worlds"
+   },
+   {
+    "question": "In which Washington city did Cyan begin?",
+    "correct_answer": "Spokane",
+    "incorrect_answers": [
+     "Seattle",
+     "Tacoma",
+     "Olympia"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Cyan began in the Millers' family home in Spokane, Washington, and is now based in Mead.",
+    "ref": "https://en.wikipedia.org/wiki/Cyan_Worlds"
+   },
+   {
+    "question": "Who co-founded Westwood in Las Vegas in 1985?",
+    "correct_answer": "Brett Sperry and Louis Castle",
+    "incorrect_answers": [
+     "Cecil and Tony Warriner",
+     "Tunnell and Damon Slye",
+     "Devine and Rob Landeros"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Brett Sperry and Louis Castle founded Westwood Associates in Las Vegas in 1985.",
+    "ref": "https://en.wikipedia.org/wiki/Westwood_Studios"
+   },
+   {
+    "question": "Which set of people founded Revolution Software?",
+    "correct_answer": "Cecil, Warriner, Sykes, Carmody",
+    "incorrect_answers": [
+     "Gilbert, Schafer, Grossman",
+     "Sperry, Castle, Devine",
+     "Miller, Miller, Watson"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Charles Cecil, Tony Warriner, David Sykes, and Noirin Carmody founded Revolution Software.",
+    "ref": "https://en.wikipedia.org/wiki/Revolution_Software"
+   },
+   {
+    "question": "In which English city is Revolution Software based?",
+    "correct_answer": "York",
+    "incorrect_answers": [
+     "Manchester",
+     "London",
+     "Bath"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Revolution Software is based in York, England.",
+    "ref": "https://en.wikipedia.org/wiki/Revolution_Software"
+   },
+   {
+    "question": "Who founded the Paris studio Coktel Vision?",
+    "correct_answer": "Roland Oskian",
+    "incorrect_answers": [
+     "Muriel Tramis",
+     "Charles Cecil",
+     "Paul Cuisset"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Engineer Roland Oskian founded Coktel Vision in Paris in 1984.",
+    "ref": "https://en.wikipedia.org/wiki/Coktel_Vision"
+   },
+   {
+    "question": "Sierra's purchase of Coktel Vision was finalized in which year?",
+    "correct_answer": "1993",
+    "incorrect_answers": [
+     "1984",
+     "1990",
+     "1996"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Sierra agreed to buy Coktel in 1992. The deal was finalized on October 29, 1993.",
+    "ref": "https://en.wikipedia.org/wiki/Coktel_Vision"
+   },
+   {
+    "question": "Who founded Dynamix with Damon Slye?",
+    "correct_answer": "Jeff Tunnell",
+    "incorrect_answers": [
+     "Jeff Stephenson",
+     "Ken Williams",
+     "Louis Castle"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Jeff Tunnell and Damon Slye founded Dynamix in Eugene, Oregon in 1984.",
+    "ref": "https://en.wikipedia.org/wiki/Dynamix"
+   },
+   {
+    "question": "In what year did Sierra acquire Dynamix?",
+    "correct_answer": "1990",
+    "incorrect_answers": [
+     "1984",
+     "1993",
+     "1996"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Sierra On-Line acquired the Eugene studio Dynamix in 1990.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "Brian Moriarty joined Lucasfilm from which company?",
+    "correct_answer": "Infocom",
+    "incorrect_answers": [
+     "Sierra On-Line",
+     "Cyan",
+     "Legend"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Brian Moriarty wrote Wishbringer and Trinity at Infocom, then designed Loom at Lucasfilm.",
+    "ref": "https://en.wikipedia.org/wiki/Brian_Moriarty"
+   },
+   {
+    "question": "Which designer led Monkey Island, with Tim Schafer and Dave Grossman on his team?",
+    "correct_answer": "Ron Gilbert",
+    "incorrect_answers": [
+     "George Lucas",
+     "Brian Moriarty",
+     "Hal Barwood"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ron Gilbert led the first Monkey Island games, working with Tim Schafer and Dave Grossman.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "Who founded Humongous Entertainment with Ron Gilbert?",
+    "correct_answer": "Shelley Day",
+    "incorrect_answers": [
+     "Tim Schafer",
+     "Dave Grossman",
+     "Gary Winnick"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Ron Gilbert and Shelley Day founded Humongous Entertainment in 1992 after Gilbert left LucasArts.",
+    "ref": "https://en.wikipedia.org/wiki/Humongous_Entertainment"
+   }
+  ],
+  "sierra-games": [
+   {
+    "question": "Who is the knight who becomes king in King's Quest?",
+    "correct_answer": "King Graham",
+    "incorrect_answers": [
+     "King Edward",
+     "Prince Alexander",
+     "Connor"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sir Graham retrieves Daventry's lost treasures and is crowned king.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_I"
+   },
+   {
+    "question": "What is the name of Graham's kingdom?",
+    "correct_answer": "Daventry",
+    "incorrect_answers": [
+     "Llewdor",
+     "Tamir",
+     "Kolyma"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The King's Quest saga is centered on the kingdom of Daventry.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_I"
+   },
+   {
+    "question": "King Graham inherits the crown from which dying king?",
+    "correct_answer": "King Edward",
+    "incorrect_answers": [
+     "King Mordack",
+     "King Manannan",
+     "King Cedric"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In King's Quest I, the aging King Edward sends Graham to recover Daventry's three treasures.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_I"
+   },
+   {
+    "question": "Graham must bring back a mirror, a shield, and what else?",
+    "correct_answer": "A chest of gold",
+    "incorrect_answers": [
+     "A magic flute",
+     "The Holy Grail",
+     "A beanstalk"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The three lost treasures of Daventry are a magic mirror, a magic shield, and a chest of gold.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_I"
+   },
+   {
+    "question": "In King's Quest II, whom does Graham set out to rescue?",
+    "correct_answer": "Valanice",
+    "incorrect_answers": [
+     "Rosella",
+     "Cassima",
+     "Genesta"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "King's Quest II: Romancing the Throne sends Graham to free Valanice, his future queen.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_II"
+   },
+   {
+    "question": "Which witch imprisoned Valanice in a crystal tower?",
+    "correct_answer": "Hagatha",
+    "incorrect_answers": [
+     "Lolotte",
+     "Malicia",
+     "Baba Yaga"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In King's Quest II, the witch Hagatha holds Valanice captive in a crystal tower.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_II"
+   },
+   {
+    "question": "King's Quest II takes Graham to which land?",
+    "correct_answer": "Kolyma",
+    "incorrect_answers": [
+     "Daventry",
+     "Tamir",
+     "Llewdor"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Graham's search for Valanice is set in the land of Kolyma.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_II"
+   },
+   {
+    "question": "In King's Quest III, what name does the wizard give the boy?",
+    "correct_answer": "Gwydion",
+    "incorrect_answers": [
+     "Graham",
+     "Connor",
+     "Edgar"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The kidnapped prince Alexander is raised as Gwydion, servant of the wizard Manannan.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_III:_To_Heir_Is_Human"
+   },
+   {
+    "question": "Who is the wizard that enslaved Alexander?",
+    "correct_answer": "Manannan",
+    "incorrect_answers": [
+     "Mordack",
+     "Crispin",
+     "Abdul Alhazred"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "King's Quest III is set in Llewdor, where Manannan keeps Alexander as a slave.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_III:_To_Heir_Is_Human"
+   },
+   {
+    "question": "What does Alexander finally turn Manannan into?",
+    "correct_answer": "A cat",
+    "incorrect_answers": [
+     "A stone",
+     "A dragon",
+     "A mouse"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Alexander brews a spell that transforms Manannan into a cat.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_III:_To_Heir_Is_Human"
+   },
+   {
+    "question": "Whom do you play for the whole of King's Quest IV?",
+    "correct_answer": "Princess Rosella",
+    "incorrect_answers": [
+     "King Graham",
+     "Queen Valanice",
+     "Princess Cassima"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Roberta Williams made Rosella the sole hero of King's Quest IV: The Perils of Rosella.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_IV:_The_Perils_of_Rosella"
+   },
+   {
+    "question": "Which good fairy begs Rosella for help in King's Quest IV?",
+    "correct_answer": "Genesta",
+    "incorrect_answers": [
+     "Lolotte",
+     "Hagatha",
+     "Malicia"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The fairy Genesta asks Rosella to recover a talisman stolen by the evil fairy Lolotte.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_IV:_The_Perils_of_Rosella"
+   },
+   {
+    "question": "Rosella's quest in King's Quest IV is mainly to save whom?",
+    "correct_answer": "King Graham",
+    "incorrect_answers": [
+     "Manannan",
+     "King Edward",
+     "Mordack"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Graham has had a heart attack. Rosella seeks a magic fruit that can restore him.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_IV:_The_Perils_of_Rosella"
+   },
+   {
+    "question": "King's Quest IV was sold in both AGI and SCI versions.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "Sierra shipped King's Quest IV on the new SCI engine and, as a fallback, on AGI.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_IV:_The_Perils_of_Rosella"
+   },
+   {
+    "question": "King's Quest IV was among the first PC games with sound-card music.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "hard",
+    "fact": "The SCI version of King's Quest IV supported add-on sound cards such as the Roland MT-32.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_IV:_The_Perils_of_Rosella"
+   },
+   {
+    "question": "Which cranky owl accompanies Graham in King's Quest V?",
+    "correct_answer": "Cedric",
+    "incorrect_answers": [
+     "Fenrus",
+     "Manannan",
+     "Boogle"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The wizard Crispin lends Graham his owl Cedric, who comments on the quest.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_V"
+   },
+   {
+    "question": "Who steals Graham's castle and family in King's Quest V?",
+    "correct_answer": "Mordack",
+    "incorrect_answers": [
+     "Manannan",
+     "Hagatha",
+     "Alhazred"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The wizard Mordack, Manannan's brother, teleports Castle Daventry away.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_V"
+   },
+   {
+    "question": "Mordack wants revenge because Alexander did what?",
+    "correct_answer": "Enchanted his brother",
+    "incorrect_answers": [
+     "Stole his owl",
+     "Sank his ship",
+     "Ate his pie"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Mordack is Manannan's brother and strikes back after Alexander turns Manannan into a cat.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_V"
+   },
+   {
+    "question": "Which prince is the hero of King's Quest VI?",
+    "correct_answer": "Alexander",
+    "incorrect_answers": [
+     "Graham",
+     "Edgar",
+     "Connor"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "King's Quest VI: Heir Today, Gone Tomorrow stars Prince Alexander.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VI:_Heir_Today,_Gone_Tomorrow"
+   },
+   {
+    "question": "Whom does Alexander hope to marry in King's Quest VI?",
+    "correct_answer": "Cassima",
+    "incorrect_answers": [
+     "Rosella",
+     "Valanice",
+     "Genesta"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Alexander is shipwrecked in the Land of the Green Isles and seeks Princess Cassima.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VI:_Heir_Today,_Gone_Tomorrow"
+   },
+   {
+    "question": "What is the vizier's name in King's Quest VI?",
+    "correct_answer": "Abdul Alhazred",
+    "incorrect_answers": [
+     "Mordack",
+     "Manannan",
+     "Jollo"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The vizier Abdul Alhazred, named for Lovecraft's mad poet, plots against Cassima.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VI:_Heir_Today,_Gone_Tomorrow"
+   },
+   {
+    "question": "Who co-designed King's Quest VI with Roberta Williams?",
+    "correct_answer": "Jane Jensen",
+    "incorrect_answers": [
+     "Lorelei Shannon",
+     "Al Lowe",
+     "Christy Marx"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Jane Jensen co-designed King's Quest VI with Roberta Williams.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VI:_Heir_Today,_Gone_Tomorrow"
+   },
+   {
+    "question": "Which two royals do you play in King's Quest VII?",
+    "correct_answer": "Rosella and Valanice",
+    "incorrect_answers": [
+     "Graham and Alexander",
+     "Rosella and Cassima",
+     "Valanice and Edgar"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "King's Quest VII: The Princeless Bride alternates between Rosella and her mother Valanice.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VII"
+   },
+   {
+    "question": "Who co-designed King's Quest VII with Roberta Williams?",
+    "correct_answer": "Lorelei Shannon",
+    "incorrect_answers": [
+     "Jane Jensen",
+     "Gano Haine",
+     "Josh Mandel"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Lorelei Shannon co-wrote and co-designed King's Quest VII with Roberta Williams.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VII"
+   },
+   {
+    "question": "King's Quest VIII swaps the royal family for which hero?",
+    "correct_answer": "Connor",
+    "incorrect_answers": [
+     "Alexander",
+     "Edgar",
+     "Gwydion"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Mask of Eternity stars Connor, a new hero, and plays as an action-adventure.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VIII:_Mask_of_Eternity"
+   },
+   {
+    "question": "King's Quest VIII moved the series toward which style?",
+    "correct_answer": "Action-adventure",
+    "incorrect_answers": [
+     "Text parser",
+     "Flight sim",
+     "FMV sitcom"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Mask of Eternity (1998) added jumping, combat, and a new hero, Connor.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_VIII:_Mask_of_Eternity"
+   },
+   {
+    "question": "What is the name of Space Quest's janitor hero?",
+    "correct_answer": "Roger Wilco",
+    "incorrect_answers": [
+     "Sonny Bonds",
+     "Larry Laffer",
+     "Ben Throttle"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Roger Wilco, a sanitation worker, is the unlikely hero of Space Quest.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_I:_The_Sarien_Encounter"
+   },
+   {
+    "question": "Aboard which ship does Space Quest I begin?",
+    "correct_answer": "The Arcada",
+    "incorrect_answers": [
+     "The Eureka",
+     "The Pestulon",
+     "The Aluminum Mallard"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Space Quest I opens on the research ship Arcada, whose Star Generator is stolen.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_I:_The_Sarien_Encounter"
+   },
+   {
+    "question": "What do the Sariens steal in Space Quest I?",
+    "correct_answer": "The Star Generator",
+    "incorrect_answers": [
+     "Roger's mop",
+     "The Time Ripper",
+     "A xenon trumpet"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Sariens raid the Arcada to take the Star Generator.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_I:_The_Sarien_Encounter"
+   },
+   {
+    "question": "Who is Roger Wilco's recurring nemesis?",
+    "correct_answer": "Sludge Vohaul",
+    "incorrect_answers": [
+     "LeChuck",
+     "Mordack",
+     "Manannan"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sludge Vohaul schemes against Roger across several Space Quest games.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_II:_Vohaul%27s_Revenge"
+   },
+   {
+    "question": "What is Roger Wilco's home planet?",
+    "correct_answer": "Xenon",
+    "incorrect_answers": [
+     "Earth",
+     "Pestulon",
+     "Estros"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Roger Wilco hails from the planet Xenon, whose people thank him at the end of Space Quest I.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_II:_Vohaul%27s_Revenge"
+   },
+   {
+    "question": "Space Quest III mocks a software house called what?",
+    "correct_answer": "ScumSoft",
+    "incorrect_answers": [
+     "ScummSoft",
+     "SierraSoft",
+     "AndromedaWare"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In The Pirates of Pestulon, Roger infiltrates ScumSoft, a parody publisher.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_III:_The_Pirates_of_Pestulon"
+   },
+   {
+    "question": "Which silly arcade game is hidden in Space Quest III?",
+    "correct_answer": "Astro Chicken",
+    "incorrect_answers": [
+     "Leisure Suit Larry",
+     "Astro Chicken 2 only",
+     "Pong"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Space Quest III includes Astro Chicken, a comic arcade game inside the adventure.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_III:_The_Pirates_of_Pestulon"
+   },
+   {
+    "question": "Who narrates the CD-ROM version of Space Quest IV?",
+    "correct_answer": "Gary Owens",
+    "incorrect_answers": [
+     "Tim Curry",
+     "Al Lowe",
+     "George Lucas"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Laugh-In announcer Gary Owens narrates the talkie edition of Space Quest IV.",
+    "ref": "https://guysfromandromeda.com/?p=1599"
+   },
+   {
+    "question": "The Two Guys happily chose point-and-click for Space Quest IV.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "hard",
+    "fact": "Murphy and Crowe preferred the parser. Sierra management overruled them for Space Quest IV.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_IV"
+   },
+   {
+    "question": "Space Quest IV sends Roger traveling through what?",
+    "correct_answer": "Time",
+    "incorrect_answers": [
+     "His own mop closet",
+     "Only Xenon",
+     "A single spaceport"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Roger Wilco and the Time Rippers hops Roger across past and future Space Quest eras.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_IV"
+   },
+   {
+    "question": "Who is credited as the designer of Space Quest V?",
+    "correct_answer": "Mark Crowe",
+    "incorrect_answers": [
+     "Scott Murphy",
+     "Josh Mandel",
+     "Al Lowe"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Space Quest V: The Next Mutation credits Mark Crowe as its designer.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_V"
+   },
+   {
+    "question": "Space Quest 6 shrinks Roger for a spoof of which 1987 film?",
+    "correct_answer": "Innerspace",
+    "incorrect_answers": [
+     "Predator",
+     "RoboCop",
+     "Platoon"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In The Spinal Frontier, Roger is miniaturized and enters a body, a spoof of the 1987 film Innerspace.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_6"
+   },
+   {
+    "question": "Who is credited as a designer of Space Quest 6 alongside Scott Murphy?",
+    "correct_answer": "Josh Mandel",
+    "incorrect_answers": [
+     "Mark Crowe",
+     "Jane Jensen",
+     "Jim Walls"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Josh Mandel designed most of Space Quest 6. Scott Murphy finished the project.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest_6"
+   },
+   {
+    "question": "Who is the officer you play in the first three Police Quest games?",
+    "correct_answer": "Sonny Bonds",
+    "incorrect_answers": [
+     "John Carey",
+     "Jim Walls",
+     "Roger Wilco"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Jim Walls's Police Quest games star Sonny Bonds of the Lytton police.",
+    "ref": "https://en.wikipedia.org/wiki/Police_Quest"
+   },
+   {
+    "question": "In which fictional city does Sonny Bonds work?",
+    "correct_answer": "Lytton",
+    "incorrect_answers": [
+     "Los Angeles",
+     "Coarsegold",
+     "Daventry"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The first three Police Quest games are set in the fictional California city of Lytton.",
+    "ref": "https://en.wikipedia.org/wiki/Police_Quest"
+   },
+   {
+    "question": "What is drug lord Jessie Bains called in Police Quest?",
+    "correct_answer": "The Death Angel",
+    "incorrect_answers": [
+     "The Kindred",
+     "Sludge",
+     "The Vizier"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Police Quest: In Pursuit of the Death Angel pits Sonny Bonds against Jessie Bains.",
+    "ref": "https://en.wikipedia.org/wiki/Police_Quest:_In_Pursuit_of_the_Death_Angel"
+   },
+   {
+    "question": "Who is the playable detective in Police Quest: Open Season?",
+    "correct_answer": "John Carey",
+    "incorrect_answers": [
+     "Sonny Bonds",
+     "Jim Walls",
+     "Daryl Gates"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Open Season drops Sonny Bonds for Los Angeles homicide detective John Carey.",
+    "ref": "https://en.wikipedia.org/wiki/Police_Quest:_Open_Season"
+   },
+   {
+    "question": "Open Season moves the series from Lytton to which real city?",
+    "correct_answer": "Los Angeles",
+    "incorrect_answers": [
+     "San Francisco",
+     "New York",
+     "Oakhurst"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Police Quest: Open Season is set in Los Angeles, not fictional Lytton.",
+    "ref": "https://en.wikipedia.org/wiki/Police_Quest:_Open_Season"
+   },
+   {
+    "question": "Who designed and wrote Police Quest: Open Season?",
+    "correct_answer": "Tammy Dargan",
+    "incorrect_answers": [
+     "Jim Walls",
+     "Jane Jensen",
+     "Al Lowe"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Sierra employee Tammy Dargan wrote and designed most of Open Season; Daryl F. Gates, former LAPD chief, is billed as its author.",
+    "ref": "https://en.wikipedia.org/wiki/Police_Quest:_Open_Season"
+   },
+   {
+    "question": "What is Leisure Suit Larry's last name?",
+    "correct_answer": "Laffer",
+    "incorrect_answers": [
+     "Bonds",
+     "Wilco",
+     "Lowe"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Al Lowe's hero is Larry Laffer, a hopeful lounge lizard in a white leisure suit.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry"
+   },
+   {
+    "question": "Larry looks for love in a city named what, winking at Las Vegas?",
+    "correct_answer": "Lost Wages",
+    "incorrect_answers": [
+     "Lost Vegas",
+     "New Reno",
+     "Coarsegold"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Larry 1 is set in Lost Wages, a fictional city in the Las Vegas Valley.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry_in_the_Land_of_the_Lounge_Lizards"
+   },
+   {
+    "question": "What blocks kids at the start of Leisure Suit Larry 1?",
+    "correct_answer": "An age quiz",
+    "incorrect_answers": [
+     "A sword fight",
+     "A typing test",
+     "A maze"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Because Larry 1 is for adults, it opens with trivia questions meant as an age check.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry_in_the_Land_of_the_Lounge_Lizards"
+   },
+   {
+    "question": "Which number did the Larry series famously skip?",
+    "correct_answer": "4",
+    "incorrect_answers": [
+     "2",
+     "7",
+     "0"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "There is no Leisure Suit Larry 4. Larry 5 follows Larry 3 on purpose.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry"
+   },
+   {
+    "question": "What is the joke subtitle hung on the never-made Larry 4?",
+    "correct_answer": "The Missing Floppies",
+    "incorrect_answers": [
+     "Love for Sail",
+     "Shape Up or Slip Out",
+     "Looking for Love"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Fans and Sierra jokingly call the absent game Leisure Suit Larry 4: The Missing Floppies.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry"
+   },
+   {
+    "question": "Which jazz pianist shares the lead role in Leisure Suit Larry 3?",
+    "correct_answer": "Passionate Patti",
+    "incorrect_answers": [
+     "Princess Rosella",
+     "Grace Nakimura",
+     "Eve"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Leisure Suit Larry 3 (1989) is titled for Passionate Patti, a jazz pianist who becomes a playable lead alongside Larry.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry_3:_Passionate_Patti_in_Pursuit_of_the_Pulsating_Pectorals"
+   },
+   {
+    "question": "Leisure Suit Larry 6 is set in what kind of place?",
+    "correct_answer": "A health spa",
+    "incorrect_answers": [
+     "A cruise ship",
+     "A gold mine",
+     "A police station"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Larry 6: Shape Up or Slip Out sends Larry to a luxury health spa.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry_6:_Shape_Up_or_Slip_Out!"
+   },
+   {
+    "question": "Leisure Suit Larry 7: Love for Sail is set where?",
+    "correct_answer": "A cruise ship",
+    "incorrect_answers": [
+     "A health spa",
+     "Lost Wages",
+     "A space station"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Larry 7 takes Larry and Patti aboard a cruise ship.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry:_Love_for_Sail!"
+   },
+   {
+    "question": "Larry 3 ends at Sierra's headquarters in which California town?",
+    "correct_answer": "Coarsegold",
+    "incorrect_answers": [
+     "Simi Valley",
+     "Bellevue",
+     "Burbank"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Larry 3 ends with Larry and Patti at Sierra's Coarsegold, California headquarters, where Larry goes on to code games.",
+    "ref": "https://en.wikipedia.org/wiki/Leisure_Suit_Larry_3:_Passionate_Patti_in_Pursuit_of_the_Pulsating_Pectorals"
+   },
+   {
+    "question": "Quest for Glory first shipped under what title?",
+    "correct_answer": "Hero's Quest",
+    "incorrect_answers": [
+     "King's Quest",
+     "HeroQuest",
+     "Glory Road"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The first game was Hero's Quest: So You Want to Be a Hero, then renamed Quest for Glory.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory"
+   },
+   {
+    "question": "What valley do you save in the first Quest for Glory?",
+    "correct_answer": "Spielburg",
+    "incorrect_answers": [
+     "Shapeir",
+     "Mordavia",
+     "Silmaria"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Quest for Glory I is set in the valley of Spielburg.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_I:_So_You_Want_to_Be_a_Hero"
+   },
+   {
+    "question": "Who cursed the valley of Spielburg in Quest for Glory I?",
+    "correct_answer": "Baba Yaga",
+    "incorrect_answers": [
+     "Ad Avis",
+     "Mordack",
+     "Erasmus"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "In Quest for Glory I, the ogress Baba Yaga has cursed Spielburg and its baron.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_I:_So_You_Want_to_Be_a_Hero"
+   },
+   {
+    "question": "Which trio are the starting jobs in Quest for Glory?",
+    "correct_answer": "Fighter, magic user, thief",
+    "incorrect_answers": [
+     "Paladin, bard, ranger",
+     "Knight, wizard, priest",
+     "Pilot, spy, cook"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "You begin as a fighter, a magic user, or a thief. Paladin can come later through honorable play.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_I:_So_You_Want_to_Be_a_Hero"
+   },
+   {
+    "question": "Behaving honorably in Quest for Glory can make you a what?",
+    "correct_answer": "Paladin",
+    "incorrect_answers": [
+     "King",
+     "Lich",
+     "Janitor"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "A hero who plays honorably can become a paladin, beyond the three starting classes.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_II:_Trial_by_Fire"
+   },
+   {
+    "question": "Quest for Glory II is set in and around which city?",
+    "correct_answer": "Shapeir",
+    "incorrect_answers": [
+     "Spielburg",
+     "Tarna",
+     "Silmaria"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Trial by Fire moves the hero to the desert city of Shapeir and the cursed city of Raseir.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_II:_Trial_by_Fire"
+   },
+   {
+    "question": "Shapeir's wizards study at the Wizards' Institute of what?",
+    "correct_answer": "Technocery",
+    "incorrect_answers": [
+     "Sorcery",
+     "Pyromancy",
+     "Alchemy"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "In Quest for Glory II, a magic user can graduate from the Wizards' Institute of Technocery.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_II:_Trial_by_Fire"
+   },
+   {
+    "question": "Who is the villainous wizard of Quest for Glory II?",
+    "correct_answer": "Ad Avis",
+    "incorrect_answers": [
+     "Mordack",
+     "Manannan",
+     "Erasmus"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Ad Avis is the dark wizard behind the troubles of Shapeir and Raseir.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_II:_Trial_by_Fire"
+   },
+   {
+    "question": "Who brings the hero to the Liontaur city of Tarna?",
+    "correct_answer": "Rakeesh",
+    "incorrect_answers": [
+     "Fenrus",
+     "Erasmus",
+     "Ad Avis"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In Quest for Glory III, Rakeesh the Paladin brings the hero to Tarna, the Liontaur city.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_III:_Wages_of_War"
+   },
+   {
+    "question": "Quest for Glory III takes place in which land?",
+    "correct_answer": "Fricana",
+    "incorrect_answers": [
+     "Mordavia",
+     "Silmaria",
+     "Spielburg"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Wages of War is set in Fricana, a jungle and savannah country that includes the Liontaur city of Tarna.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_III:_Wages_of_War"
+   },
+   {
+    "question": "Quest for Glory IV is set in which gloomy land?",
+    "correct_answer": "Mordavia",
+    "incorrect_answers": [
+     "Shapeir",
+     "Silmaria",
+     "Daventry"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Shadows of Darkness brings the hero to Mordavia, a land of Eastern European folklore.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_IV:_Shadows_of_Darkness"
+   },
+   {
+    "question": "Quest for Glory IV was notorious at launch for what?",
+    "correct_answer": "Serious bugs",
+    "incorrect_answers": [
+     "No parser",
+     "Being a pinball game",
+     "A missing hero"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Shadows of Darkness shipped with severe bugs and needed patches.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_IV:_Shadows_of_Darkness"
+   },
+   {
+    "question": "The last Quest for Glory is set in which Mediterranean land?",
+    "correct_answer": "Silmaria",
+    "incorrect_answers": [
+     "Spielburg",
+     "Tarna",
+     "Lytton"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Quest for Glory V: Dragon Fire is set in the Greek-inspired land of Silmaria.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory_V:_Dragon_Fire"
+   },
+   {
+    "question": "You can import your Quest for Glory hero into the next game.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "The series lets you carry the same hero, stats, and job forward from game to game.",
+    "ref": "https://en.wikipedia.org/wiki/Quest_for_Glory"
+   },
+   {
+    "question": "Which wizard, with his familiar Fenrus, lives near Spielburg?",
+    "correct_answer": "Erasmus",
+    "incorrect_answers": [
+     "Ad Avis",
+     "Mordack",
+     "Crispin"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Erasmus the wizard and his rat familiar Fenrus are recurring Quest for Glory characters, found near Spielburg in the first game.",
+    "ref": "https://questforglory.fandom.com/wiki/Fenrus (via web search; plus https://en.wikipedia.org/wiki/Quest_for_Glory_I:_So_You_Want_to_Be_a_Hero)"
+   },
+   {
+    "question": "Gabriel Knight's first mystery is set in which city?",
+    "correct_answer": "New Orleans",
+    "incorrect_answers": [
+     "Munich",
+     "Paris",
+     "Rennes"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sins of the Fathers (1993) is a voodoo mystery set in New Orleans.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight:_Sins_of_the_Fathers"
+   },
+   {
+    "question": "What is the German title of Gabriel's monster-hunting family?",
+    "correct_answer": "Schattenjager",
+    "incorrect_answers": [
+     "Polizei",
+     "Templar",
+     "Schatten only"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Gabriel inherits the family role of Schattenjager, a shadow hunter.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight:_Sins_of_the_Fathers"
+   },
+   {
+    "question": "Who is Gabriel Knight's researcher and assistant?",
+    "correct_answer": "Grace Nakimura",
+    "incorrect_answers": [
+     "Passionate Patti",
+     "Rosella",
+     "Nico Collard"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Grace Nakimura helps run St. George's Books and does Gabriel's research.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight:_Sins_of_the_Fathers"
+   },
+   {
+    "question": "Who voices Gabriel in the talkie version of Sins of the Fathers?",
+    "correct_answer": "Tim Curry",
+    "incorrect_answers": [
+     "Dean Erickson",
+     "Gary Owens",
+     "Christopher Lloyd"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Tim Curry voices Gabriel Knight in the 1993 game.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight:_Sins_of_the_Fathers"
+   },
+   {
+    "question": "The Beast Within is about which kind of monster?",
+    "correct_answer": "Werewolves",
+    "incorrect_answers": [
+     "Vampires",
+     "Zombies",
+     "Ghost pirates"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Gabriel Knight 2: The Beast Within is a werewolf mystery set in Bavaria.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight_2:_The_Beast_Within"
+   },
+   {
+    "question": "Gabriel Knight 2 is set in and around which city?",
+    "correct_answer": "Munich",
+    "incorrect_answers": [
+     "New Orleans",
+     "London",
+     "Rome"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The Beast Within takes Gabriel and Grace to Munich and the Bavarian countryside.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight_2:_The_Beast_Within"
+   },
+   {
+    "question": "Who plays Gabriel on screen in the live-action Beast Within?",
+    "correct_answer": "Dean Erickson",
+    "incorrect_answers": [
+     "Tim Curry",
+     "Christopher Lloyd",
+     "Chris Jones"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Dean Erickson plays Gabriel in the full-motion-video game The Beast Within.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight_2:_The_Beast_Within"
+   },
+   {
+    "question": "Gabriel Knight 1 is performed mostly as live-action video.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "Sins of the Fathers is a voiced animated adventure. The Beast Within is the live-action one.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight_2:_The_Beast_Within"
+   },
+   {
+    "question": "Who composed the Gabriel Knight scores and later married Jane Jensen?",
+    "correct_answer": "Robert Holmes",
+    "incorrect_answers": [
+     "Peter McConnell",
+     "Mark Seibert",
+     "Robyn Miller"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Composer Robert Holmes scored the Gabriel Knight games and married designer Jane Jensen.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight:_Sins_of_the_Fathers"
+   },
+   {
+    "question": "Gabriel Knight 3 is set near which French village?",
+    "correct_answer": "Rennes-le-Chateau",
+    "incorrect_answers": [
+     "Nice",
+     "Lyon",
+     "Calais"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Blood of the Sacred, Blood of the Damned is set around Rennes-le-Chateau in southern France.",
+    "ref": "https://en.wikipedia.org/wiki/Gabriel_Knight_3:_Blood_of_the_Sacred,_Blood_of_the_Damned"
+   },
+   {
+    "question": "What is the name of Sierra's 1920s sleuth?",
+    "correct_answer": "Laura Bow",
+    "incorrect_answers": [
+     "Nancy Drew",
+     "Grace Nakimura",
+     "Rosella"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Laura Bow investigates in The Colonel's Bequest and The Dagger of Amon Ra.",
+    "ref": "https://en.wikipedia.org/wiki/Laura_Bow"
+   },
+   {
+    "question": "The Colonel's Bequest is set in which decade?",
+    "correct_answer": "The 1920s",
+    "incorrect_answers": [
+     "The 1880s",
+     "The 1950s",
+     "The 1990s"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Colonel's Bequest (1989) is a mansion murder mystery set in the 1920s.",
+    "ref": "https://en.wikipedia.org/wiki/The_Colonel%27s_Bequest"
+   },
+   {
+    "question": "Who created the Laura Bow Mysteries series?",
+    "correct_answer": "Roberta Williams",
+    "incorrect_answers": [
+     "Jane Jensen",
+     "Bruce Balfour",
+     "Christy Marx"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Roberta Williams created the Laura Bow series; The Colonel's Bequest (1989) was its first game, with Jacqueline Austin as credited designer.",
+    "ref": "https://en.wikipedia.org/wiki/The_Colonel%27s_Bequest"
+   },
+   {
+    "question": "The Dagger of Amon Ra moves Laura Bow to which city?",
+    "correct_answer": "New York",
+    "incorrect_answers": [
+     "New Orleans",
+     "London",
+     "Cairo"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In The Dagger of Amon Ra, Laura investigates murders at a New York museum.",
+    "ref": "https://en.wikipedia.org/wiki/The_Dagger_of_Amon_Ra"
+   },
+   {
+    "question": "Who designed The Dagger of Amon Ra?",
+    "correct_answer": "Bruce Balfour",
+    "incorrect_answers": [
+     "Roberta Williams",
+     "Jane Jensen",
+     "Al Lowe"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Bruce Balfour designed the second Laura Bow mystery, The Dagger of Amon Ra (1992).",
+    "ref": "https://en.wikipedia.org/wiki/The_Dagger_of_Amon_Ra"
+   },
+   {
+    "question": "Who designed the horror game Phantasmagoria?",
+    "correct_answer": "Roberta Williams",
+    "incorrect_answers": [
+     "Lorelei Shannon",
+     "Jane Jensen",
+     "Harlan Ellison"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Roberta Williams designed Phantasmagoria, Sierra's 1995 live-action horror adventure.",
+    "ref": "https://en.wikipedia.org/wiki/Phantasmagoria_(video_game)"
+   },
+   {
+    "question": "What is the heroine's name in Phantasmagoria?",
+    "correct_answer": "Adrienne Delaney",
+    "incorrect_answers": [
+     "Laura Bow",
+     "Rosella",
+     "Grace Nakimura"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Writer Adrienne Delaney moves into a cursed mansion with her husband Don.",
+    "ref": "https://en.wikipedia.org/wiki/Phantasmagoria_(video_game)"
+   },
+   {
+    "question": "Phantasmagoria originally shipped on how many CD-ROMs?",
+    "correct_answer": "Seven",
+    "incorrect_answers": [
+     "Two",
+     "One",
+     "Twelve"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The 1995 retail release of Phantasmagoria filled seven CD-ROMs, one chapter each.",
+    "ref": "https://en.wikipedia.org/wiki/Phantasmagoria_(video_game)"
+   },
+   {
+    "question": "Who plays Adrienne in Phantasmagoria?",
+    "correct_answer": "Victoria Morsell",
+    "incorrect_answers": [
+     "Tim Curry",
+     "Dean Erickson",
+     "Joanne Takahashi"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Victoria Morsell plays Adrienne Delaney in the filmed scenes.",
+    "ref": "https://en.wikipedia.org/wiki/Phantasmagoria_(video_game)"
+   },
+   {
+    "question": "What stage name does the evil magician use in Phantasmagoria?",
+    "correct_answer": "Carno",
+    "incorrect_answers": [
+     "Stauf",
+     "Mordack",
+     "Vohaul"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The mansion's magician, Zoltan Carnovasch, performed as Carno.",
+    "ref": "https://en.wikipedia.org/wiki/Phantasmagoria_(video_game)"
+   },
+   {
+    "question": "Roberta Williams designed Phantasmagoria: A Puzzle of Flesh.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "Lorelei Shannon designed the 1996 sequel. Roberta designed the first Phantasmagoria.",
+    "ref": "https://en.wikipedia.org/wiki/Phantasmagoria_2:_A_Puzzle_of_Flesh"
+   },
+   {
+    "question": "Who designed Conquests of Camelot and Conquests of the Longbow?",
+    "correct_answer": "Christy Marx",
+    "incorrect_answers": [
+     "Jane Jensen",
+     "Lori Cole",
+     "Roberta Williams"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Writer Christy Marx designed both Conquests adventures for Sierra.",
+    "ref": "https://en.wikipedia.org/wiki/Conquests_of_Camelot"
+   },
+   {
+    "question": "Whom do you play in Conquests of Camelot?",
+    "correct_answer": "King Arthur",
+    "incorrect_answers": [
+     "Robin Hood",
+     "Graham",
+     "Lancelot only"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Conquests of Camelot puts you in King Arthur's place on a quest for the Grail.",
+    "ref": "https://en.wikipedia.org/wiki/Conquests_of_Camelot"
+   },
+   {
+    "question": "Whom do you play in Conquests of the Longbow?",
+    "correct_answer": "Robin Hood",
+    "incorrect_answers": [
+     "King Arthur",
+     "Little John",
+     "Graham"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Conquests of the Longbow (1991) is Christy Marx's Robin Hood adventure.",
+    "ref": "https://en.wikipedia.org/wiki/Conquests_of_the_Longbow"
+   },
+   {
+    "question": "What is the boy's name in EcoQuest?",
+    "correct_answer": "Adam",
+    "incorrect_answers": [
+     "Roger",
+     "Pepper",
+     "Torin"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "EcoQuest: The Search for Cetus stars a boy named Adam and a dolphin friend.",
+    "ref": "https://en.wikipedia.org/wiki/EcoQuest:_The_Search_for_Cetus"
+   },
+   {
+    "question": "What is the dolphin's name in EcoQuest?",
+    "correct_answer": "Delphineus",
+    "incorrect_answers": [
+     "Cedric",
+     "Boogle",
+     "Lockjaw"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Adam's companion in EcoQuest is Delphineus the dolphin.",
+    "ref": "https://en.wikipedia.org/wiki/EcoQuest:_The_Search_for_Cetus"
+   },
+   {
+    "question": "Who co-designed EcoQuest with Gano Haine?",
+    "correct_answer": "Jane Jensen",
+    "incorrect_answers": [
+     "Roberta Williams",
+     "Christy Marx",
+     "Al Lowe"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Jane Jensen and Gano Haine designed EcoQuest early in Jensen's time at Sierra.",
+    "ref": "https://en.wikipedia.org/wiki/EcoQuest:_The_Search_for_Cetus"
+   },
+   {
+    "question": "Freddy Pharkas works on the frontier as a what?",
+    "correct_answer": "Pharmacist",
+    "incorrect_answers": [
+     "Sheriff",
+     "Blacksmith",
+     "Preacher"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Al Lowe and Josh Mandel's comedy stars frontier pharmacist Freddy Pharkas.",
+    "ref": "https://en.wikipedia.org/wiki/Freddy_Pharkas:_Frontier_Pharmacist"
+   },
+   {
+    "question": "Freddy Pharkas is set in a town named for Sierra's real home area. Which?",
+    "correct_answer": "Coarsegold",
+    "incorrect_answers": [
+     "Lytton",
+     "Daventry",
+     "Lost Wages"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The western town of Coarsegold winks at the California town beside Sierra.",
+    "ref": "https://en.wikipedia.org/wiki/Freddy_Pharkas:_Frontier_Pharmacist"
+   },
+   {
+    "question": "What is Pepper's dog called in Pepper's Adventures in Time?",
+    "correct_answer": "Lockjaw",
+    "incorrect_answers": [
+     "Delphineus",
+     "Cedric",
+     "Fenrus"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Pepper and her dog Lockjaw meet Benjamin Franklin in Pepper's Adventures in Time.",
+    "ref": "https://en.wikipedia.org/wiki/Pepper%27s_Adventures_in_Time"
+   },
+   {
+    "question": "Pepper's Adventures in Time sends her to meet whom?",
+    "correct_answer": "Benjamin Franklin",
+    "incorrect_answers": [
+     "Abraham Lincoln",
+     "King Arthur",
+     "Thomas Edison"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The educational adventure Pepper's Adventures in Time visits Benjamin Franklin.",
+    "ref": "https://en.wikipedia.org/wiki/Pepper%27s_Adventures_in_Time"
+   },
+   {
+    "question": "Which of these is one of the routes in Gold Rush!?",
+    "correct_answer": "Cape Horn",
+    "incorrect_answers": [
+     "The Silk Road",
+     "A zeppelin",
+     "The Iditarod"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Gold Rush! lets Jerrod reach the 1849 gold fields via Cape Horn, Panama, or overland.",
+    "ref": "https://en.wikipedia.org/wiki/Gold_Rush!"
+   },
+   {
+    "question": "Who designed the thriller Codename: ICEMAN?",
+    "correct_answer": "Jim Walls",
+    "incorrect_answers": [
+     "Al Lowe",
+     "Christy Marx",
+     "Jane Jensen"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Jim Walls designed Codename: ICEMAN, a modern techno-thriller, between Police Quest games.",
+    "ref": "https://en.wikipedia.org/wiki/Codename:_Iceman"
+   },
+   {
+    "question": "What is the hero's name in Codename: ICEMAN?",
+    "correct_answer": "Johnny Westland",
+    "incorrect_answers": [
+     "Sonny Bonds",
+     "Roger Wilco",
+     "John Carey"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Codename: ICEMAN stars secret agent Johnny Westland.",
+    "ref": "https://en.wikipedia.org/wiki/Codename:_Iceman"
+   },
+   {
+    "question": "In Manhunter, Earth has been conquered by beings called what?",
+    "correct_answer": "The Orbs",
+    "incorrect_answers": [
+     "The Sariens",
+     "The Tentacles",
+     "The Replicants"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Manhunter: New York and its sequel put you under the eye-like alien Orbs.",
+    "ref": "https://en.wikipedia.org/wiki/Manhunter:_New_York"
+   },
+   {
+    "question": "Which duo's studio Evryware made the Manhunter games for Sierra?",
+    "correct_answer": "Barry and Dave Murry",
+    "incorrect_answers": [
+     "Murphy and Crowe",
+     "Ken and Roberta",
+     "Lori and Corey"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Brothers Barry and Dave Murry of Evryware designed the Manhunter adventures.",
+    "ref": "https://en.wikipedia.org/wiki/Manhunter:_New_York"
+   },
+   {
+    "question": "Which future Leisure Suit Larry creator designed Sierra's Black Cauldron?",
+    "correct_answer": "Al Lowe",
+    "incorrect_answers": [
+     "Mark Crowe",
+     "Jane Jensen",
+     "Jim Walls"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Al Lowe designed The Black Cauldron (1986), Sierra's adventure based on the Disney film.",
+    "ref": "https://en.wikipedia.org/wiki/The_Black_Cauldron_(video_game)"
+   },
+   {
+    "question": "Who designed the family adventure Torin's Passage?",
+    "correct_answer": "Al Lowe",
+    "incorrect_answers": [
+     "Tim Schafer",
+     "Jane Jensen",
+     "Corey Cole"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Al Lowe designed Torin's Passage (1995), a family fantasy starring Torin and Boogle.",
+    "ref": "https://en.wikipedia.org/wiki/Torin%27s_Passage"
+   },
+   {
+    "question": "What is the name of Torin's small sidekick?",
+    "correct_answer": "Boogle",
+    "incorrect_answers": [
+     "Cedric",
+     "Lockjaw",
+     "Max"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "In Torin's Passage, Torin travels with a shape-shifting companion named Boogle.",
+    "ref": "https://en.wikipedia.org/wiki/Torin%27s_Passage"
+   },
+   {
+    "question": "Which Sierra studio made Betrayal at Krondor?",
+    "correct_answer": "Dynamix",
+    "incorrect_answers": [
+     "Cyan",
+     "Coktel Vision",
+     "Evryware"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Dynamix developed Betrayal at Krondor (1993), set in Raymond Feist's Midkemia.",
+    "ref": "https://en.wikipedia.org/wiki/Betrayal_at_Krondor"
+   },
+   {
+    "question": "Betrayal in Antara dropped the license of which author?",
+    "correct_answer": "Raymond Feist",
+    "incorrect_answers": [
+     "Arthur Clarke",
+     "Terry Brooks",
+     "Piers Anthony"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Betrayal in Antara (1997) is a Sierra follow-up that could not use Feist's world.",
+    "ref": "https://en.wikipedia.org/wiki/Betrayal_in_Antara"
+   },
+   {
+    "question": "Sierra's adventure RAMA is based on a novel by whom?",
+    "correct_answer": "Arthur C. Clarke",
+    "incorrect_answers": [
+     "Isaac Asimov",
+     "Ray Bradbury",
+     "Frank Herbert"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "RAMA (1996), from Sierra's Dynamix, adapts Arthur C. Clarke's Rendezvous with Rama.",
+    "ref": "https://en.wikipedia.org/wiki/Rama_(video_game)"
+   },
+   {
+    "question": "Sierra published an early adventure of which Jim Henson film?",
+    "correct_answer": "The Dark Crystal",
+    "incorrect_answers": [
+     "Labyrinth",
+     "The Muppet Movie",
+     "Fraggle Rock"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Sierra released The Dark Crystal adventure in 1983, tied to Jim Henson's film.",
+    "ref": "https://en.wikipedia.org/wiki/The_Dark_Crystal_(video_game)"
+   },
+   {
+    "question": "Which huge 1982 Roberta Williams game hops across all of history?",
+    "correct_answer": "Time Zone",
+    "incorrect_answers": [
+     "Time Quest",
+     "Pepper's Adventures",
+     "The Dig"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Time Zone (1982) is Roberta Williams's enormous adventure spanning many eras.",
+    "ref": "https://en.wikipedia.org/wiki/Time_Zone_(video_game)"
+   },
+   {
+    "question": "What does AGI, Sierra's first adventure engine, stand for?",
+    "correct_answer": "Adventure Game Interpreter",
+    "incorrect_answers": [
+     "Active Game Interface",
+     "Apple Graphics Ink",
+     "Animated Giant Icons"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "AGI is the Adventure Game Interpreter used for Sierra adventures from King's Quest through the late 1980s.",
+    "ref": "https://en.wikipedia.org/wiki/Adventure_Game_Interpreter"
+   },
+   {
+    "question": "What does SCI stand for?",
+    "correct_answer": "Sierra Creative Interpreter",
+    "incorrect_answers": [
+     "Sierra Cartoon Ink",
+     "Scripted Character AI",
+     "Super CD Interface"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "SCI is the Sierra Creative Interpreter, introduced in 1988 with King's Quest IV.",
+    "ref": "https://en.wikipedia.org/wiki/Adventure_Game_Interpreter"
+   },
+   {
+    "question": "King's Quest V led Sierra's shift to which interface?",
+    "correct_answer": "Point and click",
+    "incorrect_answers": [
+     "A text parser only",
+     "Tank controls",
+     "A light gun"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "King's Quest V replaced the typed parser with an icon-driven point-and-click interface.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_V"
+   },
+   {
+    "question": "Scott Murphy wanted Space Quest deaths to earn the player what?",
+    "correct_answer": "A laugh",
+    "incorrect_answers": [
+     "A refund",
+     "A new life",
+     "A high score"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Scott Murphy liked a fun death, so a Space Quest failure should still earn the player a laugh.",
+    "ref": "https://en.wikipedia.org/wiki/Space_Quest"
+   },
+   {
+    "question": "Which early Sierra adventure was numbered Hi-Res Adventure #0?",
+    "correct_answer": "Mission Asteroid",
+    "incorrect_answers": [
+     "Mystery House",
+     "Time Zone",
+     "Cranston Manor"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Mission Asteroid was released as Hi-Res Adventure #0, though it was the second release.",
+    "ref": "https://en.wikipedia.org/wiki/Sierra_Entertainment"
+   },
+   {
+    "question": "King's Quest IV's story is played out over about one day.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "King's Quest IV spans 24 in-game hours, a day and night that pass much faster than real time.",
+    "ref": "https://en.wikipedia.org/wiki/King%27s_Quest_IV:_The_Perils_of_Rosella"
+   }
+  ],
+  "sierra-online": [
+   {
+    "question": "What was Sierra's online service called when it opened in 1991?",
+    "correct_answer": "The Sierra Network",
+    "incorrect_answers": [
+     "The Sierra BBS",
+     "ImagiNation",
+     "SierraLand"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sierra launched The Sierra Network in 1991 as a graphical online game and chat service.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "What was The Sierra Network renamed under AT&T?",
+    "correct_answer": "ImagiNation Network",
+    "incorrect_answers": [
+     "SierraLand Online",
+     "Constant Companion",
+     "Prodigy Games"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "After AT&T invested, The Sierra Network was rechristened The ImagiNation Network.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "Which Sierra co-founder championed the online network?",
+    "correct_answer": "Ken Williams",
+    "incorrect_answers": [
+     "Roberta Williams",
+     "Al Lowe",
+     "Lori Cole"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ken Williams conceived The Sierra Network as a social, graphical online world.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "The Sierra Network was a text-only bulletin board.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "TSN used a graphical interface, avatars, and pictured lands, not a text-only BBS.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "Ken Williams first pictured the service helping his grandmother find what?",
+    "correct_answer": "A card game",
+    "incorrect_answers": [
+     "A dungeon raid",
+     "A stock ticker",
+     "A flight school"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Ken Williams said he wanted his grandmother to be able to pick up a card game from home at an affordable cost.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "What was Ken's early set-top box idea called, before the PC service?",
+    "correct_answer": "Constant Companion",
+    "incorrect_answers": [
+     "FaceMaker",
+     "SierraBox",
+     "The Old Barn"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Williams first proposed a cheap TV unit called the Constant Companion, then shifted to PCs.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "Which Sierra programmer built the multiplayer version of SCI for TSN?",
+    "correct_answer": "Jeff Stephenson",
+    "incorrect_answers": [
+     "Al Lowe",
+     "Scott Murphy",
+     "Corey Cole"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Lead system programmer Jeff Stephenson adapted Sierra's Creative Interpreter for online play.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "What was TSN's tool for building a face avatar called?",
+    "correct_answer": "FaceMaker",
+    "incorrect_answers": [
+     "HeadShop",
+     "Portrait Booth",
+     "The Potato Bar"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "FaceMaker let members assemble a face from parts and use it in games and chat.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "FaceMaker's mix-and-match faces were inspired by which toy?",
+    "correct_answer": "Mr. Potato Head",
+    "incorrect_answers": [
+     "Barbie",
+     "Lego minifigs",
+     "G.I. Joe"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The modular FaceMaker avatar was inspired by Mr. Potato Head.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "Which TSN land was the adults-only Leisure Suit Larry area?",
+    "correct_answer": "LarryLand",
+    "incorrect_answers": [
+     "SierraLand",
+     "The Clubhouse",
+     "MedievaLand"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "LarryLand was the adult theme area, with casino games and a virtual bar.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "Which family area offered mini-golf, paintball, and Red Baron?",
+    "correct_answer": "SierraLand",
+    "incorrect_answers": [
+     "LarryLand",
+     "The Mall",
+     "The Post Office"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "SierraLand was the all-ages land, with mini-golf, paintball, Red Baron, and Graffiti.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "Where did members play bridge, chess, checkers, and backgammon?",
+    "correct_answer": "The Clubhouse",
+    "incorrect_answers": [
+     "The Town Hall",
+     "The Post Office",
+     "LarryLand"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Clubhouse held traditional table games such as bridge, chess, checkers, and backgammon.",
+    "ref": "https://en.wikipedia.org/wiki/The_Sierra_Network"
+   },
+   {
+    "question": "What was TSN's first big dungeon role-playing game?",
+    "correct_answer": "Shadow of Yserbius",
+    "incorrect_answers": [
+     "Fates of Twinion",
+     "Ruins of Cawdor",
+     "Quest for Glory"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The Shadow of Yserbius, developed by Joe Ybarra, launched on TSN in 1991.",
+    "ref": "https://en.wikipedia.org/wiki/The_Shadow_of_Yserbius"
+   },
+   {
+    "question": "Which 1993 game followed The Shadow of Yserbius?",
+    "correct_answer": "The Fates of Twinion",
+    "incorrect_answers": [
+     "The Ruins of Cawdor",
+     "Betrayal at Krondor",
+     "Hero's Quest II"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Fates of Twinion (1993) was the second of the three Yserbius dungeon games.",
+    "ref": "https://en.wikipedia.org/wiki/The_Shadow_of_Yserbius"
+   },
+   {
+    "question": "Which 1995 game completed the Yserbius trilogy?",
+    "correct_answer": "The Ruins of Cawdor",
+    "incorrect_answers": [
+     "The Fates of Twinion",
+     "Mask of Eternity",
+     "Rama"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Ruins of Cawdor (1995) followed Yserbius and The Fates of Twinion.",
+    "ref": "https://en.wikipedia.org/wiki/The_Shadow_of_Yserbius"
+   },
+   {
+    "question": "Who developed The Shadow of Yserbius for Sierra?",
+    "correct_answer": "Joe Ybarra",
+    "incorrect_answers": [
+     "Corey Cole",
+     "Christy Marx",
+     "Warren Schwader"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Joe Ybarra of Ybarra Productions developed The Shadow of Yserbius.",
+    "ref": "https://en.wikipedia.org/wiki/The_Shadow_of_Yserbius"
+   },
+   {
+    "question": "In 1994 AT&T bought the rest of ImagiNation for about how much?",
+    "correct_answer": "$40 million",
+    "incorrect_answers": [
+     "$4 million",
+     "$400 million",
+     "A bag of floppies"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "On November 15, 1994, AT&T bought the remaining ImagiNation shares for $40 million.",
+    "ref": "https://www.filfre.net/2018/02/the-sierra-network/"
+   },
+   {
+    "question": "Who bought the ImagiNation Network from AT&T in 1996?",
+    "correct_answer": "America Online",
+    "incorrect_answers": [
+     "Microsoft",
+     "CompuServe",
+     "Nintendo"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "America Online bought the ImagiNation Network from AT&T in 1996.",
+    "ref": "https://www.filfre.net/2018/02/the-sierra-network/"
+   },
+   {
+    "question": "Bill Gates and Microsoft also showed interest in buying TSN.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "In a May 1993 letter, Bill Gates expressed disappointment that Sierra had chosen AT&T over Microsoft.",
+    "ref": "https://www.filfre.net/2018/02/the-sierra-network/"
+   }
+  ],
+  "lucasarts": [
+   {
+    "question": "SCUMM was built so Lucasfilm could make which game?",
+    "correct_answer": "Maniac Mansion",
+    "incorrect_answers": [
+     "Loom",
+     "Full Throttle",
+     "Grim Fandango"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ron Gilbert created SCUMM, the Script Creation Utility for Maniac Mansion.",
+    "ref": "https://en.wikipedia.org/wiki/SCUMM"
+   },
+   {
+    "question": "SCUMM stands for Script Creation Utility for Maniac Mansion.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "The engine's name is an acronym of Script Creation Utility for Maniac Mansion.",
+    "ref": "https://en.wikipedia.org/wiki/SCUMM"
+   },
+   {
+    "question": "In what year did Lucasfilm release Maniac Mansion?",
+    "correct_answer": "1987",
+    "incorrect_answers": [
+     "1982",
+     "1990",
+     "1993"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Maniac Mansion, designed by Ron Gilbert and Gary Winnick, came out in 1987.",
+    "ref": "https://en.wikipedia.org/wiki/Maniac_Mansion"
+   },
+   {
+    "question": "Who co-designed Maniac Mansion with Ron Gilbert?",
+    "correct_answer": "Gary Winnick",
+    "incorrect_answers": [
+     "Tim Schafer",
+     "Gary Owens",
+     "Steve Purcell"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Artist Gary Winnick co-designed Maniac Mansion with Ron Gilbert.",
+    "ref": "https://en.wikipedia.org/wiki/Maniac_Mansion"
+   },
+   {
+    "question": "What color is the meteor that crashed near the Edison mansion?",
+    "correct_answer": "Purple",
+    "incorrect_answers": [
+     "Green",
+     "Gold",
+     "Invisible"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "A purple meteor mutates the Edison family in Maniac Mansion.",
+    "ref": "https://lucasfilm.fandom.com/wiki/Maniac_Mansion (via search)"
+   },
+   {
+    "question": "What is the mad scientist in Maniac Mansion called?",
+    "correct_answer": "Dr. Fred",
+    "incorrect_answers": [
+     "Dr. Freddy",
+     "Dr. Moriarty",
+     "Dr. Vohaul"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Dr. Fred Edison is the mad scientist of Maniac Mansion.",
+    "ref": "https://en.wikipedia.org/wiki/Maniac_Mansion"
+   },
+   {
+    "question": "What is the name of Dr. Fred's son in Maniac Mansion?",
+    "correct_answer": "Weird Ed",
+    "incorrect_answers": [
+     "Dead Cousin Ted",
+     "Bernard",
+     "Hoagie"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Weird Ed is Dr. Fred and Nurse Edna's son. Dead Cousin Ted is a different Edison.",
+    "ref": "https://en.wikipedia.org/wiki/Maniac_Mansion"
+   },
+   {
+    "question": "Which playable kid from Maniac Mansion returns in Day of the Tentacle?",
+    "correct_answer": "Bernard",
+    "incorrect_answers": [
+     "Syd",
+     "Razor",
+     "Wendy"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Bernard Bernoulli, one of the seven Maniac Mansion kids, stars in Day of the Tentacle.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "What humble houseplant became a LucasArts running gag?",
+    "correct_answer": "Chuck",
+    "incorrect_answers": [
+     "Ferny",
+     "Audrey",
+     "The Triffid"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Chuck the Plant, first seen in Maniac Mansion, cameos through later LucasArts games.",
+    "ref": "https://wiki-origin.giantbomb.com/wiki/Characters/Chuck_the_Plant (via search)"
+   },
+   {
+    "question": "Maniac Mansion lets you pick only one kid for the whole game.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "You choose a team from seven kids, and different teams open different solutions.",
+    "ref": "https://en.wikipedia.org/wiki/Maniac_Mansion"
+   },
+   {
+    "question": "What is Zak McKracken's day job?",
+    "correct_answer": "Tabloid reporter",
+    "incorrect_answers": [
+     "Janitor",
+     "Archaeologist",
+     "Lounge singer"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Zak McKracken writes for a supermarket tabloid before the aliens show up.",
+    "ref": "https://en.wikipedia.org/wiki/Zak_McKracken_and_the_Alien_Mindbenders"
+   },
+   {
+    "question": "Who was the lead designer of Zak McKracken?",
+    "correct_answer": "David Fox",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Tim Schafer",
+     "Hal Barwood"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "David Fox led Zak McKracken and the Alien Mindbenders (1988), with help from Ron Gilbert.",
+    "ref": "https://en.wikipedia.org/wiki/Zak_McKracken_and_the_Alien_Mindbenders"
+   },
+   {
+    "question": "Lucasfilm's Indiana Jones and the Last Crusade adventure came out in which year?",
+    "correct_answer": "1989",
+    "incorrect_answers": [
+     "1981",
+     "1992",
+     "1995"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The graphic adventure of Indiana Jones and the Last Crusade was released in 1989.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Last_Crusade:_The_Graphic_Adventure"
+   },
+   {
+    "question": "What score does the Last Crusade adventure keep for clever play?",
+    "correct_answer": "Indy Quotient",
+    "incorrect_answers": [
+     "Fortune points",
+     "SCUMM points",
+     "The Grail index"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The game tracks an Indy Quotient, rewarding puzzle solutions and optional discoveries.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Last_Crusade:_The_Graphic_Adventure"
+   },
+   {
+    "question": "Who is the hero of Loom?",
+    "correct_answer": "Bobbin Threadbare",
+    "incorrect_answers": [
+     "Guybrush",
+     "Bernard",
+     "Wesley Crusher"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Loom stars Bobbin Threadbare, youngest member of the Guild of Weavers.",
+    "ref": "https://en.wikipedia.org/wiki/Loom_(video_game)"
+   },
+   {
+    "question": "Who designed Loom?",
+    "correct_answer": "Brian Moriarty",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Tim Schafer",
+     "Noah Falstein"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Infocom veteran Brian Moriarty designed Loom (1990) at Lucasfilm Games.",
+    "ref": "https://en.wikipedia.org/wiki/Loom_(video_game)"
+   },
+   {
+    "question": "In Loom, spells are cast as short what?",
+    "correct_answer": "Musical drafts",
+    "incorrect_answers": [
+     "Insults",
+     "Inventory mixes",
+     "Morse beeps"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Bobbin casts spells by playing four-note musical drafts on his distaff.",
+    "ref": "https://en.wikipedia.org/wiki/Loom_(video_game)"
+   },
+   {
+    "question": "Loom's score draws on which ballet?",
+    "correct_answer": "Swan Lake",
+    "incorrect_answers": [
+     "The Nutcracker",
+     "Giselle",
+     "Coppelia"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Loom's music is adapted from Tchaikovsky's Swan Lake.",
+    "ref": "https://en.wikipedia.org/wiki/Loom_(video_game)"
+   },
+   {
+    "question": "Bobbin belongs to which guild in Loom?",
+    "correct_answer": "The Weavers",
+    "incorrect_answers": [
+     "The Shepherds",
+     "The Glassmakers",
+     "The Blacksmiths"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Bobbin Threadbare is a Weaver. Other guilds, such as shepherds and glassmakers, fill the world.",
+    "ref": "https://en.wikipedia.org/wiki/Loom_(video_game)"
+   },
+   {
+    "question": "What is the hero's full name in The Secret of Monkey Island?",
+    "correct_answer": "Guybrush Threepwood",
+    "incorrect_answers": [
+     "Charles LeChuck",
+     "Herman Toothrot",
+     "Stan S. Stanman"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "You play Guybrush Threepwood, a young man who wants to be a pirate.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "Who is the governor Guybrush falls for?",
+    "correct_answer": "Elaine Marley",
+    "incorrect_answers": [
+     "Nico Collard",
+     "Meche Colomar",
+     "Sophia Hapgood"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Elaine Marley is governor of Melee Island and Guybrush's love.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "What is the name of the ghost pirate in Monkey Island?",
+    "correct_answer": "LeChuck",
+    "incorrect_answers": [
+     "Sludge Vohaul",
+     "Ripburger",
+     "One-Eyed Willy"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The ghost pirate LeChuck is Guybrush's rival across the Monkey Island games.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "The Secret of Monkey Island opens on which island?",
+    "correct_answer": "Melee Island",
+    "incorrect_answers": [
+     "Monkey Island",
+     "Blood Island",
+     "Phatt Island"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Guybrush begins on Melee Island, then later sails on to Monkey Island.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "Monkey Island sword fights are won with what?",
+    "correct_answer": "Insults",
+    "incorrect_answers": [
+     "Reflex clicks",
+     "Dice rolls",
+     "A lightsaber"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Swordplay is a puzzle of pirate insults and the right comebacks, not twitch timing.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "In what year did The Secret of Monkey Island come out?",
+    "correct_answer": "1990",
+    "incorrect_answers": [
+     "1987",
+     "1992",
+     "1995"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Secret of Monkey Island, from Lucasfilm Games, was released in 1990.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "What is the grog shop on Melee Island called?",
+    "correct_answer": "The SCUMM Bar",
+    "incorrect_answers": [
+     "The Snuggly Duckling",
+     "Lefty's",
+     "The Polecat"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Pirates on Melee Island drink at the SCUMM Bar, named for the engine.",
+    "ref": "https://www.giantbomb.com/games/3030-3019/ and https://giantbomb.com/wiki/Characters/Stan (via search)"
+   },
+   {
+    "question": "Who sells Guybrush a ship he will regret?",
+    "correct_answer": "Stan",
+    "incorrect_answers": [
+     "Wally",
+     "Otis",
+     "The Voodoo Lady"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Stan the salesman sticks Guybrush with a barely floating ship.",
+    "ref": "https://www.giantbomb.com/games/3030-3019/ and https://giantbomb.com/wiki/Characters/Stan (via search)"
+   },
+   {
+    "question": "Which stranded hermit helps Guybrush on Monkey Island?",
+    "correct_answer": "Herman Toothrot",
+    "incorrect_answers": [
+     "Rapp Scallion",
+     "Captain Dread",
+     "Largo LaGrande"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Herman Toothrot is the castaway living on Monkey Island.",
+    "ref": "https://giantbomb.com/wiki/Characters/Herman_Toothrot (via search)"
+   },
+   {
+    "question": "Insult sword fighting was inspired by films starring whom?",
+    "correct_answer": "Errol Flynn",
+    "incorrect_answers": [
+     "Douglas Fairbanks",
+     "Cary Grant",
+     "Sean Connery"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The designers based the insult duels on swashbuckling films starring Errol Flynn.",
+    "ref": "https://en.wikipedia.org/wiki/The_Secret_of_Monkey_Island"
+   },
+   {
+    "question": "Monkey Island 2 is subtitled what?",
+    "correct_answer": "LeChuck's Revenge",
+    "incorrect_answers": [
+     "The Time Rippers",
+     "Curse of Monkey Island",
+     "Escape from Melee"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The 1991 sequel is Monkey Island 2: LeChuck's Revenge.",
+    "ref": "https://en.wikipedia.org/wiki/Monkey_Island_2:_LeChuck%27s_Revenge"
+   },
+   {
+    "question": "Which game was the first to use iMUSE?",
+    "correct_answer": "Monkey Island 2",
+    "incorrect_answers": [
+     "Loom",
+     "The Dig",
+     "Full Throttle"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Michael Land and Peter McConnell's iMUSE debuted in Monkey Island 2 (1991).",
+    "ref": "https://en.wikipedia.org/wiki/IMUSE"
+   },
+   {
+    "question": "Who built the iMUSE music system?",
+    "correct_answer": "Land and McConnell",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "John Williams",
+     "Robyn Miller"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Composers Michael Land and Peter McConnell developed iMUSE at LucasArts.",
+    "ref": "https://en.wikipedia.org/wiki/IMUSE"
+   },
+   {
+    "question": "What does iMUSE do for a scene?",
+    "correct_answer": "Smooth music changes",
+    "incorrect_answers": [
+     "Voices the hero",
+     "Draws the verbs",
+     "Saves the game"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "iMUSE, the Interactive Music Streaming Engine, transitions music as the action changes.",
+    "ref": "https://en.wikipedia.org/wiki/IMUSE"
+   },
+   {
+    "question": "Which of these islands is in Monkey Island 2?",
+    "correct_answer": "Phatt Island",
+    "incorrect_answers": [
+     "Skull Island",
+     "Dread Island",
+     "Plunder Island"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Monkey Island 2 visits Scabb Island, Phatt Island, Booty Island, and Dinky Island.",
+    "ref": "https://en.wikipedia.org/wiki/Monkey_Island_2:_LeChuck%27s_Revenge"
+   },
+   {
+    "question": "Which cartographer helps Guybrush with the Big Whoop map in MI2?",
+    "correct_answer": "Wally",
+    "incorrect_answers": [
+     "Stan",
+     "Herman Toothrot",
+     "Otis"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Wally is the nervous cartographer of Monkey Island 2.",
+    "ref": "https://en.wikipedia.org/wiki/Monkey_Island_2:_LeChuck%27s_Revenge"
+   },
+   {
+    "question": "Who bullies Guybrush on Scabb Island?",
+    "correct_answer": "Largo LaGrande",
+    "incorrect_answers": [
+     "LeChuck",
+     "Ripburger",
+     "Captain Smirk"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The tiny bully Largo LaGrande extorts Guybrush on Scabb Island.",
+    "ref": "https://en.wikipedia.org/wiki/Monkey_Island_2:_LeChuck%27s_Revenge"
+   },
+   {
+    "question": "In the Monkey Island 2 ending, Big Whoop turns out to be what?",
+    "correct_answer": "An amusement park",
+    "incorrect_answers": [
+     "A real gold mine",
+     "Atlantis",
+     "A space station"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The ending of Monkey Island 2 places Big Whoop in an amusement park.",
+    "ref": "https://en.wikipedia.org/wiki/Monkey_Island_2:_LeChuck%27s_Revenge"
+   },
+   {
+    "question": "Day of the Tentacle was released in which year?",
+    "correct_answer": "1993",
+    "incorrect_answers": [
+     "1987",
+     "1990",
+     "1998"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Day of the Tentacle, a Maniac Mansion sequel, was released in 1993.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "Who designed Day of the Tentacle?",
+    "correct_answer": "Schafer and Grossman",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Hal Barwood",
+     "Steve Purcell"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Tim Schafer and Dave Grossman designed Day of the Tentacle.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "Name the three playable kids in Day of the Tentacle.",
+    "correct_answer": "Bernard, Hoagie, Laverne",
+    "incorrect_answers": [
+     "Dave, Syd, Razor",
+     "Sam, Max, Bernard",
+     "Ben, Mo, Maureen"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "You swap among Bernard, Hoagie, and Laverne, each stuck in a different time.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "Purple Tentacle becomes a genius after drinking what?",
+    "correct_answer": "Toxic sludge",
+    "incorrect_answers": [
+     "Grog",
+     "Coffee",
+     "Swan water"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "A sip of toxic sludge turns Purple Tentacle into a would-be world conqueror.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "What entire older game is playable on a computer inside Day of the Tentacle?",
+    "correct_answer": "Maniac Mansion",
+    "incorrect_answers": [
+     "Loom",
+     "Zak McKracken",
+     "Monkey Island"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "A PC in Weird Ed's room contains the whole original Maniac Mansion.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "Hoagie is sent to which era in Day of the Tentacle?",
+    "correct_answer": "The colonial past",
+    "incorrect_answers": [
+     "The far future",
+     "The present only",
+     "The Stone Age"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Hoagie lands in the colonial past, Bernard stays in the present, and Laverne goes to the future.",
+    "ref": "https://en.wikipedia.org/wiki/Day_of_the_Tentacle"
+   },
+   {
+    "question": "Sam & Max Hit the Road came out in which year?",
+    "correct_answer": "1993",
+    "incorrect_answers": [
+     "1987",
+     "1995",
+     "1998"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "LucasArts released Sam & Max Hit the Road in 1993.",
+    "ref": "https://en.wikipedia.org/wiki/Sam_%26_Max_Hit_the_Road"
+   },
+   {
+    "question": "In Sam & Max, what kind of animal is Sam?",
+    "correct_answer": "A dog",
+    "incorrect_answers": [
+     "A rabbit",
+     "A cat",
+     "A wolf"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sam is an upright dog in a suit. Max is his small rabbit-like partner.",
+    "ref": "https://en.wikipedia.org/wiki/Sam_%26_Max_Hit_the_Road"
+   },
+   {
+    "question": "What sort of creature is Max?",
+    "correct_answer": "A rabbity thing",
+    "incorrect_answers": [
+     "A dog in a hat",
+     "A bigfoot",
+     "A talking skull"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Max is Sam's short, furious, rabbit-like partner in the Freelance Police.",
+    "ref": "https://en.wikipedia.org/wiki/Sam_%26_Max_Hit_the_Road"
+   },
+   {
+    "question": "Who created the Sam & Max comics behind the game?",
+    "correct_answer": "Steve Purcell",
+    "incorrect_answers": [
+     "Tim Schafer",
+     "Dave Grossman",
+     "Gary Winnick"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Steve Purcell's Sam & Max comics were adapted by LucasArts, with Purcell on the team.",
+    "ref": "https://en.wikipedia.org/wiki/Sam_%26_Max_Hit_the_Road"
+   },
+   {
+    "question": "What do Sam and Max call their two-person agency?",
+    "correct_answer": "Freelance Police",
+    "incorrect_answers": [
+     "The Polecats",
+     "SCUMM Detectives",
+     "The Department of Death"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Sam and Max are the Freelance Police.",
+    "ref": "https://en.wikipedia.org/wiki/Sam_%26_Max_Hit_the_Road"
+   },
+   {
+    "question": "Whose kidnapping starts Sam & Max Hit the Road?",
+    "correct_answer": "Bruno the bigfoot",
+    "incorrect_answers": [
+     "Max's cousin",
+     "A talking skull",
+     "LeChuck"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The case opens when Bruno, a bigfoot, disappears from a local attraction.",
+    "ref": "https://en.wikipedia.org/wiki/Sam_%26_Max_Hit_the_Road"
+   },
+   {
+    "question": "Indiana Jones and the Fate of Atlantis was released in which year?",
+    "correct_answer": "1992",
+    "incorrect_answers": [
+     "1989",
+     "1995",
+     "1981"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Fate of Atlantis, an original Indy story, was released in 1992.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Fate_of_Atlantis"
+   },
+   {
+    "question": "Who designed Fate of Atlantis?",
+    "correct_answer": "Barwood and Falstein",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Schafer and Grossman",
+     "Brian Moriarty"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Hal Barwood and Noah Falstein designed Indiana Jones and the Fate of Atlantis.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Fate_of_Atlantis"
+   },
+   {
+    "question": "Fate of Atlantis offers which three ways to play?",
+    "correct_answer": "Team, Wits, and Fists",
+    "incorrect_answers": [
+     "Past, present, future",
+     "Land, sea, and air",
+     "Good, evil, chaos"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "You choose a Team path, a Wits path, or a Fists path, each with different puzzles.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Fate_of_Atlantis"
+   },
+   {
+    "question": "Who is Indy's partner in Fate of Atlantis?",
+    "correct_answer": "Sophia Hapgood",
+    "incorrect_answers": [
+     "Elaine Marley",
+     "Marion Ravenwood",
+     "Willie Scott"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Psychic Sophia Hapgood joins Indy for the original Atlantis story.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Fate_of_Atlantis"
+   },
+   {
+    "question": "Fate of Atlantis is a direct adaptation of an Indy film.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "easy",
+    "fact": "Fate of Atlantis is an original story by Hal Barwood and Noah Falstein, not a movie tie-in.",
+    "ref": "https://en.wikipedia.org/wiki/Indiana_Jones_and_the_Fate_of_Atlantis"
+   },
+   {
+    "question": "Full Throttle was released in which year?",
+    "correct_answer": "1995",
+    "incorrect_answers": [
+     "1991",
+     "1993",
+     "1998"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Tim Schafer's biker adventure Full Throttle was released in 1995.",
+    "ref": "https://en.wikipedia.org/wiki/Full_Throttle_(1995_video_game)"
+   },
+   {
+    "question": "Who leads the Polecats in Full Throttle?",
+    "correct_answer": "Ben",
+    "incorrect_answers": [
+     "Guybrush",
+     "Manny",
+     "Sam"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Ben is the leader of the Polecats motorcycle gang.",
+    "ref": "https://en.wikipedia.org/wiki/Full_Throttle_(1995_video_game)"
+   },
+   {
+    "question": "Full Throttle's last motorcycle company is called what?",
+    "correct_answer": "Corley Motors",
+    "incorrect_answers": [
+     "ScumSoft",
+     "Corley and Ripburger",
+     "Throttle Bikes"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Malcolm Corley's Corley Motors is the last motorcycle maker in Ben's world.",
+    "ref": "https://en.wikipedia.org/wiki/Full_Throttle_(1995_video_game)"
+   },
+   {
+    "question": "Who is the suit that frames Ben in Full Throttle?",
+    "correct_answer": "Adrian Ripburger",
+    "incorrect_answers": [
+     "LeChuck",
+     "Largo LaGrande",
+     "Domino Hurley"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Adrian Ripburger murders Malcolm Corley and pins the crime on Ben.",
+    "ref": "https://en.wikipedia.org/wiki/Full_Throttle_(1995_video_game)"
+   },
+   {
+    "question": "Who designed Full Throttle?",
+    "correct_answer": "Tim Schafer",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Sean Clark",
+     "Hal Barwood"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Tim Schafer designed and directed Full Throttle.",
+    "ref": "https://en.wikipedia.org/wiki/Full_Throttle_(1995_video_game)"
+   },
+   {
+    "question": "Which mechanic repairs Ben's bike in Full Throttle?",
+    "correct_answer": "Maureen",
+    "incorrect_answers": [
+     "Elaine",
+     "Laverne",
+     "Sophia"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Maureen, called Mo, is the tough mechanic who helps Ben.",
+    "ref": "https://en.wikipedia.org/wiki/Full_Throttle_(1995_video_game)"
+   },
+   {
+    "question": "Whose story idea launched the long production of The Dig?",
+    "correct_answer": "Steven Spielberg",
+    "incorrect_answers": [
+     "George Lucas",
+     "Hal Barwood",
+     "Orson Welles"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Steven Spielberg supplied the original story idea that became The Dig.",
+    "ref": "https://en.wikipedia.org/wiki/The_Dig_(video_game)"
+   },
+   {
+    "question": "Who finished The Dig as its designer after earlier leads left?",
+    "correct_answer": "Sean Clark",
+    "incorrect_answers": [
+     "Brian Moriarty",
+     "Ron Gilbert",
+     "Tim Schafer"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The Dig passed through several designers, including Brian Moriarty. Sean Clark finished it.",
+    "ref": "https://en.wikipedia.org/wiki/The_Dig_(video_game)"
+   },
+   {
+    "question": "What is the astronaut hero of The Dig called?",
+    "correct_answer": "Boston Low",
+    "incorrect_answers": [
+     "Ben Throttle",
+     "Boston Crab",
+     "Guybrush"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Dig stars commander Boston Low, with Maggie Robbins and Ludger Brink.",
+    "ref": "https://en.wikipedia.org/wiki/The_Dig_(video_game)"
+   },
+   {
+    "question": "Grim Fandango was released in which year?",
+    "correct_answer": "1998",
+    "incorrect_answers": [
+     "1993",
+     "1995",
+     "2000"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "LucasArts released Tim Schafer's Grim Fandango in 1998.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "What is the travel agent's name in Grim Fandango?",
+    "correct_answer": "Manny Calavera",
+    "incorrect_answers": [
+     "Manuel Calrissian",
+     "Max Calavera",
+     "Domino Hurley"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "You play Manny Calavera, a travel agent in the Land of the Dead.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "Manny Calavera works for which office?",
+    "correct_answer": "Department of Death",
+    "incorrect_answers": [
+     "Freelance Police",
+     "Corley Motors",
+     "The SCUMM Bar"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Manny sells travel packages for the Department of Death.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "What engine replaced SCUMM for Grim Fandango?",
+    "correct_answer": "GrimE",
+    "incorrect_answers": [
+     "iMUSE",
+     "SCI",
+     "AGI"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Grim Fandango was the first LucasArts adventure since Labyrinth not to use SCUMM. It runs on GrimE.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "GrimE scripts are written in which language?",
+    "correct_answer": "Lua",
+    "incorrect_answers": [
+     "SCUMM",
+     "LISP",
+     "BASIC"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Programmer Bret Mogilefsky built GrimE around the Lua scripting language.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "Who composed the score of Grim Fandango?",
+    "correct_answer": "Peter McConnell",
+    "incorrect_answers": [
+     "Michael Land",
+     "John Williams",
+     "Robyn Miller"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Peter McConnell composed Grim Fandango's mix of jazz, folk, and big-band themes.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "Whom does Manny chase across the Land of the Dead?",
+    "correct_answer": "Meche",
+    "incorrect_answers": [
+     "Elaine",
+     "Eva",
+     "Gloria"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Manny tries to make good to Meche Colomar, a client cheated out of her rightful journey.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "Who is Manny's huge demon driver and mechanic?",
+    "correct_answer": "Glottis",
+    "incorrect_answers": [
+     "Sal",
+     "Domino",
+     "Bruno"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Glottis, a speed-loving demon, drives and repairs Manny's vehicles.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "Grim Fandango's look mixes film noir with which tradition?",
+    "correct_answer": "Day of the Dead",
+    "incorrect_answers": [
+     "Ancient Egypt",
+     "Viking sagas",
+     "Art of the Aztecs only"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The art combines film noir with Mexican Day of the Dead calavera imagery and Art Deco.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   },
+   {
+    "question": "The Curse of Monkey Island was released in which year?",
+    "correct_answer": "1997",
+    "incorrect_answers": [
+     "1991",
+     "1990",
+     "2000"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The Curse of Monkey Island, the third game, was released in 1997.",
+    "ref": "https://en.wikipedia.org/wiki/The_Curse_of_Monkey_Island"
+   },
+   {
+    "question": "Who designed The Curse of Monkey Island?",
+    "correct_answer": "Ahern and Ackley",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Schafer and Grossman",
+     "Barwood and Falstein"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Larry Ahern and Jonathan Ackley designed The Curse of Monkey Island.",
+    "ref": "https://en.wikipedia.org/wiki/The_Curse_of_Monkey_Island"
+   },
+   {
+    "question": "What is the name of the demonic talking skull in Curse of Monkey Island?",
+    "correct_answer": "Murray",
+    "incorrect_answers": [
+     "LeChuck",
+     "Wally",
+     "Skully"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Murray is a wisecracking demonic skull who cannot move on his own.",
+    "ref": "https://en.wikipedia.org/wiki/The_Curse_of_Monkey_Island"
+   },
+   {
+    "question": "Ron Gilbert designed The Curse of Monkey Island.",
+    "correct_answer": "False",
+    "incorrect_answers": [
+     "True"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "Larry Ahern and Jonathan Ackley designed the 1997 game. Gilbert had been gone for years.",
+    "ref": "https://en.wikipedia.org/wiki/The_Curse_of_Monkey_Island"
+   },
+   {
+    "question": "Before Maniac Mansion, Lucasfilm made an adventure of which film?",
+    "correct_answer": "Labyrinth",
+    "incorrect_answers": [
+     "The Dark Crystal",
+     "Willow",
+     "Howard the Duck"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Labyrinth (1986), designed with David Fox, was Lucasfilm's adventure of the Jim Henson film.",
+    "ref": "https://en.wikipedia.org/wiki/Labyrinth_(1986_video_game)"
+   },
+   {
+    "question": "Which early Lucasfilm game strands you on a fractal planet?",
+    "correct_answer": "Rescue on Fractalus",
+    "incorrect_answers": [
+     "Ballblazer",
+     "The Dig",
+     "Loom"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Rescue on Fractalus!, one of the first Lucasfilm games, flew rescue runs over a fractal world.",
+    "ref": "https://en.wikipedia.org/wiki/Rescue_on_Fractalus!"
+   },
+   {
+    "question": "Putt-Putt Joins the Parade was built with the SCUMM engine.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "Ron Gilbert's Humongous Entertainment reused SCUMM for Putt-Putt, Freddi Fish, and Pajama Sam.",
+    "ref": "https://en.wikipedia.org/wiki/Putt-Putt_Joins_the_Parade"
+   },
+   {
+    "question": "Who programmed GrimE and chose Lua for it?",
+    "correct_answer": "Bret Mogilefsky",
+    "incorrect_answers": [
+     "Ron Gilbert",
+     "Aric Wilmunder",
+     "Peter McConnell"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Bret Mogilefsky programmed GrimE and adopted Lua so designers could script the game.",
+    "ref": "https://en.wikipedia.org/wiki/Grim_Fandango"
+   }
+  ],
+  "adventure-90s": [
+   {
+    "question": "Which studio made Myst?",
+    "correct_answer": "Cyan",
+    "incorrect_answers": [
+     "Sierra",
+     "LucasArts",
+     "Trilobyte"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Rand and Robyn Miller's Cyan developed Myst, published by Broderbund in 1993.",
+    "ref": "https://en.wikipedia.org/wiki/Myst"
+   },
+   {
+    "question": "Myst was published by which company?",
+    "correct_answer": "Broderbund",
+    "incorrect_answers": [
+     "Sierra On-Line",
+     "LucasArts",
+     "Virgin"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Broderbund published Cyan's Myst in 1993.",
+    "ref": "https://en.wikipedia.org/wiki/Myst"
+   },
+   {
+    "question": "In what year was Myst released?",
+    "correct_answer": "1993",
+    "incorrect_answers": [
+     "1987",
+     "1990",
+     "1997"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Myst was first released in 1993, for the Macintosh.",
+    "ref": "https://en.wikipedia.org/wiki/Myst"
+   },
+   {
+    "question": "Who writes the linking books that create Myst's ages?",
+    "correct_answer": "Atrus",
+    "incorrect_answers": [
+     "Gehn",
+     "Sirrus",
+     "Rand Miller"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Atrus writes linking books that open onto the ages. His sons are Sirrus and Achenar.",
+    "ref": "https://en.wikipedia.org/wiki/Myst"
+   },
+   {
+    "question": "What are the names of Atrus's two sons in Myst?",
+    "correct_answer": "Sirrus and Achenar",
+    "incorrect_answers": [
+     "Guybrush and LeChuck",
+     "Rand and Robyn",
+     "Brandon and Malcolm"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Sirrus and Achenar are trapped in books on Myst Island. Their father is Atrus.",
+    "ref": "https://en.wikipedia.org/wiki/Myst"
+   },
+   {
+    "question": "How does Myst show its world?",
+    "correct_answer": "Pre-rendered stills",
+    "incorrect_answers": [
+     "A text parser",
+     "Hand-drawn pixels only",
+     "Full live action"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Myst is a first-person tour of pre-rendered scenes you click through.",
+    "ref": "https://en.wikipedia.org/wiki/Myst"
+   },
+   {
+    "question": "What is the 1997 sequel to Myst called?",
+    "correct_answer": "Riven",
+    "incorrect_answers": [
+     "The 11th Hour",
+     "Obsidian",
+     "Uru"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Riven, released in 1997, is the sequel to Myst.",
+    "ref": "https://en.wikipedia.org/wiki/Riven"
+   },
+   {
+    "question": "Who is the villain of Riven, and Atrus's father?",
+    "correct_answer": "Gehn",
+    "incorrect_answers": [
+     "Sirrus",
+     "Achenar",
+     "Stauf"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Gehn, Atrus's father, is the self-declared ruler of the world of Riven and its main villain.",
+    "ref": "https://en.wikipedia.org/wiki/Riven"
+   },
+   {
+    "question": "Who co-designed Riven with Robyn Miller?",
+    "correct_answer": "Richard Vander Wende",
+    "incorrect_answers": [
+     "Rand Miller",
+     "Graeme Devine",
+     "Jane Jensen"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Richard Vander Wende co-designed Riven with Robyn Miller; Rand Miller produced it.",
+    "ref": "https://en.wikipedia.org/wiki/Riven"
+   },
+   {
+    "question": "Which studio made The 7th Guest?",
+    "correct_answer": "Trilobyte",
+    "incorrect_answers": [
+     "Cyan",
+     "Sierra",
+     "Westwood"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Graeme Devine and Rob Landeros's Trilobyte developed The 7th Guest.",
+    "ref": "https://en.wikipedia.org/wiki/The_7th_Guest"
+   },
+   {
+    "question": "Who co-founded Trilobyte and created The 7th Guest?",
+    "correct_answer": "Devine and Landeros",
+    "incorrect_answers": [
+     "Miller and Miller",
+     "Cecil and Warriner",
+     "Sperry and Castle"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Graeme Devine and Rob Landeros founded Trilobyte and made The 7th Guest.",
+    "ref": "https://en.wikipedia.org/wiki/The_7th_Guest"
+   },
+   {
+    "question": "What is the toymaker villain of The 7th Guest called?",
+    "correct_answer": "Henry Stauf",
+    "incorrect_answers": [
+     "Carno",
+     "Gehn",
+     "Stauf Miller"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Henry Stauf, a toymaker, built the haunted mansion of The 7th Guest.",
+    "ref": "https://en.wikipedia.org/wiki/The_7th_Guest"
+   },
+   {
+    "question": "What is the sequel to The 7th Guest?",
+    "correct_answer": "The 11th Hour",
+    "incorrect_answers": [
+     "Riven",
+     "The 8th Guest",
+     "The 13th Guest"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Trilobyte followed The 7th Guest with The 11th Hour in 1995.",
+    "ref": "https://en.wikipedia.org/wiki/The_11th_Hour_(video_game)"
+   },
+   {
+    "question": "Which studio made The Legend of Kyrandia?",
+    "correct_answer": "Westwood",
+    "incorrect_answers": [
+     "Sierra",
+     "LucasArts",
+     "Revolution"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Westwood Studios developed The Legend of Kyrandia, released in 1992.",
+    "ref": "https://en.wikipedia.org/wiki/The_Legend_of_Kyrandia"
+   },
+   {
+    "question": "Who is the hero of the first Legend of Kyrandia?",
+    "correct_answer": "Brandon",
+    "incorrect_answers": [
+     "Malcolm",
+     "Zanthia",
+     "Kallak"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Brandon, a young prince, must restore Kyrandia after the jester Malcolm uses the Kyragem to corrupt its magic.",
+    "ref": "https://en.wikipedia.org/wiki/The_Legend_of_Kyrandia"
+   },
+   {
+    "question": "Who is the jester villain of Kyrandia?",
+    "correct_answer": "Malcolm",
+    "incorrect_answers": [
+     "Brandon",
+     "LeChuck",
+     "Stauf"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Malcolm the court jester is the villain of the first Kyrandia and the hero of the third.",
+    "ref": "https://en.wikipedia.org/wiki/The_Legend_of_Kyrandia"
+   },
+   {
+    "question": "Whom do you play in Kyrandia: The Hand of Fate?",
+    "correct_answer": "Zanthia",
+    "incorrect_answers": [
+     "Brandon",
+     "Malcolm",
+     "Kallak"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Book Two, The Hand of Fate (1993), stars the witch Zanthia.",
+    "ref": "https://en.wikipedia.org/wiki/The_Legend_of_Kyrandia:_Hand_of_Fate"
+   },
+   {
+    "question": "Kyrandia's third game lets you play as whom?",
+    "correct_answer": "Malcolm",
+    "incorrect_answers": [
+     "Brandon",
+     "Zanthia",
+     "Kallak"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Malcolm's Revenge (1994) makes you play Malcolm, the villain of the first game, now out for revenge.",
+    "ref": "https://en.wikipedia.org/wiki/The_Legend_of_Kyrandia:_Malcolm%27s_Revenge"
+   },
+   {
+    "question": "Who is the American tourist hero of Broken Sword?",
+    "correct_answer": "George Stobbart",
+    "incorrect_answers": [
+     "Robert Foster",
+     "Simon",
+     "Guybrush"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Broken Sword stars George Stobbart, a tourist caught in a Paris bombing.",
+    "ref": "https://en.wikipedia.org/wiki/Broken_Sword:_The_Shadow_of_the_Templars"
+   },
+   {
+    "question": "Who is George's French partner in Broken Sword?",
+    "correct_answer": "Nico Collard",
+    "incorrect_answers": [
+     "Elaine Marley",
+     "Sophia Hapgood",
+     "Grace Nakimura"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Journalist Nico Collard joins George Stobbart in the Broken Sword games.",
+    "ref": "https://en.wikipedia.org/wiki/Broken_Sword:_The_Shadow_of_the_Templars"
+   },
+   {
+    "question": "Broken Sword opens with an explosion in which city?",
+    "correct_answer": "Paris",
+    "incorrect_answers": [
+     "London",
+     "York",
+     "Rome"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "A cafe bombing in Paris pulls George Stobbart into the Templar plot.",
+    "ref": "https://en.wikipedia.org/wiki/Broken_Sword:_The_Shadow_of_the_Templars"
+   },
+   {
+    "question": "Which order's secrets drive the first Broken Sword?",
+    "correct_answer": "The Knights Templar",
+    "incorrect_answers": [
+     "The Freemasons",
+     "The Weavers",
+     "The Orbs"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Broken Sword: The Shadow of the Templars is a modern Templar conspiracy.",
+    "ref": "https://en.wikipedia.org/wiki/Broken_Sword:_The_Shadow_of_the_Templars"
+   },
+   {
+    "question": "What was the American title of the first Broken Sword?",
+    "correct_answer": "Circle of Blood",
+    "incorrect_answers": [
+     "Steel Sky",
+     "Shadow of the Templars",
+     "The Smoking Mirror"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "In the United States, Broken Sword: The Shadow of the Templars was titled Circle of Blood.",
+    "ref": "https://en.wikipedia.org/wiki/Broken_Sword:_The_Shadow_of_the_Templars"
+   },
+   {
+    "question": "Which animal blocks a famous, fiddly puzzle in Broken Sword?",
+    "correct_answer": "A goat",
+    "incorrect_answers": [
+     "A cow",
+     "A donkey",
+     "A goose"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "The goat puzzle is in Ireland: a goat tied to a rope guards the entrance to the underground dig at a castle in Lochmarne.",
+    "ref": "https://en.wikipedia.org/wiki/The_Goat_Puzzle"
+   },
+   {
+    "question": "Who is the hero of Beneath a Steel Sky?",
+    "correct_answer": "Robert Foster",
+    "incorrect_answers": [
+     "George Stobbart",
+     "Joey",
+     "Simon"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Robert Foster, stranded in the Gap as a boy and raised by Aboriginal people, is the hero of Beneath a Steel Sky.",
+    "ref": "https://en.wikipedia.org/wiki/Beneath_a_Steel_Sky"
+   },
+   {
+    "question": "What is the name of Foster's robot friend?",
+    "correct_answer": "Joey",
+    "incorrect_answers": [
+     "Glottis",
+     "Max",
+     "Chip"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Joey's circuit board is moved from body to body as Foster crosses Union City.",
+    "ref": "https://en.wikipedia.org/wiki/Beneath_a_Steel_Sky"
+   },
+   {
+    "question": "Which comics artist co-designed Beneath a Steel Sky?",
+    "correct_answer": "Dave Gibbons",
+    "incorrect_answers": [
+     "Steve Purcell",
+     "Jack Kirby",
+     "Dave McKean"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Watchmen artist Dave Gibbons co-designed Beneath a Steel Sky with Charles Cecil of Revolution Software.",
+    "ref": "https://en.wikipedia.org/wiki/Beneath_a_Steel_Sky"
+   },
+   {
+    "question": "What is Foster's walled city called?",
+    "correct_answer": "Union City",
+    "incorrect_answers": [
+     "Steel Harbor",
+     "York",
+     "Metroplex"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Union City is a city-state controlled by the all-powerful computer LINC.",
+    "ref": "https://en.wikipedia.org/wiki/Beneath_a_Steel_Sky"
+   },
+   {
+    "question": "Revolution's early adventures used which character engine?",
+    "correct_answer": "Virtual Theatre",
+    "incorrect_answers": [
+     "SCUMM",
+     "SCI",
+     "GrimE"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Lure of the Temptress was the first Virtual Theatre game and Beneath a Steel Sky the second; Broken Sword also used it.",
+    "ref": "https://en.wikipedia.org/wiki/Beneath_a_Steel_Sky"
+   },
+   {
+    "question": "Revolution later released Beneath a Steel Sky as freeware.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "Revolution released Beneath a Steel Sky as freeware in August 2003, and ScummVM later supported it.",
+    "ref": "https://en.wikipedia.org/wiki/Beneath_a_Steel_Sky"
+   },
+   {
+    "question": "Revolution's first game, in 1992, was called what?",
+    "correct_answer": "Lure of the Temptress",
+    "incorrect_answers": [
+     "Broken Sword",
+     "Beneath a Steel Sky",
+     "Simon the Sorcerer"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Lure of the Temptress (1992) was Revolution's debut and the first Virtual Theatre game.",
+    "ref": "https://en.wikipedia.org/wiki/Lure_of_the_Temptress"
+   },
+   {
+    "question": "Which company made Simon the Sorcerer?",
+    "correct_answer": "Adventure Soft",
+    "incorrect_answers": [
+     "Sierra",
+     "LucasArts",
+     "Revolution"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Adventure Soft developed and published Simon the Sorcerer in 1993.",
+    "ref": "https://en.wikipedia.org/wiki/Simon_the_Sorcerer"
+   },
+   {
+    "question": "Who voices Simon on the CD version of Simon the Sorcerer?",
+    "correct_answer": "Chris Barrie",
+    "incorrect_answers": [
+     "Eric Idle",
+     "Tim Curry",
+     "Douglas Adams"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Chris Barrie, known for Red Dwarf, voices Simon in the talkie version.",
+    "ref": "https://en.wikipedia.org/wiki/Simon_the_Sorcerer"
+   },
+   {
+    "question": "In the Gobliiins series, the number of i's matches the goblin count.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "In the Gobliiins series, the number of i's in the title indicates how many characters you may control.",
+    "ref": "https://en.wikipedia.org/wiki/Gobliiins"
+   },
+   {
+    "question": "Which studio made the Gobliiins games?",
+    "correct_answer": "Coktel Vision",
+    "incorrect_answers": [
+     "Delphine",
+     "Revolution",
+     "Sierra Oakhurst"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Coktel Vision, a French developer, made Gobliiins (1991); Muriel Tramis and Pierre Gilhodes created the series.",
+    "ref": "https://en.wikipedia.org/wiki/Coktel_Vision"
+   },
+   {
+    "question": "I Have No Mouth, and I Must Scream was co-designed by whom?",
+    "correct_answer": "Harlan Ellison",
+    "incorrect_answers": [
+     "H.R. Giger",
+     "Douglas Adams",
+     "Terry Pratchett"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Harlan Ellison co-designed the 1995 game of his story and voiced the computer AM.",
+    "ref": "https://en.wikipedia.org/wiki/I_Have_No_Mouth,_and_I_Must_Scream_(video_game)"
+   },
+   {
+    "question": "Westwood's Blade Runner casts you as whom?",
+    "correct_answer": "Ray McCoy",
+    "incorrect_answers": [
+     "Rick Deckard",
+     "Roy Batty",
+     "Boston Low"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Westwood's 1997 Blade Runner stars a new detective, Ray McCoy, not Deckard.",
+    "ref": "https://en.wikipedia.org/wiki/Blade_Runner_(1997_video_game)"
+   },
+   {
+    "question": "Who voices Rincewind in the Discworld adventure?",
+    "correct_answer": "Eric Idle",
+    "incorrect_answers": [
+     "Terry Pratchett",
+     "Chris Barrie",
+     "Douglas Adams"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Eric Idle voices Rincewind in the 1995 Discworld point-and-click game.",
+    "ref": "https://en.wikipedia.org/wiki/Discworld_(video_game)"
+   },
+   {
+    "question": "The Discworld games adapt novels by whom?",
+    "correct_answer": "Terry Pratchett",
+    "incorrect_answers": [
+     "Douglas Adams",
+     "Piers Anthony",
+     "Neil Gaiman"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "The Discworld adventures are based on Terry Pratchett's comic fantasy novels.",
+    "ref": "https://en.wikipedia.org/wiki/Discworld_(video_game)"
+   },
+   {
+    "question": "Who designed The Last Express?",
+    "correct_answer": "Jordan Mechner",
+    "incorrect_answers": [
+     "Eric Chahi",
+     "Charles Cecil",
+     "Rand Miller"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Jordan Mechner, of Karateka and Prince of Persia, directed The Last Express.",
+    "ref": "https://en.wikipedia.org/wiki/Jordan_Mechner"
+   },
+   {
+    "question": "The Last Express is set aboard which train?",
+    "correct_answer": "The Orient Express",
+    "incorrect_answers": [
+     "The Polar Express",
+     "The Flying Scotsman",
+     "A Sierra mine cart"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "The Last Express takes place on the Orient Express in July 1914.",
+    "ref": "https://en.wikipedia.org/wiki/The_Last_Express"
+   },
+   {
+    "question": "What is the hero's name in The Last Express?",
+    "correct_answer": "Robert Cath",
+    "incorrect_answers": [
+     "Jordan Mechner",
+     "Robert Foster",
+     "Henry Stauf"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "You play Robert Cath, an American doctor who boards the Orient Express and takes his dead friend's identity.",
+    "ref": "https://en.wikipedia.org/wiki/The_Last_Express"
+   },
+   {
+    "question": "The Last Express plays out in real time.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "The Last Express runs almost entirely in real time, accelerated by a factor of six.",
+    "ref": "https://en.wikipedia.org/wiki/The_Last_Express"
+   },
+   {
+    "question": "Whom can you play in the 1992 game Alone in the Dark?",
+    "correct_answer": "Edward Carnby",
+    "incorrect_answers": [
+     "Ray McCoy",
+     "Larry Laffer",
+     "Atrus"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Alone in the Dark lets you investigate Derceto as Edward Carnby or Emily Hartwood.",
+    "ref": "https://en.wikipedia.org/wiki/Alone_in_the_Dark_(1992_video_game)"
+   },
+   {
+    "question": "Who designed Alone in the Dark?",
+    "correct_answer": "Frederic Raynal",
+    "incorrect_answers": [
+     "Hideo Kojima",
+     "Jordan Mechner",
+     "Eric Chahi"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Frederic Raynal designed Infogrames' Alone in the Dark (1992).",
+    "ref": "https://en.wikipedia.org/wiki/Alone_in_the_Dark_(1992_video_game)"
+   },
+   {
+    "question": "What is the haunted mansion in Alone in the Dark called?",
+    "correct_answer": "Derceto",
+    "incorrect_answers": [
+     "Stauf Manor",
+     "The Edison place",
+     "Hill House"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "Edward Carnby investigates the Louisiana mansion Derceto.",
+    "ref": "https://en.wikipedia.org/wiki/Alone_in_the_Dark_(1992_video_game)"
+   },
+   {
+    "question": "Who plays and co-created the detective Tex Murphy?",
+    "correct_answer": "Chris Jones",
+    "incorrect_answers": [
+     "Tim Curry",
+     "Christopher Lloyd",
+     "Hal Barwood"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Chris Jones of Access Software plays Tex Murphy and led the adventure series.",
+    "ref": "https://en.wikipedia.org/wiki/Tex_Murphy"
+   },
+   {
+    "question": "Whose artwork is Dark Seed's dark world based on?",
+    "correct_answer": "H.R. Giger",
+    "incorrect_answers": [
+     "Dave Gibbons",
+     "Roger Dean",
+     "Moebius"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Cyberdreams' Dark Seed (1992) bases its dark world on artwork by H.R. Giger.",
+    "ref": "https://en.wikipedia.org/wiki/Dark_Seed_(video_game)"
+   },
+   {
+    "question": "What is the clay hero of The Neverhood called?",
+    "correct_answer": "Klaymen",
+    "incorrect_answers": [
+     "Gumby",
+     "Morph",
+     "Klogg"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Doug TenNapel's The Neverhood (1996) is a clay-animated adventure starring Klaymen.",
+    "ref": "https://en.wikipedia.org/wiki/The_Neverhood"
+   },
+   {
+    "question": "Who created The Neverhood?",
+    "correct_answer": "Doug TenNapel",
+    "incorrect_answers": [
+     "Tim Burton",
+     "Trey Parker",
+     "Steve Purcell"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Doug TenNapel created The Neverhood, released by DreamWorks Interactive in 1996.",
+    "ref": "https://en.wikipedia.org/wiki/The_Neverhood"
+   },
+   {
+    "question": "Which actor stars as the cartoonist in Toonstruck?",
+    "correct_answer": "Christopher Lloyd",
+    "incorrect_answers": [
+     "Tim Curry",
+     "Christopher Walken",
+     "Dean Erickson"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Christopher Lloyd plays Drew Blanc, a cartoonist pulled into his own cartoon, in Toonstruck.",
+    "ref": "https://en.wikipedia.org/wiki/Toonstruck"
+   },
+   {
+    "question": "Who created the game Starship Titanic?",
+    "correct_answer": "Douglas Adams",
+    "incorrect_answers": [
+     "Terry Pratchett",
+     "Tim Schafer",
+     "Infocom's heirs"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Douglas Adams's Digital Village released Starship Titanic in 1998.",
+    "ref": "https://en.wikipedia.org/wiki/Starship_Titanic"
+   },
+   {
+    "question": "Who designed the cyberpunk adventure Snatcher?",
+    "correct_answer": "Hideo Kojima",
+    "incorrect_answers": [
+     "H.R. Giger",
+     "Yu Suzuki",
+     "Harlan Ellison"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Hideo Kojima designed Snatcher. The Sega CD edition brought it to English.",
+    "ref": "https://en.wikipedia.org/wiki/Snatcher_(video_game)"
+   },
+   {
+    "question": "What is the hero's name in Little Big Adventure?",
+    "correct_answer": "Twinsen",
+    "incorrect_answers": [
+     "Lester",
+     "Robert Foster",
+     "Klaymen"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Adeline's Little Big Adventure (1994) stars Twinsen. In the US it was sold as Relentless: Twinsen's Adventure.",
+    "ref": "https://en.wikipedia.org/wiki/Little_Big_Adventure"
+   },
+   {
+    "question": "Which company developed the graphical Return to Zork in 1993?",
+    "correct_answer": "Activision",
+    "incorrect_answers": [
+     "Sierra",
+     "Legend",
+     "LucasArts"
+    ],
+    "type": "multiple",
+    "difficulty": "easy",
+    "fact": "Activision developed Return to Zork (1993), which was released under the Infocom label as the last Zork-series game.",
+    "ref": "https://en.wikipedia.org/wiki/Return_to_Zork"
+   },
+   {
+    "question": "Return to Zork replaced the old text parser with point-and-click.",
+    "correct_answer": "True",
+    "incorrect_answers": [
+     "False"
+    ],
+    "type": "boolean",
+    "difficulty": "medium",
+    "fact": "Return to Zork (1993) swapped Infocom's text parser for a point-and-click interface.",
+    "ref": "https://en.wikipedia.org/wiki/Return_to_Zork"
+   },
+   {
+    "question": "Who designed the comedy Eric the Unready?",
+    "correct_answer": "Bob Bates",
+    "incorrect_answers": [
+     "Steve Meretzky",
+     "Al Lowe",
+     "Tim Schafer"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Bob Bates designed Eric the Unready (1993) at Legend Entertainment.",
+    "ref": "https://en.wikipedia.org/wiki/Eric_the_Unready"
+   },
+   {
+    "question": "Who designed Spellcasting 101 after leaving Infocom?",
+    "correct_answer": "Steve Meretzky",
+    "incorrect_answers": [
+     "Brian Moriarty",
+     "Dave Lebling",
+     "Bob Bates"
+    ],
+    "type": "multiple",
+    "difficulty": "medium",
+    "fact": "Steve Meretzky, formerly of Infocom, designed Spellcasting 101 for Legend Entertainment in 1990.",
+    "ref": "https://en.wikipedia.org/wiki/Spellcasting_101:_Sorcerers_Get_All_the_Girls"
+   },
+   {
+    "question": "In Bad Mojo, what creature do you play?",
+    "correct_answer": "A cockroach",
+    "incorrect_answers": [
+     "A bat",
+     "A rat",
+     "A ghost"
+    ],
+    "type": "multiple",
+    "difficulty": "hard",
+    "fact": "In Bad Mojo (1996) entomologist Roger Samms is turned into a cockroach and crawls through a rundown bar and its sewers.",
+    "ref": "https://en.wikipedia.org/wiki/Bad_Mojo"
+   }
+  ]
+ }
+}

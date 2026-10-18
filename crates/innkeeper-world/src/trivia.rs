@@ -1,12 +1,19 @@
 //! NTN Trivia rooms. A kind-2 join picks the room; JOIN runs the handle logon.
-//! The packet layouts are `message::trivia`. The show clock is separate.
+//! The show is `tick`; layouts are `message::trivia`.
+
+mod bank;
+mod show;
+mod text;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use tracing::{info, warn};
 
 use crate::message::{NtnMessage, TriviaHeader, TriviaReply, TriviaRequest};
-use crate::{ConnectionId, HostMessage, JoinNet, ObjectKind, NTN_SERVER};
+use crate::{ConnectionId, Delivery, HostMessage, JoinNet, ObjectKind, NTN_SERVER};
+
+pub use bank::{OpenQuestion, PoolCounts, TriviaPools};
+pub use text::{fit, wrap, Item, RawQuestion};
 
 /// The three rooms, behind a mutex so `World` can keep the field public.
 #[derive(Debug)]
@@ -37,10 +44,10 @@ const HUB_GROUPS: [u16; 3] = [16, 17, 18];
 /// SierraLand and Feb-94 push these for the same three topics.
 const SIERRA_GROUPS: [u16; 3] = [7, 8, 9];
 
-const HANDLE_LIMIT: usize = 6;
+pub(super) const HANDLE_LIMIT: usize = 6;
 /// whichCmd 16 bytes 14..20. The client ignores them (`proc_237`).
 const IGNORED_PAD: usize = 7;
-const ROOMS: usize = 3;
+pub(super) const ROOMS: usize = 3;
 
 /// The topic index, 1..=3, when `join` is a trivia waiting-room group.
 pub(crate) fn room_for(join: &JoinNet) -> Option<u8> {
@@ -63,11 +70,13 @@ pub(crate) fn room_for(join: &JoinNet) -> Option<u8> {
 pub(crate) struct Shows {
     next_number: u16,
     rooms: [Room; ROOMS],
+    bags: [bank::RoomBag; ROOMS],
 }
 
 #[derive(Debug, Default)]
 struct Room {
     seats: Vec<Seat>,
+    phase: show::Phase,
 }
 
 #[derive(Debug)]
@@ -80,6 +89,9 @@ struct Seat {
     remote: u16,
     handle: Option<Vec<u8>>,
     awaiting: bool,
+    score: u32,
+    last: u16,
+    answered: Option<show::Answer>,
 }
 
 #[derive(Clone, Copy)]
@@ -98,6 +110,11 @@ impl Shows {
         Shows {
             next_number: 1,
             rooms: Default::default(),
+            bags: [
+                bank::RoomBag::Empty,
+                bank::RoomBag::Empty,
+                bank::RoomBag::Empty,
+            ],
         }
     }
 
@@ -107,15 +124,26 @@ impl Shows {
         room: Option<u8>,
         host: u16,
         request: &TriviaRequest,
-    ) -> Vec<HostMessage> {
+        now: u64,
+    ) -> Vec<Delivery> {
         match request {
-            TriviaRequest::Join { header, .. } => self.join(connection, room, host, *header),
+            TriviaRequest::Join { header, .. } => {
+                into(connection, self.join(connection, room, host, *header))
+            }
             TriviaRequest::Exit(_) => {
                 self.disconnect(connection);
                 Vec::new()
             }
-            TriviaRequest::Text { text, .. } => self.text(connection, text),
+            TriviaRequest::Text { text, .. } => self.text(connection, text, now),
         }
+    }
+
+    pub(crate) fn set_pools(&mut self, pools: TriviaPools, seed: u64) {
+        self.bags = [
+            bank::RoomBag::single(pools.adventure, seed),
+            bank::RoomBag::single(pools.general, seed ^ 0x9e37_79b9),
+            bank::RoomBag::mixed(pools.screens_ours, pools.screens, seed ^ 0x85eb_ca6b),
+        ];
     }
 
     pub(crate) fn disconnect(&mut self, connection: ConnectionId) {
@@ -123,6 +151,9 @@ impl Shows {
         for room in &mut self.rooms {
             let before = room.seats.len();
             room.seats.retain(|seat| seat.connection != connection);
+            if !room.seats.iter().any(|seat| seat.handle.is_some()) {
+                room.phase = show::Phase::Idle;
+            }
             removed |= room.seats.len() != before;
         }
         if removed {
@@ -148,6 +179,9 @@ impl Shows {
             remote: 0,
             handle: None,
             awaiting: true,
+            score: 0,
+            last: 0,
+            answered: None,
         };
         let header = seat.header();
         let Some(room) = self.rooms.get_mut(index) else {
@@ -168,7 +202,7 @@ impl Shows {
         ]
     }
 
-    fn text(&mut self, connection: ConnectionId, text: &[u8]) -> Vec<HostMessage> {
+    fn text(&mut self, connection: ConnectionId, text: &[u8], now: u64) -> Vec<Delivery> {
         let Some(place) = self.place_of(connection) else {
             warn!("trivia line before JOIN: ignored");
             return Vec::new();
@@ -176,19 +210,25 @@ impl Shows {
         let Some(view) = self.view(place) else {
             return Vec::new();
         };
-        if !view.awaiting || version_line(text) {
+        if !view.awaiting {
+            if !version_line(text) {
+                self.take_answer(connection, text, now);
+            }
+            return Vec::new();
+        }
+        if version_line(text) {
             return Vec::new();
         }
         let Some(handle) = normalize_handle(text) else {
             warn!(bytes = text.len(), "trivia handle refused");
-            return vec![game(view.header, NtnMessage::Version)];
+            return into(connection, vec![game(view.header, NtnMessage::Version)]);
         };
         if self.taken(place.room, &handle) {
             warn!(
                 bytes = handle.len(),
                 "trivia handle already used in the room"
             );
-            return vec![game(view.header, NtnMessage::Version)];
+            return into(connection, vec![game(view.header, NtnMessage::Version)]);
         }
         self.accept(place, handle.clone());
         info!(
@@ -196,19 +236,22 @@ impl Shows {
             handle = %String::from_utf8_lossy(&handle),
             "trivia handle accepted"
         );
-        vec![
-            game(view.header, NtnMessage::HandleRegistered { handle }),
-            game(
-                view.header,
-                NtnMessage::ScoreTemplate {
-                    mode: 0,
-                    cnf: 0,
-                    help: 0,
-                    game_id: 0,
-                    scope: 0,
-                },
-            ),
-        ]
+        into(
+            connection,
+            vec![
+                game(view.header, NtnMessage::HandleRegistered { handle }),
+                game(
+                    view.header,
+                    NtnMessage::ScoreTemplate {
+                        mode: 0,
+                        cnf: 0,
+                        help: 0,
+                        game_id: 0,
+                        scope: 0,
+                    },
+                ),
+            ],
+        )
     }
 
     fn accept(&mut self, place: Place, handle: Vec<u8>) {
@@ -321,7 +364,7 @@ fn normalize_handle(text: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-fn line_of(text: &[u8]) -> &[u8] {
+pub(super) fn line_of(text: &[u8]) -> &[u8] {
     let end = text
         .iter()
         .position(|byte| *byte == b'\r' || *byte == 0)
@@ -333,7 +376,14 @@ fn joined(header: TriviaHeader) -> HostMessage {
     HostMessage::Trivia(TriviaReply::Joined(header))
 }
 
-fn game(header: TriviaHeader, message: NtnMessage) -> HostMessage {
+fn into(connection: ConnectionId, messages: Vec<HostMessage>) -> Vec<Delivery> {
+    messages
+        .into_iter()
+        .map(|message| Delivery::new(connection, message))
+        .collect()
+}
+
+pub(super) fn game(header: TriviaHeader, message: NtnMessage) -> HostMessage {
     HostMessage::Trivia(TriviaReply::Game {
         header,
         ignored: 0,
@@ -365,7 +415,11 @@ mod tests {
     }
 
     fn handle(shows: &mut Shows, connection: ConnectionId, text: &[u8]) -> Vec<HostMessage> {
-        shows.text(connection, text)
+        shows
+            .text(connection, text, 0)
+            .into_iter()
+            .map(|delivery| delivery.message)
+            .collect()
     }
 
     #[test]
@@ -414,7 +468,7 @@ mod tests {
         shows.disconnect(A);
         join(&mut shows, B, 1);
         assert_eq!(handle(&mut shows, B, b"QUINN\r\n").len(), 2);
-        shows.on_request(B, Some(1), 7, &TriviaRequest::Exit(header(1)));
+        shows.on_request(B, Some(1), 7, &TriviaRequest::Exit(header(1)), 0);
         join(&mut shows, A, 1);
         assert_eq!(handle(&mut shows, A, b"QUINN\r\n").len(), 2);
     }

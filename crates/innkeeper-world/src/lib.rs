@@ -74,5 +74,7 @@ pub use store::{
     not_a_complaint, AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post,
     PostId, Store, StoreError,
 };
-pub use trivia::TriviaShows;
+pub use trivia::{
+    fit, wrap, Item, OpenQuestion, PoolCounts, RawQuestion, TriviaPools, TriviaShows,
+};
 pub use world::World;

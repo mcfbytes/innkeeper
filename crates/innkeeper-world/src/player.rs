@@ -290,9 +290,10 @@ impl PlayerSession {
             .player_span(player.account.id.0, &player.account.persona)
             .entered();
         let host = u16::from(world.host.0);
-        let messages = world
-            .with_trivia(|shows| shows.on_request(connection, player.trivia_room, host, request));
-        replies_to(connection, messages)
+        let now = world.clock.millis();
+        world.with_trivia(|shows| {
+            shows.on_request(connection, player.trivia_room, host, request, now)
+        })
     }
 
     /// The Town Hall billing screens. The first 34/4 of a Login is the logon's and stays unanswered.

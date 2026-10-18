@@ -71,6 +71,12 @@ pub(crate) struct Config {
     /// Directory holding the account database; without it every account number is admitted.
     #[arg(long)]
     pub(crate) data_dir: Option<PathBuf>,
+    /// GPL question bank directory (`questions.json`).
+    #[arg(long, default_value = "data/trivia")]
+    pub(crate) trivia_dir: PathBuf,
+    /// Open Trivia DB snapshot (CC BY-SA 4.0).
+    #[arg(long, default_value = "third_party/opentdb/opentdb.json")]
+    pub(crate) opentdb: PathBuf,
     /// SPKI PEM of the operator RSA key sealed connection records are encrypted to.
     #[arg(long)]
     pub(crate) audit_public_key: Option<PathBuf>,
@@ -606,6 +612,11 @@ mod tests {
         assert_eq!(config.capture_dir(), Some(PathBuf::from("work/captures")));
         assert_eq!(config.session_config().line, LineKind::Auto);
         assert_eq!(config.data_dir, None);
+        assert_eq!(config.trivia_dir, PathBuf::from("data/trivia"));
+        assert_eq!(
+            config.opentdb,
+            PathBuf::from("third_party/opentdb/opentdb.json")
+        );
         assert_eq!(
             config.int14h_bind(),
             Some("127.0.0.1:2315".parse().unwrap())
