@@ -22,6 +22,7 @@ mod object_list;
 mod objects;
 mod player;
 mod presence;
+mod quota;
 mod red_baron;
 mod reserved;
 mod retention;
@@ -75,7 +76,7 @@ pub use retention::RetentionPolicy;
 pub use store::conformance;
 pub use store::{
     not_a_complaint, AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post,
-    PostId, Store, StoreError,
+    PostId, Store, StoreError, Written,
 };
 pub use trivia::{
     fit, wrap, Item, OpenQuestion, PoolCounts, RawQuestion, TriviaPools, TriviaShows,

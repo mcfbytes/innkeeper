@@ -410,6 +410,8 @@ impl LetterRef {
 pub enum MailFault {
     /// "because the host had some kind of disk error".
     HostDisk = 2,
+    /// "because there is not enough room left": a full box, or the sender's daily quota.
+    NoRoom = 5,
     /// "because it does not exist": the addressee's box.
     NoSuchBox = 6,
     /// "because the box number was not between 1 and 4294901759".
@@ -428,6 +430,7 @@ impl TryFrom<u8> for MailFault {
     fn try_from(byte: u8) -> Result<Self, Self::Error> {
         [
             MailFault::HostDisk,
+            MailFault::NoRoom,
             MailFault::NoSuchBox,
             MailFault::BoxOutOfRange,
             MailFault::NotYourBox,

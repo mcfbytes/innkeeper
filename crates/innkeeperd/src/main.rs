@@ -25,6 +25,7 @@ mod save_channel;
 mod seal;
 mod server;
 mod signin;
+mod sqlite_listing;
 mod sqlite_store;
 mod subject;
 mod switchboard;

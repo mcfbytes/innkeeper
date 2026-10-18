@@ -14,8 +14,9 @@ Five families, each as narrow as its first users need.
 |---|---|---|---|
 | accounts | `AccountId` | `account` (get), `create_account`, `update_password`, `set_persona`, `highest_account_id` | account book, logon, command 44, signup |
 | money | `AccountId` | `money` (get), `set_money` | CasinoLand bankroll (commands 40/3 and 40/2) |
-| mailboxes | `MailboxNumber`, assigned per account | `assign_mailbox`, `append_letter`, `letters`, `delete_letter` | mail (`NewBoxHandler` 45, `EMMsg` 37) |
-| boards | `BoardId` | `post`, `posts`, `delete_post` | the RPG bulletin board (command 27), complaints, Member Services |
+| mailboxes | `MailboxNumber`, assigned per account | `assign_mailbox`, `append_letter`, `letters`, `delete_letter`; bounded reads `letter_count`, `first_letters`, `letter` | mail (`NewBoxHandler` 45, `EMMsg` 37) |
+| boards | `BoardId` | `post`, `posts`, `delete_post`; bounded reads `post_count`, `post_at` | the RPG bulletin board (command 27), complaints, Member Services |
+| quotas | `AccountId`, a window | `written_within`: letters and posts written in the last N ms, deleted ones included | the daily quotas ([mail.md](mail.md) section 9, [hub-services.md](hub-services.md) section 12) |
 | saves | `AccountId`, canonical path, version | `saves`, `save_versions`, `save_read`, `save_write` | the browser client's game files ([saves.md](saves.md)) |
 
 An `AccountRecord` holds the `EncodedPassword` exactly as the client sends it, the persona name, the
@@ -62,6 +63,10 @@ never rewritten to 500.
 - **Order is posting order.** `letters` and `posts` return oldest first. Letter ids are unique across
   all mailboxes and post ids across all boards, and are never reused.
 - **A board exists from its first post.** There is no board table to maintain.
+- **The game paths read boundedly.** `letter_count` and `post_count` count without reading bodies,
+  `first_letters` and `post_at` read one page or one row (`LIMIT` and `OFFSET` in SQLite,
+  `crates/innkeeperd/src/sqlite_listing.rs`), and `letter` finds one letter by id. The full lists
+  `letters` and `posts` stay for exports, the portal and tests.
 - **Backend faults are `StoreError::Backend`.** The error carries the backend's own error, boxed, so
   the world crate does not name `rusqlite`.
 

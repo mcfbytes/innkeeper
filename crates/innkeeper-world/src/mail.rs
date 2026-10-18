@@ -6,11 +6,12 @@ use std::ops::RangeInclusive;
 use tracing::{info, warn};
 
 use crate::assumptions::{
-    NO_ACCOUNT_MAILBOX_STATUS_ASSUMED, OTHER_BOXES_ARE_PRIVATE_ASSUMED,
-    SHORT_MAIL_FORM_IS_REFUSED_ASSUMED, STORE_FAULT_MAILBOX_STATUS_ASSUMED,
+    MAILBOX_LETTERS_MAX_ASSUMED, NO_ACCOUNT_MAILBOX_STATUS_ASSUMED,
+    OTHER_BOXES_ARE_PRIVATE_ASSUMED, SHORT_MAIL_FORM_IS_REFUSED_ASSUMED,
+    STORE_FAULT_MAILBOX_STATUS_ASSUMED,
 };
 use crate::message::{StoredLetter, FIELD_LEN};
-use crate::town_hall;
+use crate::{quota, town_hall};
 use crate::{
     Account, AccountId, Envelope, HostMessage, Letter, LetterId, ListedLetter, MailFault,
     MailReply, MailRequest, MailboxAnswer, MailboxNumber, MailboxRequest, OutgoingLetter, Sid,
@@ -157,9 +158,10 @@ impl PostOffice<'_> {
 
     fn new_mail(&self, sid: Sid, mailbox: MailboxNumber) -> Outcome {
         let mailbox = self.yours(mailbox)?;
-        let status = match self.letters(mailbox)?.is_empty() {
-            true => 0,
-            false => MAIL_ICON | MAIL_IN_BOX,
+        let held = self.world.store.letter_count(mailbox);
+        let status = match held.map_err(|error| refusal_of(&error))? {
+            0 => 0,
+            _ => MAIL_ICON | MAIL_IN_BOX,
         };
         Ok(Some(MailReply::NewMail {
             to: sid,
@@ -170,15 +172,12 @@ impl PostOffice<'_> {
 
     fn list(&self, sid: Sid, mailbox: MailboxNumber) -> Outcome {
         let mailbox = self.yours(mailbox)?;
-        let letters = self.letters(mailbox)?;
+        let letters = self.world.store.first_letters(mailbox, LISTING_LIMIT);
+        let letters = letters.map_err(|error| refusal_of(&error))?;
         Ok(Some(MailReply::Listing {
             to: sid,
             mailbox,
-            letters: letters
-                .iter()
-                .filter_map(listed)
-                .take(LISTING_LIMIT)
-                .collect(),
+            letters: letters.iter().filter_map(listed).collect(),
         }))
     }
 
@@ -259,22 +258,33 @@ impl PostOffice<'_> {
         }
     }
 
-    fn letters(&self, mailbox: MailboxNumber) -> Result<Vec<Letter>, MailFault> {
-        let letters = self.world.store.letters(mailbox);
-        letters.map_err(|error| refusal_of(&error))
-    }
-
     fn find(&self, mailbox: MailboxNumber, id: LetterId) -> Result<StoredLetter, MailFault> {
-        let letters = self.letters(mailbox)?;
-        let letter = letters.iter().find(|letter| letter.id == id);
+        let letter = self.world.store.letter(mailbox, id);
+        let letter = letter.map_err(|error| refusal_of(&error))?;
         let stored = letter.and_then(|letter| stored(letter.id, &letter.body));
         stored.ok_or(MailFault::NoSuchLetter)
+    }
+
+    /// A send within the sender's daily quota, to a box with room for it.
+    fn has_room(&self, mailbox: MailboxNumber) -> Result<(), MailFault> {
+        let store = self.world.store.as_ref();
+        let fault = |error: StoreError| refusal_of(&error);
+        if !quota::may_send_letter(store, self.account).map_err(fault)? {
+            return Err(MailFault::NoRoom);
+        }
+        let held = store.letter_count(mailbox).map_err(fault)?;
+        if held >= MAILBOX_LETTERS_MAX_ASSUMED {
+            warn!(mailbox = mailbox.0, held, "letter refused: the box is full");
+            return Err(MailFault::NoRoom);
+        }
+        Ok(())
     }
 
     fn put(&self, mailbox: MailboxNumber, envelope: &Envelope) -> Result<(), MailFault> {
         if !BOX_NUMBERS.contains(&mailbox.0) {
             return Err(MailFault::BoxOutOfRange);
         }
+        self.has_room(mailbox)?;
         let letter = StoredLetter {
             received: self.world.clock.now(),
             envelope: envelope.clone(),

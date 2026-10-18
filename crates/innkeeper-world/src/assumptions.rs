@@ -176,6 +176,14 @@ pub(crate) const HELD_OBJECTS_MAX_ASSUMED: usize = 512;
 /// Reply bytes of mirrored properties one object keeps: a name, a game, a room and a looks array are
 /// a few dozen (objects.md section 9). A later value past it is still relayed, only not mirrored.
 pub(crate) const MIRRORED_BYTES_PER_OBJECT_MAX_ASSUMED: usize = 4096;
+/// Letters one account may send in 24 hours. The client sends one per typed letter to one box
+/// (`hub/script.145`); a hundred is far more than a person writes (mail.md section 9).
+pub(crate) const LETTERS_PER_DAY_ASSUMED: usize = 100;
+/// Live letters one mailbox holds: four listings of the client's 64 rows. A send to a full box is
+/// refused with fault 5, "there is not enough room left" (`hub/script.145` export 10).
+pub(crate) const MAILBOX_LETTERS_MAX_ASSUMED: usize = 256;
+/// Posts, complaints and Member Services forms one account may write in 24 hours (hub-services.md 12).
+pub(crate) const POSTS_PER_DAY_ASSUMED: usize = 50;
 /// `ObjFreeList` tells other connections the way leaveNet does: `ObjFree` (command 9), not command 52.
 /// PaintBall's `handleMsg` has no command-52 arm (`SL/script.780`). A peer that disposed on 52 would
 /// settle it the other way.
