@@ -8,8 +8,8 @@ use std::iter;
 use tracing::{info, warn};
 
 use crate::assumptions::{
-    GROUP_JOIN_TELLS_MEMBERS_ASSUMED, GROUP_KINDS_ASSUMED, PRIVATE_PARAMETER_MIN_ASSUMED,
-    REJOIN_REPLACES_KIND_ASSUMED,
+    GROUP_JOIN_TELLS_MEMBERS_ASSUMED, GROUP_KINDS_ASSUMED, HELD_OBJECTS_MAX_ASSUMED,
+    PRIVATE_PARAMETER_MIN_ASSUMED, REJOIN_REPLACES_KIND_ASSUMED,
 };
 use crate::message::Command;
 use crate::rpg::RPG_OBJECT_LAND_TYPE;
@@ -85,6 +85,8 @@ pub struct ObjectStore {
     mirror: PropertyMirror,
     /// Logged-in players. Dropped when the connection hangs up; the phone book reads it.
     online: BTreeMap<ConnectionId, OnlinePlayer>,
+    /// How many objects each connection holds, so no connection takes every SID.
+    held: HashMap<ConnectionId, usize>,
     log: LogPolicy,
 }
 
@@ -145,6 +147,7 @@ impl ObjectStore {
             games: GameBook::default(),
             mirror: PropertyMirror::default(),
             online: BTreeMap::new(),
+            held: HashMap::new(),
             log: LogPolicy::Verbose,
         }
     }
@@ -464,8 +467,18 @@ impl ObjectStore {
         self.let_go(connection, sid)
     }
 
+    /// A new object for `connection`; none when every SID is taken or the connection holds its share.
     fn create(&mut self, connection: ConnectionId, request: JoinNet, role: Role) -> Option<Sid> {
+        let held = self.held.get(&connection).copied().unwrap_or_default();
+        if held >= HELD_OBJECTS_MAX_ASSUMED {
+            warn!(
+                connection = connection.0,
+                held, "object refused: the connection holds its share"
+            );
+            return None;
+        }
         let sid = self.allocate_sid()?;
+        self.note_held(connection);
         info!(sid = sid.0, request = %self.log.debug(&request), "object joined");
         let holders = BTreeMap::from([(connection, 1)]);
         let object = NetObject {
@@ -489,8 +502,12 @@ impl ObjectStore {
             return Some(sid);
         };
         if let Some(group) = self.objects.get_mut(&sid) {
+            let newcomer = !group.holders.contains_key(&connection);
             let references = group.holders.entry(connection).or_default();
             *references = references.saturating_add(1);
+            if newcomer {
+                self.note_held(connection);
+            }
         }
         info!(sid = sid.0, key = %self.log.debug(&key), "shared group joined");
         Some(sid)
@@ -543,8 +560,12 @@ impl ObjectStore {
         let Some(object) = self.objects.get_mut(&sid) else {
             return deliveries;
         };
-        object.holders.remove(&connection);
-        if object.holders.is_empty() {
+        let released = object.holders.remove(&connection).is_some();
+        let unheld = object.holders.is_empty();
+        if released {
+            self.note_released(connection);
+        }
+        if unheld {
             deliveries.extend(self.destroy(connection, sid));
         }
         deliveries
@@ -618,6 +639,19 @@ impl ObjectStore {
 
     fn members_of(&self, sid: Sid) -> &[Sid] {
         self.objects.get(&sid).map_or(&[], NetObject::members)
+    }
+
+    fn note_held(&mut self, connection: ConnectionId) {
+        *self.held.entry(connection).or_default() += 1;
+    }
+
+    fn note_released(&mut self, connection: ConnectionId) {
+        if let Some(held) = self.held.get_mut(&connection) {
+            *held = held.saturating_sub(1);
+            if *held == 0 {
+                self.held.remove(&connection);
+            }
+        }
     }
 
     fn holds(&self, connection: ConnectionId, sid: Sid) -> bool {

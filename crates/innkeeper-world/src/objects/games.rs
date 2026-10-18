@@ -197,8 +197,13 @@ impl ObjectStore {
                 );
                 continue;
             }
-            if let Some(object) = self.objects.get_mut(&sid) {
+            let newcomer = self.objects.get_mut(&sid).is_some_and(|object| {
+                let newcomer = !object.holders.contains_key(&connection);
                 object.holders.entry(connection).or_insert(1);
+                newcomer
+            });
+            if newcomer {
+                self.note_held(connection);
             }
             self.games.registered(sid, connection);
             info!(

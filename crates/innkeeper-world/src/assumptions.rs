@@ -170,6 +170,9 @@ pub(crate) const OBJ_NEW_LIST_UNREAD_WORD_ASSUMED: u16 = 0;
 /// The most objects one `ObjNewList` creates. `placeMen` asks for one per inventory item
 /// (`SL/script.780`). A capture of a longer list, or the original host's limit, would settle a higher cap.
 pub(crate) const OBJ_NEW_LIST_MAX_ASSUMED: u16 = 256;
+/// The most objects one connection may hold. A PaintBall leader holds one per item tile, 113 on the
+/// largest stock map, beside some ten others (objects.md section 6); 64 lines at this cap fill half the SIDs.
+pub(crate) const HELD_OBJECTS_MAX_ASSUMED: usize = 512;
 /// `ObjFreeList` tells other connections the way leaveNet does: `ObjFree` (command 9), not command 52.
 /// PaintBall's `handleMsg` has no command-52 arm (`SL/script.780`). A peer that disposed on 52 would
 /// settle it the other way.

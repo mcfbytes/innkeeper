@@ -116,10 +116,17 @@ switchboard, and a delivery for a connection that is gone is dropped.
 | `REPLICAS_INCLUDE_GROUP_FELLOWS_ASSUMED` | true | `WaitingRoomGroup::addMember` builds a replica of each newcomer and reads its properties, so a later change must reach it | `messages.md` 3.2 |
 | `UNSET_INT_PROPERTY_ASSUMED` | 0 | a `GrpGetProp` row needs a value in every column; text columns get empty text | `messages.md` 3.2 |
 | `PROPERTIES_UNREAD_WORD_ASSUMED` | 0 | the word at byte 4 of `SetMsg`, which the client skips | `messages.md` 3.2 |
+| `HELD_OBJECTS_MAX_ASSUMED` | 512 | the most objects one connection holds. LSCI holds 3 in the lobby and 5 or 6 in a game or conference, the RPGs 4, GOLF and Red Baron 1 beside the LSCI ones; a PaintBall leader adds one per item tile of its map, 113 on the largest stock map (MAZE, `SL/script.780 placeMen`). 512 leaves room for a larger map and one full `ObjNewList` (256), and 64 lines at the cap fill half of the 65,280 SIDs | `int14h-census/yserbius.md`, `golf.md`, `redbaron.md`, the `SL/*.PBM` maps; INFERRED bound |
 
 Also INFERRED but not constants, because no alternative is plausible: the shared key is
 `(kind, landType, parameter)`; a release by a connection takes its own members out of the group; a destroyed
 object's peers get `ObjFree`; GrpDel is accepted from any connection for a member that is in the group.
+
+A connection that holds `HELD_OBJECTS_MAX_ASSUMED` objects gets no new SID: a joinNet is answered as when
+every SID is taken (a warning and no `ObjID`; GOLF reports "create object timeout"), and an `ObjNewList`
+returns the SIDs made before the cap. Joining an existing shared group takes no SID and is still allowed.
+Before the cap one account took all 65,280 SIDs with 256 `ObjNewList` messages of 14 bytes, and no other
+player could join anything until it hung up.
 
 ## 7. Open
 

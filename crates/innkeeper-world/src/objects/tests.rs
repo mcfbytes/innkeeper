@@ -28,8 +28,36 @@ fn granted(deliveries: &[Delivery]) -> Sid {
 fn a_new_list_stops_when_every_sid_is_taken() {
     let mut store = ObjectStore::new();
     let join = request(0, ObjectKind::Object, 0xFFFF);
-    while store.create(A, join, Role::Object).is_some() {}
+    let mut connections = (10..).map(ConnectionId);
+    for connection in connections.by_ref() {
+        if store.new_list(connection, join, 256).len() < 256 {
+            break;
+        }
+    }
+    assert_eq!(store.objects.len(), usize::from(u16::MAX - FIRST_SID) + 1);
     assert!(store.new_list(A, join, 2).is_empty());
+}
+
+#[test]
+fn one_connection_holds_at_most_its_share_and_gets_it_back() {
+    let mut store = ObjectStore::new();
+    let join = request(0, ObjectKind::Object, 0xFFFF);
+    let mut made = 0;
+    while store.create(A, join, Role::Object).is_some() {
+        made += 1;
+    }
+    assert_eq!(made, HELD_OBJECTS_MAX_ASSUMED);
+    let room = request(1, ObjectKind::LandGroup, 1);
+    assert!(store.join(A, room).is_empty(), "no ObjID for a new SID");
+    let shared = granted(&store.join(B, room));
+    assert_eq!(
+        granted(&store.join(A, room)),
+        shared,
+        "an existing group takes no SID"
+    );
+    store.disconnect(A);
+    assert!(!store.held.contains_key(&A));
+    assert_eq!(store.new_list(A, join, 3).len(), 3);
 }
 
 #[test]
