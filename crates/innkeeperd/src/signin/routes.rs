@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -18,14 +17,16 @@ use serde_json::{json, Value};
 use tracing::{info, warn};
 
 use super::keys::{self, IdentityKey};
-use super::rp::Audience;
+use super::rp::{Audience, PendingRp};
 use super::store::{self, Attested, Created};
-use super::{Mode, PageReturn, PendingLogin, SignIn};
+use super::{Mode, PageReturn, SignIn};
 use crate::dates;
 use crate::http::{self, Reply};
 
 use crate::dates::DAY;
 const MAX_PERSONA: usize = 10;
+/// The longest `return` address taken; it travels inside the sealed `state` to the provider.
+const MAX_RETURN: usize = 1024;
 /// The most file bytes the saves listing carries inline; later files are fetched one by one.
 const PREFETCH_INLINE_BYTES: usize = 2 * 1024 * 1024;
 
@@ -135,7 +136,10 @@ impl SignIn {
             return http::error(StatusCode::BAD_REQUEST, "bad_provider", "Unknown provider.");
         }
         let address = query.get("return").map(String::as_str).unwrap_or("");
-        let Some((url, origin)) = self.origins.check_return(address) else {
+        let checked = (address.len() <= MAX_RETURN)
+            .then(|| self.origins.check_return(address))
+            .flatten();
+        let Some((url, origin)) = checked else {
             return http::error(
                 StatusCode::BAD_REQUEST,
                 "bad_return",
@@ -147,43 +151,48 @@ impl SignIn {
             _ => Mode::Popup,
         };
         let attest = query.get("attest").and_then(|text| parse_attest(text));
+        let page_nonce = match query.get("nonce").map(String::as_str) {
+            None | Some("") => None,
+            Some(text) if page_nonce_ok(text) => Some(text.to_owned()),
+            Some(_) => {
+                return http::error(
+                    StatusCode::BAD_REQUEST,
+                    "bad_nonce",
+                    "The nonce must be 16 to 64 of A-Z, a-z, 0-9, - and _.",
+                )
+            }
+        };
         let page = PageReturn {
             url,
             origin,
             mode,
             attest,
+            page_nonce,
         };
-        let started = match self.rp.begin(provider, Audience::Player).await {
-            Ok(started) => started,
+        let expires_at = dates::now_ms().saturating_add(super::LOGIN_TTL);
+        let seal = |pending: &PendingRp| {
+            let state = pending.to_state(expires_at, Some(page.to_state()));
+            self.states().seal(&state)
+        };
+        match self.rp.begin(provider, Audience::Player, seal).await {
+            Ok(authorize) => super::pages::redirect(authorize.as_str()),
             Err(error) => {
                 warn!(provider, %error, "sign-in could not start");
-                return super::pages::finish(&page, Err("server_error"));
+                super::pages::finish(&page, Err("server_error"))
             }
-        };
-        let pending = PendingLogin {
-            rp: started.pending,
-            page,
-            created: Instant::now(),
-        };
-        if !self.remember(started.state, pending) {
-            warn!("sign-in refused: too many logins in flight");
-            return http::error(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "busy",
-                "Try again in a minute.",
-            );
         }
-        super::pages::redirect(started.authorize.as_str())
     }
 
     async fn callback(&self, query: &HashMap<String, String>) -> Reply {
         let state = query.get("state").map(String::as_str).unwrap_or("");
-        let Some(login) = self
-            .take_pending(state)
-            .filter(|login| login.rp.audience() == Audience::Player)
-        else {
+        let opened = self.states().open(state, Audience::Player, dates::now_ms());
+        let Some((rp, page)) = opened.and_then(|state| {
+            let page = PageReturn::from_state(state.page.as_ref()?)?;
+            Some((PendingRp::from_state(&state), page))
+        }) else {
             return super::pages::expired();
         };
+        let login = Login { rp, page };
         if let Some(code) = query.get("error") {
             let code = if code == "access_denied" {
                 "access_denied"
@@ -528,6 +537,20 @@ impl SignIn {
         }
         http::empty(StatusCode::NO_CONTENT)
     }
+}
+
+/// A login back from the provider, opened from its sealed `state`.
+struct Login {
+    rp: PendingRp,
+    page: PageReturn,
+}
+
+/// The page's login nonce: 16 to 64 base64url characters, so it is echoed back unchanged.
+fn page_nonce_ok(text: &str) -> bool {
+    (16..=64).contains(&text.len())
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// `<age>+v<terms>`, for example `18+v1`.

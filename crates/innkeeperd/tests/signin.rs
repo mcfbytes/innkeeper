@@ -167,3 +167,64 @@ async fn a_web_sign_in_opens_its_own_account_and_nothing_else() {
         "innkeeperd is still running\n{log}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn unfinished_logins_cost_nothing_and_each_state_comes_back_once_with_the_page_nonce() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let issuer = format!("http://{}", listener.local_addr().unwrap());
+    let key = rsa::RsaPrivateKey::new(&mut aes_gcm::aead::OsRng, 2048).unwrap();
+    let provider = Arc::new(dev_oidc::MockProvider::new(issuer.clone(), key));
+    tokio::spawn(Arc::clone(&provider).serve(listener));
+    let port = free_port();
+    let dir = std::env::temp_dir().join(format!("inn-signin-flood-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    let base = format!("http://127.0.0.1:{port}");
+    std::fs::write(
+        dir.join("auth.toml"),
+        format!(
+            "public_url = \"{base}\"\n\n[[provider]]\nid = \"dev\"\nname = \"Dev\"\n\
+             issuer = \"{issuer}\"\nclient_id = \"inn-test\"\nclient_secret_name = \"dev-secret\"\n\n\
+             [dev_secrets]\ndev-secret = \"not-a-real-secret\"\n"
+        ),
+    )
+    .unwrap();
+    let server = tokio::task::block_in_place(|| start(&dir, port, &[]));
+
+    // More unfinished logins than the old in-memory table held: none is refused, none is kept.
+    let login = format!(
+        "{base}/auth/login?provider=dev&return={}",
+        url::form_urlencoded::byte_serialize(RETURN.as_bytes()).collect::<String>()
+    );
+    let mut workers = Vec::new();
+    for _ in 0..8 {
+        let login = login.clone();
+        workers.push(tokio::spawn(async move {
+            let client = http();
+            for _ in 0..600 {
+                let answer = client.get(&login).send().await.unwrap();
+                assert_eq!(answer.status(), 302);
+            }
+        }));
+    }
+    for worker in workers {
+        worker.await.unwrap();
+    }
+
+    let nonce = "pageNonce_0123456789-abc";
+    let (callback, page) = redirect_login(&base, "flood", &format!("&nonce={nonce}")).await;
+    let fragment = page
+        .strip_prefix(&format!("{RETURN}#inn-session="))
+        .unwrap();
+    assert!(fragment.ends_with(&format!("&inn-nonce={nonce}")), "{page}");
+    let replayed = http().get(&callback).send().await.unwrap();
+    assert_eq!(replayed.status(), 400, "a state is good for one callback");
+    let bad = http()
+        .get(format!("{login}&nonce=short"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), 400);
+
+    drop(server);
+    let _ = std::fs::remove_dir_all(&dir);
+}

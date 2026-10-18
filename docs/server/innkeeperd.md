@@ -393,10 +393,23 @@ oidc-google = "not-a-real-secret"
   and `-`). Without a vault it is looked up
   in `[dev_secrets]`, then in `INNKEEPERD_SECRET_<NAME>` (upper case, `-` as `_`).
 
-Each login uses PKCE (S256), a random `state` and, for OIDC, a `nonce`; the ID token's signature,
+Each login uses PKCE (S256), a `state` and, for OIDC, a `nonce`; the ID token's signature,
 issuer, audience, expiry and nonce are checked. Discovery metadata and signing keys are cached for an
-hour and fetched again when a token names an unknown key. Redirects are not followed. A login that
-has not come back within ten minutes is forgotten.
+hour and fetched again when a token names an unknown key. Redirects are not followed.
+
+**The server keeps nothing for a login in flight.** The `state` value is the pending login itself:
+the provider id, the audience (player or portal), the PKCE verifier, the OIDC nonce, an expiry ten
+minutes on and, for a player, the checked page return (address, origin, mode, `attest` and the page's
+`nonce`), as JSON sealed with AES-256-GCM under a key made at startup, the audience bound in as
+associated data (`crates/innkeeperd/src/signin/state.rs`). So `GET /auth/login` and
+`/admin/auth/login` allocate nothing, and no number of unfinished logins can turn a real one away.
+The callback opens the state, refuses one that is forged, expired, for the other audience or already
+used, and only then exchanges the code. Single use is a set of the states that came back, each kept
+until its own expiry; it holds at most 65536, and when full the entry closest to expiry goes, never a
+new login. (A state replayed after that eviction still needs its authorization code, which the
+provider redeems once, and the PKCE verifier sealed with it.) A restart makes every login in flight
+start again. A `return` longer than 1024 bytes is `bad_return`, so the state stays a few hundred
+characters.
 
 Apple is not supported: its client secret is a signed JWT, which this file cannot express yet. For
 Microsoft, use a tenant-specific issuer, or for personal accounts the consumer tenant's
@@ -501,7 +514,14 @@ What the server decided where the `docs/web.md` contract is open or silent:
   429 body is `rate_limited`.
 - 401 bodies are `unauthorized`; a credential request for an account the identity does not own is
   404 `no_such_account`.
-- More than 4096 logins in flight is 503 `busy`.
+- **The page's nonce (login CSRF).** `GET /auth/login` takes an optional `nonce`: 16 to 64 of A-Z,
+  a-z, 0-9, `-` and `_` (otherwise 400 `bad_nonce`), which the page makes fresh for each login and
+  keeps. It travels sealed in the `state` and comes back with the result, in either outcome: the
+  redirect fragment ends `&inn-nonce=<nonce>` and the popup message carries `"nonce"`. A page that
+  finds no nonce, or not its own, drops the result, so a `#inn-session=` or a callback link an
+  attacker made for their own login cannot sign the victim's page in as the attacker. Without the
+  parameter the result carries no nonce, as before.
+- There is no limit on logins in flight: nothing is stored for them (8.2).
 - **Attestation is enforced.** `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are
   403 `attest_required` unless the identity's stored answer (from `attest=` on the login URL or
   `POST /auth/attest`) has age at least `--minimum-age` and terms at least `--terms-version`. The

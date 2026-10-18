@@ -67,8 +67,10 @@ lookups use `identity_key` only. The raw issuer and subject exist in the databas
 behind one account under legal process. Without an audit recipient `subject_sealed` is NULL and
 startup warns. The player sees a handle such as `Caller 7F3A`, the first two bytes of the key. The
 session token itself is never stored or logged; the table keeps its SHA-256. The age and terms
-answer is a self-declaration and is stored as given. Pending logins (state, PKCE verifier, nonce)
-live in memory for up to ten minutes and are never written.
+answer is a self-declaration and is stored as given. A login in flight is kept nowhere: its PKCE
+verifier, nonce and page return travel inside the `state` value, encrypted under a key that exists
+only in the process's memory, and expire after ten minutes. The only thing remembered is which
+states have already come back, until each expires ([innkeeperd.md](innkeeperd.md) section 8.2).
 
 ## 2. Public mode (`innkeeperd --public`)
 

@@ -7,13 +7,13 @@ mod pages;
 mod routes;
 pub(crate) mod rp;
 pub(crate) mod startup;
+pub(crate) mod state;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use innkeeper_world::{AccountId, StoreError};
 use serde_json::json;
@@ -25,12 +25,11 @@ use crate::seal::{self, Recipient};
 use crate::sqlite_store::SqliteStore;
 use config::PageOrigins;
 use keys::{IdentityKey, KeyRing};
-use rp::{PendingRp, Rp};
+use rp::Rp;
+use state::{LoginStates, PageState};
 
-/// A login that has not come back from its provider within this is forgotten.
-const PENDING_TTL: Duration = Duration::from_secs(600);
-/// Logins in flight at once; more are refused rather than grown without bound.
-const MAX_PENDING: usize = 4096;
+/// A login that has not come back from its provider within this is refused at its callback.
+pub(crate) const LOGIN_TTL: i64 = 10 * dates::MINUTE;
 
 /// Who may create accounts (docs/server/innkeeperd.md section 8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -90,12 +89,34 @@ struct PageReturn {
     origin: String,
     mode: Mode,
     attest: Option<(u32, u32)>,
+    /// The page's own random value for this login, echoed with the result so the page can tell
+    /// its login from one an attacker started (login CSRF).
+    page_nonce: Option<String>,
 }
 
-struct PendingLogin {
-    rp: PendingRp,
-    page: PageReturn,
-    created: Instant,
+impl PageReturn {
+    fn to_state(&self) -> PageState {
+        PageState {
+            url: self.url.as_str().to_owned(),
+            origin: self.origin.clone(),
+            redirect: self.mode == Mode::Redirect,
+            attest: self.attest,
+            page_nonce: self.page_nonce.clone(),
+        }
+    }
+
+    fn from_state(state: &PageState) -> Option<Self> {
+        Some(PageReturn {
+            url: Url::parse(&state.url).ok()?,
+            origin: state.origin.clone(),
+            mode: match state.redirect {
+                true => Mode::Redirect,
+                false => Mode::Popup,
+            },
+            attest: state.attest,
+            page_nonce: state.page_nonce.clone(),
+        })
+    }
 }
 
 pub(crate) struct SignIn {
@@ -110,7 +131,7 @@ pub(crate) struct SignIn {
     terms_version: u32,
     recipient: Option<Recipient>,
     required: bool,
-    pending: Mutex<HashMap<String, PendingLogin>>,
+    states: LoginStates,
 }
 
 impl std::fmt::Debug for SignIn {
@@ -137,7 +158,7 @@ impl SignIn {
             terms_version: setup.terms_version,
             recipient: setup.recipient,
             required: setup.required,
-            pending: Mutex::new(HashMap::new()),
+            states: LoginStates::new(),
         }
     }
 
@@ -189,24 +210,9 @@ impl SignIn {
         }
     }
 
-    fn pending(&self) -> MutexGuard<'_, HashMap<String, PendingLogin>> {
-        self.pending.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Keeps a login until its callback; false when too many are in flight.
-    fn remember(&self, state: String, login: PendingLogin) -> bool {
-        let mut pending = self.pending();
-        pending.retain(|_, waiting| waiting.created.elapsed() < PENDING_TTL);
-        if pending.len() >= MAX_PENDING {
-            return false;
-        }
-        pending.insert(state, login);
-        true
-    }
-
-    fn take_pending(&self, state: &str) -> Option<PendingLogin> {
-        let login = self.pending().remove(state)?;
-        (login.created.elapsed() < PENDING_TTL).then_some(login)
+    /// The sealed `state` values of every login in flight, the portal's included.
+    pub(crate) fn states(&self) -> &LoginStates {
+        &self.states
     }
 
     /// The sealed `issuer`/`subject` pair, when an audit recipient is configured.

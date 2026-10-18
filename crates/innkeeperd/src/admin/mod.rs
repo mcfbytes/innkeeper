@@ -16,8 +16,7 @@ mod views;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64URL;
 use base64::Engine;
@@ -49,9 +48,6 @@ use store::Who;
 /// A portal session lasts this long in all, and ends sooner when idle.
 const SESSION_LIFETIME: i64 = 8 * dates::HOUR;
 const SESSION_IDLE: i64 = 30 * dates::MINUTE;
-/// A login that has not come back from its provider within this is forgotten.
-const PENDING_TTL: Duration = Duration::from_secs(600);
-const MAX_PENDING: usize = 256;
 const MAX_FORM: usize = 64 * 1024;
 
 const COOKIE_SECURE: &str = "__Host-inn-admin";
@@ -73,11 +69,6 @@ pub(crate) struct AdminSetup {
     pub(crate) retention: RetentionPolicy,
 }
 
-struct PendingLogin {
-    rp: PendingRp,
-    created: Instant,
-}
-
 pub(crate) struct Admin {
     pub(crate) settings: Arc<ConnectionSettings>,
     sign_in: Arc<SignIn>,
@@ -86,7 +77,6 @@ pub(crate) struct Admin {
     origin: String,
     secure: bool,
     pub(crate) retention: RetentionPolicy,
-    pending: Mutex<HashMap<String, PendingLogin>>,
 }
 
 impl std::fmt::Debug for Admin {
@@ -127,7 +117,6 @@ impl Admin {
             origin: setup.origin.origin().ascii_serialization(),
             secure,
             retention: setup.retention,
-            pending: Mutex::new(HashMap::new()),
         }
     }
 
@@ -158,10 +147,6 @@ impl Admin {
             self.cookie_name()
         );
         HeaderValue::from_str(&text).unwrap_or_else(|_| HeaderValue::from_static(""))
-    }
-
-    fn pending(&self) -> std::sync::MutexGuard<'_, HashMap<String, PendingLogin>> {
-        self.pending.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -487,29 +472,23 @@ impl Admin {
                 ),
             );
         }
-        let started = match self.sign_in.rp().begin(provider, Audience::Admin).await {
-            Ok(started) => started,
+        let expires_at = dates::now_ms().saturating_add(crate::signin::LOGIN_TTL);
+        let states = self.sign_in.states();
+        let seal = |pending: &PendingRp| states.seal(&pending.to_state(expires_at, None));
+        let authorize = match self
+            .sign_in
+            .rp()
+            .begin(provider, Audience::Admin, seal)
+            .await
+        {
+            Ok(authorize) => authorize,
             Err(error) => {
                 warn!(provider, %error, "portal sign-in could not start");
                 return self.sign_in_failed();
             }
         };
-        {
-            let mut pending = self.pending();
-            pending.retain(|_, waiting| waiting.created.elapsed() < PENDING_TTL);
-            if pending.len() >= MAX_PENDING {
-                return self.sign_in_failed();
-            }
-            pending.insert(
-                started.state,
-                PendingLogin {
-                    rp: started.pending,
-                    created: Instant::now(),
-                },
-            );
-        }
         let mut reply = http::empty(StatusCode::FOUND);
-        if let Ok(value) = HeaderValue::from_str(started.authorize.as_str()) {
+        if let Ok(value) = HeaderValue::from_str(authorize.as_str()) {
             reply.headers_mut().insert(LOCATION, value);
         }
         reply
@@ -532,11 +511,11 @@ impl Admin {
 
     async fn auth_callback(&self, query: &HashMap<String, String>) -> Reply {
         let state = query.get("state").map_or("", String::as_str);
-        let login = self
-            .pending()
-            .remove(state)
-            .filter(|login| login.created.elapsed() < PENDING_TTL);
-        let Some(login) = login else {
+        let opened = self
+            .sign_in
+            .states()
+            .open(state, Audience::Admin, dates::now_ms());
+        let Some(login) = opened.map(|state| PendingRp::from_state(&state)) else {
             return html_reply(
                 StatusCode::BAD_REQUEST,
                 html::bare_page(
@@ -567,7 +546,7 @@ impl Admin {
         let Some(code) = query.get("code").cloned() else {
             return self.sign_in_failed();
         };
-        let verified = match self.sign_in.rp().finish(login.rp, code).await {
+        let verified = match self.sign_in.rp().finish(login, code).await {
             Ok(verified) => verified,
             Err(error) => {
                 warn!(%error, "portal sign-in did not finish");
