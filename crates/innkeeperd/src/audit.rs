@@ -56,7 +56,8 @@ pub(crate) struct AuditTicket {
     ended_at: Option<i64>,
     account_id: Option<u32>,
     peer_ip: String,
-    peer_port: u16,
+    /// None for a client behind the proxy, which passes its address and not its port.
+    peer_port: Option<u16>,
     transport: &'static str,
     closed: bool,
 }
@@ -105,7 +106,7 @@ fn open_session(
         ended_at: None,
         account_id: None,
         peer_ip: peer.ip().to_string(),
-        peer_port: peer.port(),
+        peer_port: (peer.port() != 0).then_some(peer.port()),
         transport,
         closed: false,
     };
@@ -561,19 +562,19 @@ fn read_data_keys(path: &Path) -> Result<Vec<DataKey>, AuditError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::sync::OnceLock;
 
     use rsa::RsaPublicKey;
 
     use super::*;
 
-    fn private_key() -> &'static RsaPrivateKey {
+    pub(crate) fn private_key() -> &'static RsaPrivateKey {
         static KEY: OnceLock<RsaPrivateKey> = OnceLock::new();
         KEY.get_or_init(|| RsaPrivateKey::new(&mut aes_gcm::aead::OsRng, 2048).unwrap())
     }
 
-    fn seal_for(store: Arc<SqliteStore>) -> Arc<AuditSeal> {
+    pub(crate) fn seal_for(store: Arc<SqliteStore>) -> Arc<AuditSeal> {
         let recipient = Recipient {
             key: RsaPublicKey::from(private_key()),
             kid: "test-kid".into(),
@@ -587,7 +588,7 @@ mod tests {
         store.create_account(AccountId(id), record).unwrap();
     }
 
-    fn plain_of(store: &SqliteStore, id: i64) -> Value {
+    pub(crate) fn plain_of(store: &SqliteStore, id: i64) -> Value {
         let sealed: Vec<u8> = store
             .connection()
             .query_row(

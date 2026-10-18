@@ -510,6 +510,17 @@ impl Config {
         Ok(())
     }
 
+    /// Public mode trusts the loopback proxy's `X-Forwarded-For`; only a loopback-only development
+    /// run (`--insecure-dev-keys`) may take a same-machine browser without one as the client.
+    pub(crate) fn forwarding(&self) -> crate::forwarded::Forwarding {
+        match self.public {
+            true => crate::forwarded::Forwarding::Proxy {
+                peer_when_absent: self.insecure_dev_keys,
+            },
+            false => crate::forwarded::Forwarding::Direct,
+        }
+    }
+
     /// `--enrolment`, or its default: open, and web-only with `--public`.
     pub(crate) fn enrolment(&self) -> EnrolmentMode {
         self.enrolment.unwrap_or(if self.public {

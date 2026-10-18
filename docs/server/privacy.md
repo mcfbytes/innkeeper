@@ -79,7 +79,9 @@ Opt-in. The default log and capture format stay exactly as they are.
   no hex dump. The raw line `client message` keeps `len=N` and drops the bytes.
 - **No IP addresses in logs.** The `peer=` field in spans and lines is the first eight hex characters of
   HMAC-SHA256 over the IP (not the port), keyed by a random per-process secret. Sessions correlate
-  within one run and are not reversible or stable across restarts.
+  within one run and are not reversible or stable across restarts. On a WebSocket the IP is the
+  client's, the right-most `X-Forwarded-For` entry of the loopback proxy, not the proxy's
+  ([hardening.md](hardening.md) section 1).
 - **No free text.** Persona names in info/warn lines become the account number. PAD commands, dial
   strings and AT lines log the event kind only.
 - **Sealed records.** With `--key-vault` the audit key is read from the server vault (section 7),
@@ -199,6 +201,10 @@ On open the row's `sealed` blob is the envelope of this JSON:
 {peer_ip, peer_port, transport: "tcp"|"websocket", started_at, ended_at, account_id}
 ```
 
+`peer_ip` is the client: on a WebSocket in public mode, the right-most `X-Forwarded-For` entry the
+loopback proxy sent ([hardening.md](hardening.md) section 1). The proxy does not pass the client's
+port, so `peer_port` is null there; it is the socket's port on a line that arrived directly.
+An upgrade with no usable header is refused before a row is written, so no record names the proxy.
 `started_at` and `ended_at` are Unix milliseconds, here and in the row's clear columns. The JSON key
 stays `account_id`; the column is `account`. `transport` is `tcp` for a legacy line and for INT 14h,
 and `websocket` for a WebSocket line. The row

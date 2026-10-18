@@ -41,6 +41,8 @@ pub(crate) struct ConnectionSettings {
     pub(crate) require_session: bool,
     /// False unless enrolment is open: a signup (command 55) then creates nothing.
     pub(crate) signup_open: bool,
+    /// Public mode: the client is the proxy's `X-Forwarded-For` entry, not the loopback peer.
+    pub(crate) forwarding: crate::forwarded::Forwarding,
     next_connection: AtomicU64,
 }
 
@@ -57,6 +59,7 @@ impl ConnectionSettings {
             sign_in: None,
             require_session: false,
             signup_open: true,
+            forwarding: crate::forwarded::Forwarding::Direct,
             next_connection: AtomicU64::new(1),
             world,
         }

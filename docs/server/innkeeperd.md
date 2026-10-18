@@ -576,7 +576,11 @@ handle /admin/* {
 }
 ```
 
-Add it beside the player routes; pass `Host` and `X-Forwarded-Proto` through as usual.
+Add it beside the player routes; pass `Host` and `X-Forwarded-Proto` through as usual. The player
+routes need Caddy's own `X-Forwarded-For` (its default): in `--public` an upgrade from loopback
+without it is refused, and its right-most entry is the address sealed for the line
+([hardening.md](hardening.md) section 1). Leave `trusted_proxies` unset unless a CDN really sits in
+front of Caddy, so a client-sent header is replaced and never believed.
 
 ### 9.4 What it does
 

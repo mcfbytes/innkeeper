@@ -19,7 +19,7 @@ use tokio::net::TcpStream;
 use tracing::{debug, warn};
 
 use crate::connection::ConnectionSettings;
-use crate::websocket;
+use crate::{forwarded, websocket};
 
 /// A browser that opens the socket but never finishes its request head is dropped after this.
 pub(crate) const HEADER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -55,7 +55,19 @@ async fn route(
     settings: Arc<ConnectionSettings>,
 ) -> Reply {
     if websocket::is_upgrade(&request) {
-        return websocket::accept(request, addr, settings);
+        // The sealed record and the log token name the client, never the proxy's loopback address.
+        return match forwarded::client_addr(request.headers(), addr, settings.forwarding) {
+            Ok(client) => websocket::accept(request, client, settings),
+            Err(why) => {
+                warn!(%why, "websocket refused: no client address");
+                crate::metrics::counters().ws_refused();
+                error(
+                    StatusCode::BAD_REQUEST,
+                    "no_client_address",
+                    "This server is reached through its proxy only.",
+                )
+            }
+        };
     }
     let path = request.uri().path();
     if path == "/healthz" {

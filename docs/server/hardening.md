@@ -26,6 +26,20 @@ opened.
 - `--allow-root` is an error, including together with `--no-sandbox`.
 - `--capture-dir` is still an error ([privacy.md](privacy.md) section 2).
 
+**The client's address.** The proxy reaches the WebSocket listener from loopback, so in public mode
+the socket peer is never the player. When the peer is loopback, the client is the right-most entry of
+`X-Forwarded-For` (`crates/innkeeperd/src/forwarded.rs`): the address the proxy itself saw. Entries
+further left came from the client or from proxies nobody here trusts, and are ignored. That address is
+what the sealed connection record holds and what the log's peer token is made from
+([privacy.md](privacy.md) sections 2 and 5). Its port is unknown, because the proxy does not pass it.
+An upgrade whose loopback peer sent no header, or whose right-most entry is not one IP address, is
+refused with 400 `no_client_address` before anything is sealed: a record of `127.0.0.1` would be
+useless. The one exception is `--public --insecure-dev-keys`, whose page origins are loopback only:
+there a browser on the same machine with no proxy is its own client. A peer that is not loopback is
+taken as it is. Caddy's `reverse_proxy` replaces a client-sent `X-Forwarded-For` with the address
+it saw unless the client is in its `trusted_proxies`, so the proxy must not list any range there
+unless another proxy really sits in front of it.
+
 `connection_gate::admit` (`crates/innkeeperd/src/connection_gate.rs`) runs on the upgrade request,
 before the WebSocket handshake. In public mode it requires `?session=<token>` naming a live sign-in
 session ([innkeeperd.md](innkeeperd.md) section 8). A missing, unknown or expired token is an HTTP

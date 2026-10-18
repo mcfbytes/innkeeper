@@ -397,6 +397,67 @@ mod tests {
         );
     }
 
+    /// A server behind the proxy, sealing every line; the store is where its rows land.
+    async fn serve_behind_proxy() -> (SocketAddr, Arc<crate::sqlite_store::SqliteStore>) {
+        let store = Arc::new(crate::sqlite_store::SqliteStore::open_in_memory().unwrap());
+        let mut settings = ConnectionSettings::new(SessionConfig::default(), World::stock(), None);
+        settings.audit = Some(crate::audit::tests::seal_for(Arc::clone(&store)));
+        settings.forwarding = crate::forwarded::Forwarding::Proxy {
+            peer_when_absent: false,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(accept_forever(
+            listener,
+            Arc::new(settings),
+            serve_websocket,
+        ));
+        (address, store)
+    }
+
+    #[tokio::test]
+    async fn behind_the_proxy_the_sealed_record_names_the_forwarded_client() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let (address, store) = serve_behind_proxy().await;
+        let mut request = format!("ws://{address}/").into_client_request().unwrap();
+        request.headers_mut().insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("10.9.9.9, 203.0.113.77"),
+        );
+        let stream = TcpStream::connect(address).await.unwrap();
+        let (_socket, _) = client_async(request, stream).await.unwrap();
+        let mut sealed = None;
+        for _ in 0..100 {
+            let id: Option<i64> = store
+                .connection()
+                .query_row("SELECT max(id) FROM audit_sessions", [], |row| row.get(0))
+                .unwrap();
+            if let Some(id) = id {
+                sealed = Some(crate::audit::tests::plain_of(&store, id));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let plain = sealed.expect("a sealed row");
+        assert_eq!(plain["peer_ip"], "203.0.113.77");
+        assert!(plain["peer_port"].is_null(), "{plain}");
+        assert_eq!(plain["transport"], "websocket");
+    }
+
+    #[tokio::test]
+    async fn behind_the_proxy_an_upgrade_without_the_header_is_refused_unsealed() {
+        let (address, store) = serve_behind_proxy().await;
+        let head = "GET / HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\
+                    Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+        let reply = crate::http::tests::request_head(address, head).await;
+        assert!(reply.starts_with("HTTP/1.1 400"), "{reply}");
+        let rows: i64 = store
+            .connection()
+            .query_row("SELECT count(*) FROM audit_sessions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
     #[tokio::test]
     async fn a_plain_http_request_is_not_upgraded() {
         let address = serve_on_loopback().await;
