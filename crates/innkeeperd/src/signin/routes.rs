@@ -171,6 +171,13 @@ impl SignIn {
         };
         let attest = query.get("attest").and_then(|text| parse_attest(text));
         let page_nonce = match query.get("nonce").map(String::as_str) {
+            None | Some("") if self.required => {
+                return http::error(
+                    StatusCode::BAD_REQUEST,
+                    "bad_nonce",
+                    "This server needs the page's nonce on every login.",
+                )
+            }
             None | Some("") => None,
             Some(text) if page_nonce_ok(text) => Some(text.to_owned()),
             Some(_) => {

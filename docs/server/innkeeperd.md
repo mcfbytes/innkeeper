@@ -555,8 +555,10 @@ What the server decided where the `docs/web.md` contract is open or silent:
   keeps. It travels sealed in the `state` and comes back with the result, in either outcome: the
   redirect fragment ends `&inn-nonce=<nonce>` and the popup message carries `"nonce"`. A page that
   finds no nonce, or not its own, drops the result, so a `#inn-session=` or a callback link an
-  attacker made for their own login cannot sign the victim's page in as the attacker. Without the
-  parameter the result carries no nonce, as before.
+  attacker made for their own login cannot sign the victim's page in as the attacker. **With
+  `--public` the nonce is mandatory**: a login without one is 400 `bad_nonce` ("This server needs
+  the page's nonce on every login."), since the page always sends it. Without `--public` the
+  parameter stays optional and a result without it carries no nonce, as before.
 - There is no limit on logins in flight: nothing is stored for them (8.2).
 - **Attestation is enforced.** `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are
   403 `attest_required` unless the identity's stored answer (from `attest=` on the login URL or

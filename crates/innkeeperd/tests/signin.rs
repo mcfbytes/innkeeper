@@ -190,10 +190,15 @@ async fn unfinished_logins_cost_nothing_and_each_state_comes_back_once_with_the_
     .unwrap();
     let server = tokio::task::block_in_place(|| start(&dir, port, &[]));
 
+    // A public server refuses a login without the page's nonce.
     let bare = format!(
         "{base}/auth/login?provider=dev&return={}",
         url::form_urlencoded::byte_serialize(RETURN.as_bytes()).collect::<String>()
     );
+    let refused = http().get(&bare).send().await.unwrap();
+    assert_eq!(refused.status(), 400, "no nonce");
+    let body: Value = refused.json().await.unwrap();
+    assert_eq!(body["error"], "bad_nonce");
 
     // More unfinished logins than the old in-memory table held: none is refused, none is kept.
     let login = format!("{bare}&nonce={NONCE}");

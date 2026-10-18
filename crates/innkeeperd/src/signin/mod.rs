@@ -114,7 +114,8 @@ pub(crate) struct SignInSetup {
     /// ... and at least this terms version.
     pub(crate) terms_version: u32,
     pub(crate) recipient: Option<Recipient>,
-    /// Every line must carry a session (public mode); the page then offers no unsigned way in.
+    /// Every line must carry a session (public mode); the page then offers no unsigned way in, and
+    /// every login must carry the page's nonce.
     pub(crate) required: bool,
 }
 
