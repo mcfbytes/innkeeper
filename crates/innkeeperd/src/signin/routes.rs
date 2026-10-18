@@ -365,7 +365,7 @@ impl SignIn {
                     return http::error(
                         StatusCode::BAD_REQUEST,
                         "bad_persona",
-                        "Use 1 to 10 letters or digits.",
+                        "Use 1 to 10 letters or digits, and not a staff name.",
                     )
                 }
             },
@@ -569,11 +569,13 @@ fn named(persona: &str) -> Option<&str> {
     (!persona.trim().is_empty()).then_some(persona)
 }
 
-/// 1 to 10 of A-Z, a-z and 0-9, the rule for a persona given when the account is opened.
+/// 1 to 10 of A-Z, a-z and 0-9 and no staff or service name, the rule for a persona given when
+/// the account is opened.
 pub(crate) fn persona_ok(persona: &str) -> bool {
     !persona.is_empty()
         && persona.len() <= MAX_PERSONA
         && persona.bytes().all(|b| b.is_ascii_alphanumeric())
+        && !innkeeper_world::is_reserved_name(persona)
 }
 
 /// `/auth/accounts/<id>/saves`.
@@ -675,7 +677,15 @@ mod tests {
         for good in ["Guybrush", "A", "Abcdefghij", "R2D2"] {
             assert!(persona_ok(good), "{good}");
         }
-        for bad in ["", "Abcdefghijk", "two words", "a-b", "é"] {
+        for bad in [
+            "",
+            "Abcdefghijk",
+            "two words",
+            "a-b",
+            "é",
+            "Sysop",
+            "TSNstaff",
+        ] {
             assert!(!persona_ok(bad), "{bad}");
         }
     }

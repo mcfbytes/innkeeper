@@ -92,6 +92,8 @@ const TRIVIA_TOPIC_SECTIONS: [u16; 2] = [84, 85];
 /// Info line, then one topic per `\x02`. The client splits on bytes 1 and 2 (`proc_309`).
 const DEFAULT_TRIVIA_TOPICS: &[u8] =
     b"\x01Choose a room\x02Adventure games\x02General trivia\x02Games and screens\x02";
+/// The most `author|text` bytes a post's 309-byte request carries after its header and NUL.
+const POST_BODY_LIMIT: usize = 300;
 /// The client keeps one byte per indexed message in a 120-byte buffer.
 const INDEX_LIMIT: usize = 120;
 
@@ -147,6 +149,7 @@ pub(crate) fn answer(
         privileged: account.user_flags & PRIVILEGED_USER_FLAGS != 0,
         moderator: account.user_flags & MODERATOR_USER_FLAGS != 0,
         account: account.id,
+        persona: &account.persona,
     };
     match boards.handle(request) {
         Ok(reply) => reply.into_iter().map(HostMessage::Bbs).collect(),
@@ -164,6 +167,8 @@ struct Boards<'w> {
     privileged: bool,
     moderator: bool,
     account: AccountId,
+    /// The session's persona: the author a post it writes is shown under.
+    persona: &'w str,
 }
 
 impl Boards<'_> {
@@ -266,10 +271,11 @@ impl Boards<'_> {
             warn!(?board, "post to a board no directory lists: dropped");
             return Ok(());
         }
+        let body = authored(&author_of(self.account, self.persona), body);
         let id = self
             .world
             .store
-            .post(self.board_id(board), self.account, None, body)?;
+            .post(self.board_id(board), self.account, None, &body)?;
         info!(?board, post = id.0, "board post stored");
         Ok(())
     }
@@ -350,6 +356,29 @@ impl Boards<'_> {
     }
 }
 
+/// `author|text` with the session's persona as the author, whatever name the client put there, so
+/// a post cannot pass for another player's or the staff's. The text keeps the client's length limit.
+fn authored(author: &str, body: &[u8]) -> Vec<u8> {
+    let text = match body.iter().position(|byte| *byte == b'|') {
+        Some(bar) => body.get(bar + 1..).unwrap_or_default(),
+        None => body,
+    };
+    let mut stamped = author.as_bytes().to_vec();
+    stamped.push(b'|');
+    stamped.extend_from_slice(text);
+    stamped.truncate(POST_BODY_LIMIT);
+    stamped
+}
+
+/// The name a post or complaint is filed under: the persona without `|`, or the account number
+/// while the account has no persona yet.
+fn author_of(account: AccountId, persona: &str) -> String {
+    match persona.trim() {
+        "" => format!("account {}", account.0),
+        persona => persona.replace('|', "_"),
+    }
+}
+
 /// A complaint from the hub or the Sketch Pad. The client says "Your complaint has been forwarded"
 /// the moment it sends and waits for nothing, so nothing is answered. The text is kept as
 /// `persona|Complaint: text` on the complaint board, where the account's export and delete find it
@@ -368,10 +397,7 @@ fn complaint(
     }
     let text = text.get(..COMPLAINT_TEXT_LIMIT_ASSUMED).unwrap_or(text);
     let text = text.strip_prefix(b"Complaint|").unwrap_or(text);
-    let author = match account.persona.trim() {
-        "" => format!("account {}", account.id.0),
-        persona => persona.replace('|', "_"),
-    };
+    let author = author_of(account.id, &account.persona);
     let mut body = format!("{author}|Complaint: ").into_bytes();
     body.extend_from_slice(text);
     let board = board_id(

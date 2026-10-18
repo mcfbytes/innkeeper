@@ -49,9 +49,23 @@ erased with the account like the row. Names are not unique, as in the original, 
 attributed by name**. Every post records the account that wrote it (`posts.account`): board posts
 (27/0), the hub's complaints (27/9), Town Hall "Ask Member Services" messages (37/30) and the
 conference and trivia topic text. Every letter records the account that sent it
-(`letters.from_account`); the envelope's `from` mailbox and names are the client's bytes and are not
-used to find an account. The account export, `account delete` and its restore, the retention purge
-and its legal holds, the operator portal's links and the bulletin board's "erase your own message"
+(`letters.from_account`). The envelope's addressee name is the client's; its `from` mailbox and
+sender name are stamped by the host with the sending account's own box and the session's persona,
+and are still not used to find an account. A board post (27/0) is stored as `persona|text` with the
+session's persona in place of whatever name the client put before the `|`.
+
+**Nobody may pass for the staff.** A persona that reads as a staff title or a name of the service is
+refused wherever a name is taken: at Login (a Nak with its reason), on a 40/4 (no reply exists, so the
+session keeps its name) and in `POST /auth/accounts` (`bad_persona`). The test is
+`innkeeper_world::is_reserved_name`: case, spaces, punctuation and look-alike digits are ignored
+(`S.Y.S.0.P` is `sysop`), and the names are sysop, admin, administrator, moderator, staff, guide,
+ImagiNation, innkeeper and the client's own service box names `MemberServ` and `AcctUpdate` anywhere
+at the start or end of a name (sysop, moderator, administrator, ImagiNation, innkeeper and
+MemberServ anywhere in it), and inn, TSN, host, system, Sierra, mod, GM, operator, official,
+support, accounting, root and network as the whole name or two of them run together ("INN Host").
+The host has no staff accounts of its own; an operator who wants one picks a plain name.
+
+The account export, `account delete` and its restore, the retention purge and its legal holds, the operator portal's links and the bulletin board's "erase your own message"
 all use those columns, so two accounts that share a persona never see, hide, erase or hold each
 other's posts or letters. There is no fallback to the name at the head of a post body.
 

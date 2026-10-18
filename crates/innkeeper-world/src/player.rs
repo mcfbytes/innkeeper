@@ -5,10 +5,11 @@ use crate::assumptions::{
 };
 use crate::objects::OnlinePlayer;
 use crate::{
-    bbs, conference, game_info, hint_board, logon, mail, mall, money, object_list, presence,
-    red_baron, router, rpg, signup, town_hall, trivia, user_find, Account, AccountId,
-    AccountRequest, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet,
-    LogPolicy, Login, ObjectStore, Place, TriviaRequest, Unexplained, UnexplainedCommand, World,
+    bbs, conference, game_info, hint_board, is_reserved_name, logon, mail, mall, money,
+    object_list, presence, red_baron, router, rpg, signup, town_hall, trivia, user_find, Account,
+    AccountId, AccountRequest, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage,
+    JoinNet, LogPolicy, Login, ObjectStore, Place, TriviaRequest, Unexplained, UnexplainedCommand,
+    World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -239,9 +240,13 @@ impl PlayerSession {
     /// when it is one a board post can carry (`storable_persona`). A session whose latest land
     /// join was an RPG title's land (`rpg::is_title`) only renames: the name is a game character
     /// (`RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`). A store that refuses is logged and the session
-    /// still plays under the name.
+    /// still plays under the name. A staff or service name (`is_reserved_name`) is not taken.
     fn set_persona(&mut self, world: &World, name: &str) {
         match &mut self.state {
+            PlayerState::LoggedIn(_) if is_reserved_name(name) => {
+                // 40/4 has no reply to refuse with: the session keeps the name it had.
+                warn!("persona rename refused: a staff or service name");
+            }
             PlayerState::LoggedIn(player) => {
                 info!(
                     from = %self.log.persona(player.account.id.0, &player.account.persona),

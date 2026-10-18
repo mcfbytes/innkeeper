@@ -23,6 +23,7 @@ mod objects;
 mod player;
 mod presence;
 mod red_baron;
+mod reserved;
 mod retention;
 pub mod router;
 mod rpg;
@@ -68,6 +69,7 @@ pub use objects::{
     OnlineEntry, Place,
 };
 pub use player::PlayerSession;
+pub use reserved::is_reserved_name;
 pub use retention::RetentionPolicy;
 #[cfg(feature = "test-support")]
 pub use store::conformance;

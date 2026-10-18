@@ -233,7 +233,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand, CasinoLand, Arena, Yserbius, Cawdor and Twinion, land number 1, on host 7. Arena is land type 5, listed after the three LSCI lands and before the RPG titles. `lsci()` is still the three-land capture |
 | 47/1 | occupancy for the same lands: maximum 64 for Clubhouse, SierraLand, CasinoLand and the Arena, and 100 for the three RPG titles, current the number of members in the land's waiting room (0 for a land nobody entered; the Clubhouse room itself holds 128, the size of the stock joinNet) |
-| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`). The name replaces the account's persona for the session, and is also written to the store as the account's persona (`Store::set_persona`) when it is 1 to 16 printable ASCII characters with no `\|`, no leading or trailing space; any other name only renames the session, and so does every name from a session whose latest land joinNet was an RPG title's land (land types 4, 6, 8: the name is the game character, `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`; Find and the online list still show it). It applies to every account, not only web accounts, so that phone-signup accounts (which start with an empty persona) are named the same way; the last name presented wins, and a name need not be unique |
+| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`). The name replaces the account's persona for the session, and is also written to the store as the account's persona (`Store::set_persona`) when it is 1 to 16 printable ASCII characters with no `\|`, no leading or trailing space; a staff or service name (`is_reserved_name`, privacy.md section 1) is not taken at all, and the session keeps the name it had; any other name only renames the session, and so does every name from a session whose latest land joinNet was an RPG title's land (land types 4, 6, 8: the name is the game character, `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`; Find and the online list still show it). It applies to every account, not only web accounts, so that phone-signup accounts (which start with an empty persona) are named the same way; the last name presented wins, and a name need not be unique |
 | 40/3 | the bankroll from the store as `HostMessage::Money`; 500 (`MONEY_STARTING_BALANCE`) for an account with no balance yet, and nothing at all when the store fails, so the client keeps its own copy |
 | 40/2 | Ack 40/2 after the bankroll is stored, because the client waits for a reply naming command 40; Nak 40/2 with a text when the store fails |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
@@ -462,8 +462,8 @@ null `persona`: the account then has no persona yet (the row's `persona` is empt
 JSON's `accounts` entry says `"persona": null`). The browser page now sends `{}`: the original
 client's own Select Player screen (Create) makes the persona, and the name it presents becomes the
 account's persona through 40/4, below. A `persona` in the body still works, for compatibility, with
-today's checks: 1 to 10 of A-Z, a-z and 0-9, unique without regard to case across every account row,
-deleted or not (`400 bad_persona`, `409 persona_taken`). A name that came from the client is not
+today's checks: 1 to 10 of A-Z, a-z and 0-9, not a staff or service name, unique without regard
+to case across every account row, deleted or not (`400 bad_persona`, `409 persona_taken`). A name that came from the client is not
 checked for uniqueness: the original let two players share a name, and the phone book and the board
 posts already cope with that (privacy.md section 1).
 
@@ -471,7 +471,9 @@ The session token is 32 random bytes, base64url. The `sessions` row keeps only i
 WebSocket upgrade takes it from `?session=` and nowhere else; the token is never logged. On a bound
 line a Login for an account the identity does not own gets the same reply as a wrong password
 (`That password is not right.`). The Login's name, which the client takes from the persona it picked
-in Select Player, is accepted as it is; the stored persona changes only on a 40/4 (the 40/4 row of
+in Select Player, is accepted as it is unless it reads as a staff or service name (privacy.md
+section 1): that Login gets a Nak, `That player name is kept for the staff. Choose another one.`,
+which the client shows before it hangs up; the stored persona changes only on a 40/4 (the 40/4 row of
 section 5). One INN account can hold several personas in the client's `PLAYER.DIR`; the server keeps
 the name the client last presented, for display (the session list, the operator portal, the phone
 book). The page keeps each account's `PLAYER.DIR` and persona files in that account's own save space,

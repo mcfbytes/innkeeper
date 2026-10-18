@@ -66,6 +66,8 @@ The hub's own bulletin board (`theBBSs`, `BBS` in `hub/script.130`) is the same 
 (yserbius.md section 3): 27/13 with location 66 lists boards, 27/14 an index, 27/1 a message, 27/0 a post of
 `author|text`. This host lists no boards at location 66, so the Clubhouse's "Bulletin Board" says "There are
 no bulletin boards available." Erase is only offered at sysop level 3, from the user flag `0x0004`.
+A post is stored with the session's persona as its author, in place of the name the client wrote
+before the `|`, so nobody posts as another player or as the staff ([privacy.md](privacy.md) section 1).
 
 27/6 removes message number `message` (the position in the board, counted from 1) of the board named by
 `location` and `section`, in the player's land. The host deletes it when the requester's flags are privileged

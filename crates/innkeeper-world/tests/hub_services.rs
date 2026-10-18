@@ -300,3 +300,48 @@ fn topic_text_from_a_reader_without_moderator_rights_is_dropped_and_the_list_sta
     );
     table.run(&steps);
 }
+
+#[test]
+fn a_post_is_shown_under_the_session_persona_and_a_staff_name_is_not_taken() {
+    let (mut table, store) = stored_table(0);
+    let steps = format!(
+        "{IN_A_LAND}
+        A > 40/4 rename to a staff title, kept out | 28 04 {}
+        A > 27/0 post signed as the operator | 1b 00 59 00 00 01 01 00 {}
+        A > 27/0 post with no author | 1b 00 59 00 00 01 01 00 {}
+        ",
+        hex(b"S y s 0 p\0"),
+        hex(b"Sysop|Official: send me your password\0"),
+        hex(b"no bar here\0"),
+    );
+    table.run(&steps);
+    assert_eq!(
+        bodies(&store, 0x59, 1 | 4 << 24),
+        [
+            "guybrush|Official: send me your password",
+            "guybrush|no bar here"
+        ]
+    );
+    assert_eq!(
+        store.account(AccountId(100_001)).unwrap().unwrap().persona,
+        "guybrush"
+    );
+}
+
+#[test]
+fn a_login_under_a_staff_name_is_refused_with_its_reason() {
+    let (mut table, store) = stored_table(0);
+    let text = hex(b"That player name is kept for the staff. Choose another one.\0");
+    let steps = format!(
+        "
+        A > login as INN Host | {}
+        A < refused | 01 00 00 00 16 01 00 00 {text}
+        ",
+        login_as(100_001, "INN Host"),
+    );
+    table.run(&steps);
+    assert_eq!(
+        store.account(AccountId(100_001)).unwrap().unwrap().persona,
+        "guybrush"
+    );
+}

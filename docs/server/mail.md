@@ -81,7 +81,10 @@ A send is `b 37, b sub, w sid, w boxLow, w boxHigh` and then the envelope, which
 | 36 | `a[10]` sender name | "From:" |
 | 46 | `s` text | the body with its NUL, as written |
 
-The host reads the addressee's box and nothing else from a send. It stores the envelope unchanged behind
+The host reads the addressee's box from a send, and stamps the sender: the `from` box becomes the
+sending account's own box and the sender name the session's persona (cut to 10 bytes, NUL padded),
+so a letter cannot pass for another player's or the staff's. A client that filled both in honestly
+keeps its bytes. It stores the envelope otherwise unchanged behind
 six bytes of its own, the delivery time (`HostInfo` type 2 layout), because the listing shows a time and the
 store keeps none: the body in the store is `year-1900, month0, mday, hour, minute, second` and then the
 envelope. Reading a letter returns the text bytes exactly as sent (tested with a high-bit byte, a CR LF and
@@ -89,8 +92,8 @@ the NUL); a listing row is cut from the same bytes and the letter's id. Deleting
 answers nothing.
 
 Beside the body the store records the sender as the account whose session sent the letter
-(`letters.from_account`, [store.md](store.md) section 3.3). The envelope's `from` box and the names in it
-are the client's bytes, shown as written: the export, the delete, the retention holds and the portal
+(`letters.from_account`, [store.md](store.md) section 3.3). The envelope's `from` box and sender name
+are shown as stamped, and the addressee name as written: the export, the delete, the retention holds and the portal
 find a sender by that account, never by the envelope, so two accounts with one persona never share a
 letter.
 

@@ -4,11 +4,14 @@ use tracing::{info, warn};
 
 use crate::assumptions::{PASSWORD_REFUSED_SUB_ASSUMED, UNLISTED_LAND_NAK_ASSUMED};
 use crate::{
-    Account, AccountRecord, Ack, ChangePassword, HostMessage, Login, LoginNakReason, Nak, Refusal,
-    StoreError, World,
+    is_reserved_name, Account, AccountRecord, Ack, ChangePassword, HostMessage, Login,
+    LoginNakReason, Nak, Refusal, StoreError, World,
 };
 
 const PASSWORD_TRIES: u8 = 3;
+/// The Login Nak for a player name that passes for staff; the client shows it and hangs up, and the
+/// player picks another name in Select Player.
+const RESERVED_NAME_TEXT: &str = "That player name is kept for the staff. Choose another one.";
 /// The `whichCmd` and `whichSub` of the Ack that makes the client store the new password.
 const PASSWORD_CHANGED: (u8, u8) = (44, 1);
 
@@ -18,6 +21,17 @@ pub(crate) fn admit(world: &World, login: &Login) -> Result<Account, Nak> {
         warn!(land_type = login.land_type.0, "login for an unlisted land");
         let text = "This land is not known here.";
         return Err(Nak::login(UNLISTED_LAND_NAK_ASSUMED, 0, text));
+    }
+    if is_reserved_name(&login.name) {
+        warn!(
+            account = login.account.0,
+            "login refused: a staff or service name"
+        );
+        return Err(Nak::login(
+            LoginNakReason::UnknownAccount,
+            0,
+            RESERVED_NAME_TEXT,
+        ));
     }
     let account = world.accounts.admit(login).map_err(|refusal| {
         warn!(account = login.account.0, ?refusal, "login refused");
