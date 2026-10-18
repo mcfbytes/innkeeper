@@ -123,6 +123,53 @@ impl AuthFile {
     }
 }
 
+impl AuthFile {
+    /// Public mode: every URL a provider is reached at, and the callback origins, are https,
+    /// except on a loopback host (a local run against the mock provider).
+    pub(crate) fn check_public(&self) -> Result<(), AuthConfigError> {
+        for provider in &self.providers {
+            let urls = match provider.kind {
+                ProviderKind::Oidc => vec![("issuer", Some(&provider.issuer))],
+                ProviderKind::Oauth2 => vec![
+                    ("authorize_url", provider.authorize_url.as_ref()),
+                    ("token_url", provider.token_url.as_ref()),
+                    ("userinfo_url", provider.userinfo_url.as_ref()),
+                ],
+            };
+            for (field, url) in urls {
+                if let Some(url) = url.filter(|url| !secure_or_loopback(url)) {
+                    return Err(invalid(format!(
+                        "provider {}: {field} {url} must be https with --public",
+                        provider.id
+                    )));
+                }
+            }
+        }
+        for (field, url) in [
+            ("public_url", &self.public_url),
+            ("admin_public_url", &self.admin_public_url),
+        ] {
+            if let Some(url) = url.as_ref().filter(|url| !secure_or_loopback(url)) {
+                return Err(invalid(format!(
+                    "{field} {url} must be https with --public"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// https anywhere, or http on `localhost`, `127.0.0.0/8` or `[::1]`.
+fn secure_or_loopback(text: &str) -> bool {
+    match Url::parse(text) {
+        Ok(url) if url.scheme() == "https" => true,
+        Ok(url) => {
+            url.scheme() == "http" && is_loopback_origin(&url.origin().ascii_serialization())
+        }
+        Err(_) => false,
+    }
+}
+
 impl ProviderEntry {
     fn check(&self) -> Result<(), AuthConfigError> {
         let id_ok = !self.id.is_empty()
@@ -394,6 +441,34 @@ client_secret_name = "oauth-discord-client-secret"
             .check_return("https://play.example.org@evil.test/")
             .is_none());
         assert!(PageOrigins::parse(&["https://play.example.org/inn.html".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn public_mode_wants_https_providers_except_on_loopback() {
+        assert!(AuthFile::parse(EXAMPLE).unwrap().check_public().is_ok());
+        let plain = EXAMPLE.replace("https://accounts.google.com", "http://accounts.google.com");
+        let text = AuthFile::parse(&plain)
+            .unwrap()
+            .check_public()
+            .unwrap_err()
+            .to_string();
+        assert!(text.contains("issuer") && text.contains("https"), "{text}");
+        let token = EXAMPLE.replace(
+            "https://discord.com/api/oauth2/token",
+            "http://discord.com/api/oauth2/token",
+        );
+        let text = AuthFile::parse(&token)
+            .unwrap()
+            .check_public()
+            .unwrap_err()
+            .to_string();
+        assert!(text.contains("token_url"), "{text}");
+        let callback = EXAMPLE.replace("https://inn.example.org", "http://inn.example.org");
+        assert!(AuthFile::parse(&callback).unwrap().check_public().is_err());
+        let local = EXAMPLE
+            .replace("https://accounts.google.com", "http://127.0.0.1:2902")
+            .replace("https://inn.example.org", "http://localhost:2900");
+        assert!(AuthFile::parse(&local).unwrap().check_public().is_ok());
     }
 
     #[test]

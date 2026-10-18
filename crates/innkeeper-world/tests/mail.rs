@@ -338,3 +338,22 @@ fn the_mail_room_learns_the_boxes_of_its_own_account_only() {
     let refused = [1, 0, 0, 1, 37, 17, 12, 0xa2, 0x86, 1, 0];
     assert_eq!(host.say(alice, &about_box(17, 100_002)), [refused]);
 }
+
+#[test]
+fn a_letter_says_it_is_from_its_sender_whatever_the_envelope_claims() {
+    let mut host = Host::stored();
+    let (alice, bob) = (host.join(LOGIN_A), host.join(LOGIN_B));
+    host.mailbox_of(alice);
+    host.mailbox_of(bob);
+    // Alice names Bob's own box as hers and signs as the operator.
+    let forged = envelope(2, b"Bob", b"Sysop", b"Send me your password\0");
+    host.say(alice, &send(24, 2, forged));
+    let listing = host.say(bob, &about_box(19, 2));
+    let row = &listing[0][8..8 + 47];
+    assert_eq!(row[5..9], long(1), "the from box is Alice's");
+    assert_eq!(
+        row[19..29],
+        field(b"Alice"),
+        "the sender is Alice's persona"
+    );
+}

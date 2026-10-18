@@ -7,13 +7,13 @@ mod pages;
 mod routes;
 pub(crate) mod rp;
 pub(crate) mod startup;
+pub(crate) mod state;
 pub(crate) mod store;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Duration;
 
 use innkeeper_world::{AccountId, StoreError};
 use serde_json::json;
@@ -25,12 +25,11 @@ use crate::seal::{self, Recipient};
 use crate::sqlite_store::SqliteStore;
 use config::PageOrigins;
 use keys::{IdentityKey, KeyRing};
-use rp::{PendingRp, Rp};
+use rp::Rp;
+use state::{LoginStates, PageState};
 
-/// A login that has not come back from its provider within this is forgotten.
-const PENDING_TTL: Duration = Duration::from_secs(600);
-/// Logins in flight at once; more are refused rather than grown without bound.
-const MAX_PENDING: usize = 4096;
+/// A login that has not come back from its provider within this is refused at its callback.
+pub(crate) const LOGIN_TTL: i64 = 10 * dates::MINUTE;
 
 /// Who may create accounts (docs/server/innkeeperd.md section 8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -39,6 +38,9 @@ pub(crate) enum EnrolmentMode {
     Open,
     /// Only sign-in creates accounts; a Login never does.
     WebOnly,
+    /// As web-only, but only for an identity on the invite list (`--invite-list`, the vault
+    /// secret `invite-identities`): a test publish open to named testers.
+    Invite,
     /// Nobody creates accounts.
     Closed,
 }
@@ -51,6 +53,38 @@ impl EnrolmentMode {
     pub(crate) fn web_creates(self) -> bool {
         self != EnrolmentMode::Closed
     }
+}
+
+/// Who `--enrolment invite` lets open an account: the vault secret and the file, merged.
+#[derive(Debug, Default)]
+pub(crate) struct Invites {
+    pub(crate) vault: Option<std::collections::HashSet<IdentityKey>>,
+    pub(crate) file: Option<crate::admin::allowlist::KeyFile>,
+}
+
+impl Invites {
+    fn lists(&self, key: &IdentityKey) -> bool {
+        let in_vault = self.vault.as_ref().is_some_and(|keys| keys.contains(key));
+        in_vault
+            || self
+                .file
+                .as_ref()
+                .is_some_and(|file| file.keys("the invite list").contains(key))
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.vault.is_none() && self.file.is_none()
+    }
+}
+
+/// What a bound line's Login may do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LoginGate {
+    Open,
+    /// Not an account of this sign-in, or the token is no longer live.
+    NotOwned,
+    /// The identity has not answered the current age and terms question.
+    NeedsAttestation,
 }
 
 /// A WebSocket that presented a live session token, tied to its identity.
@@ -67,6 +101,8 @@ pub(crate) struct SignInSetup {
     pub(crate) rp: Rp,
     pub(crate) origins: PageOrigins,
     pub(crate) enrolment: EnrolmentMode,
+    /// The invite list; read only under `EnrolmentMode::Invite`.
+    pub(crate) invites: Invites,
     pub(crate) session_lifetime: Duration,
     pub(crate) accounts_per_day: u32,
     /// An account or password needs an attestation of at least this age ...
@@ -90,12 +126,34 @@ struct PageReturn {
     origin: String,
     mode: Mode,
     attest: Option<(u32, u32)>,
+    /// The page's own random value for this login, echoed with the result so the page can tell
+    /// its login from one an attacker started (login CSRF).
+    page_nonce: Option<String>,
 }
 
-struct PendingLogin {
-    rp: PendingRp,
-    page: PageReturn,
-    created: Instant,
+impl PageReturn {
+    fn to_state(&self) -> PageState {
+        PageState {
+            url: self.url.as_str().to_owned(),
+            origin: self.origin.clone(),
+            redirect: self.mode == Mode::Redirect,
+            attest: self.attest,
+            page_nonce: self.page_nonce.clone(),
+        }
+    }
+
+    fn from_state(state: &PageState) -> Option<Self> {
+        Some(PageReturn {
+            url: Url::parse(&state.url).ok()?,
+            origin: state.origin.clone(),
+            mode: match state.redirect {
+                true => Mode::Redirect,
+                false => Mode::Popup,
+            },
+            attest: state.attest,
+            page_nonce: state.page_nonce.clone(),
+        })
+    }
 }
 
 pub(crate) struct SignIn {
@@ -104,13 +162,14 @@ pub(crate) struct SignIn {
     rp: Rp,
     origins: PageOrigins,
     enrolment: EnrolmentMode,
+    invites: Invites,
     session_lifetime: i64,
     accounts_per_day: u32,
     minimum_age: u32,
     terms_version: u32,
     recipient: Option<Recipient>,
     required: bool,
-    pending: Mutex<HashMap<String, PendingLogin>>,
+    states: LoginStates,
 }
 
 impl std::fmt::Debug for SignIn {
@@ -131,13 +190,14 @@ impl SignIn {
             rp: setup.rp,
             origins: setup.origins,
             enrolment: setup.enrolment,
+            invites: setup.invites,
             session_lifetime: i64::try_from(setup.session_lifetime.as_millis()).unwrap_or(i64::MAX),
             accounts_per_day: setup.accounts_per_day,
             minimum_age: setup.minimum_age,
             terms_version: setup.terms_version,
             recipient: setup.recipient,
             required: setup.required,
-            pending: Mutex::new(HashMap::new()),
+            states: LoginStates::new(),
         }
     }
 
@@ -149,6 +209,19 @@ impl SignIn {
     /// The identity key ring, for the portal's allowlist check.
     pub(crate) fn keys(&self) -> &KeyRing {
         &self.keys
+    }
+
+    /// The directory the sandbox must keep readable for the invite file.
+    pub(crate) fn invite_dir(&self) -> Option<std::path::PathBuf> {
+        self.invites
+            .file
+            .as_ref()
+            .map(crate::admin::allowlist::KeyFile::dir)
+    }
+
+    /// True unless enrolment is by invitation and `key` is on neither invite list.
+    fn invited(&self, key: &IdentityKey) -> bool {
+        self.enrolment != EnrolmentMode::Invite || self.invites.lists(key)
     }
 
     pub(crate) fn has_providers(&self) -> bool {
@@ -165,21 +238,33 @@ impl SignIn {
         }))
     }
 
-    /// A Login on a bound line opens only an account the identity owns, while the token lives.
-    pub(crate) fn may_log_in(&self, binding: &Binding, account: AccountId) -> bool {
+    /// A Login on a bound line opens only an account the identity owns, while the token lives and
+    /// while the identity's age and terms answer is still the one this server asks for.
+    pub(crate) fn may_log_in(&self, binding: &Binding, account: AccountId) -> LoginGate {
         let now = dates::now_ms();
-        let check = || -> Result<bool, StoreError> {
+        let check = || -> Result<LoginGate, StoreError> {
             let live = store::session_identity(&self.store, &binding.token_hash, now)?;
-            if live != Some(binding.identity) {
-                return Ok(false);
+            if live != Some(binding.identity)
+                || !store::owns(&self.store, &binding.identity, account)?
+            {
+                return Ok(LoginGate::NotOwned);
             }
-            store::owns(&self.store, &binding.identity, account)
+            match self.attested_enough(&binding.identity)? {
+                true => Ok(LoginGate::Open),
+                false => Ok(LoginGate::NeedsAttestation),
+            }
         };
         check().unwrap_or_else(|error| {
             warn!(%error, "the sign-in store failed; the Login is refused");
             crate::metrics::counters().store_error();
-            false
+            LoginGate::NotOwned
         })
+    }
+
+    /// The identity's stored answer covers `--minimum-age` and `--terms-version`.
+    fn attested_enough(&self, key: &IdentityKey) -> Result<bool, StoreError> {
+        let attested = store::identity(&self.store, key)?.and_then(|row| row.attested);
+        Ok(attested.is_some_and(|at| at.age >= self.minimum_age && at.terms >= self.terms_version))
     }
 
     /// Notes which account the session's line is playing, for the session purge and holds.
@@ -189,24 +274,9 @@ impl SignIn {
         }
     }
 
-    fn pending(&self) -> MutexGuard<'_, HashMap<String, PendingLogin>> {
-        self.pending.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Keeps a login until its callback; false when too many are in flight.
-    fn remember(&self, state: String, login: PendingLogin) -> bool {
-        let mut pending = self.pending();
-        pending.retain(|_, waiting| waiting.created.elapsed() < PENDING_TTL);
-        if pending.len() >= MAX_PENDING {
-            return false;
-        }
-        pending.insert(state, login);
-        true
-    }
-
-    fn take_pending(&self, state: &str) -> Option<PendingLogin> {
-        let login = self.pending().remove(state)?;
-        (login.created.elapsed() < PENDING_TTL).then_some(login)
+    /// The sealed `state` values of every login in flight, the portal's included.
+    pub(crate) fn states(&self) -> &LoginStates {
+        &self.states
     }
 
     /// The sealed `issuer`/`subject` pair, when an audit recipient is configured.

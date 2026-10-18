@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -18,14 +17,16 @@ use serde_json::{json, Value};
 use tracing::{info, warn};
 
 use super::keys::{self, IdentityKey};
-use super::rp::Audience;
+use super::rp::{Audience, PendingRp};
 use super::store::{self, Attested, Created};
-use super::{Mode, PageReturn, PendingLogin, SignIn};
+use super::{Mode, PageReturn, SignIn};
 use crate::dates;
 use crate::http::{self, Reply};
 
 use crate::dates::DAY;
 const MAX_PERSONA: usize = 10;
+/// The longest `return` address taken; it travels inside the sealed `state` to the provider.
+const MAX_RETURN: usize = 1024;
 /// The most file bytes the saves listing carries inline; later files are fetched one by one.
 const PREFETCH_INLINE_BYTES: usize = 2 * 1024 * 1024;
 
@@ -135,7 +136,10 @@ impl SignIn {
             return http::error(StatusCode::BAD_REQUEST, "bad_provider", "Unknown provider.");
         }
         let address = query.get("return").map(String::as_str).unwrap_or("");
-        let Some((url, origin)) = self.origins.check_return(address) else {
+        let checked = (address.len() <= MAX_RETURN)
+            .then(|| self.origins.check_return(address))
+            .flatten();
+        let Some((url, origin)) = checked else {
             return http::error(
                 StatusCode::BAD_REQUEST,
                 "bad_return",
@@ -147,43 +151,48 @@ impl SignIn {
             _ => Mode::Popup,
         };
         let attest = query.get("attest").and_then(|text| parse_attest(text));
+        let page_nonce = match query.get("nonce").map(String::as_str) {
+            None | Some("") => None,
+            Some(text) if page_nonce_ok(text) => Some(text.to_owned()),
+            Some(_) => {
+                return http::error(
+                    StatusCode::BAD_REQUEST,
+                    "bad_nonce",
+                    "The nonce must be 16 to 64 of A-Z, a-z, 0-9, - and _.",
+                )
+            }
+        };
         let page = PageReturn {
             url,
             origin,
             mode,
             attest,
+            page_nonce,
         };
-        let started = match self.rp.begin(provider, Audience::Player).await {
-            Ok(started) => started,
+        let expires_at = dates::now_ms().saturating_add(super::LOGIN_TTL);
+        let seal = |pending: &PendingRp| {
+            let state = pending.to_state(expires_at, Some(page.to_state()));
+            self.states().seal(&state)
+        };
+        match self.rp.begin(provider, Audience::Player, seal).await {
+            Ok(authorize) => super::pages::redirect(authorize.as_str()),
             Err(error) => {
                 warn!(provider, %error, "sign-in could not start");
-                return super::pages::finish(&page, Err("server_error"));
+                super::pages::finish(&page, Err("server_error"))
             }
-        };
-        let pending = PendingLogin {
-            rp: started.pending,
-            page,
-            created: Instant::now(),
-        };
-        if !self.remember(started.state, pending) {
-            warn!("sign-in refused: too many logins in flight");
-            return http::error(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "busy",
-                "Try again in a minute.",
-            );
         }
-        super::pages::redirect(started.authorize.as_str())
     }
 
     async fn callback(&self, query: &HashMap<String, String>) -> Reply {
         let state = query.get("state").map(String::as_str).unwrap_or("");
-        let Some(login) = self
-            .take_pending(state)
-            .filter(|login| login.rp.audience() == Audience::Player)
-        else {
+        let opened = self.states().open(state, Audience::Player, dates::now_ms());
+        let Some((rp, page)) = opened.and_then(|state| {
+            let page = PageReturn::from_state(state.page.as_ref()?)?;
+            Some((PendingRp::from_state(&state), page))
+        }) else {
             return super::pages::expired();
         };
+        let login = Login { rp, page };
         if let Some(code) = query.get("error") {
             let code = if code == "access_denied" {
                 "access_denied"
@@ -270,8 +279,15 @@ impl SignIn {
             let attested = row
                 .and_then(|row| row.attested)
                 .map(|at| json!({"age": at.age, "terms": at.terms}));
+            let mut identity = json!({"handle": keys::handle(&key), "provider": provider});
+            if let (true, Some(fields)) = (
+                self.enrolment == super::EnrolmentMode::Invite,
+                identity.as_object_mut(),
+            ) {
+                fields.insert("key".to_owned(), json!(crate::admin::allowlist::hex(&key)));
+            }
             Ok(json!({
-                "identity": {"handle": keys::handle(&key), "provider": provider},
+                "identity": identity,
                 "accounts": accounts,
                 "canCreate": self.can_create(&key)?,
                 "attested": attested,
@@ -284,7 +300,10 @@ impl SignIn {
     }
 
     fn can_create(&self, key: &IdentityKey) -> Result<bool, innkeeper_world::StoreError> {
-        if !self.enrolment.web_creates() {
+        if !self.enrolment.web_creates()
+            || !self.invited(key)
+            || store::owns_suspended(&self.store, key)?
+        {
             return Ok(false);
         }
         let since = dates::now_ms().saturating_sub(DAY);
@@ -313,14 +332,10 @@ impl SignIn {
 
     /// The refusal for an identity whose stored attestation is missing or too old, else `None`.
     fn attestation_gate(&self, key: &IdentityKey) -> Option<Reply> {
-        let attested = match store::identity(&self.store, key) {
-            Ok(row) => row.and_then(|row| row.attested),
+        match self.attested_enough(key) {
+            Ok(true) => return None,
+            Ok(false) => {}
             Err(error) => return Some(server_error(&error)),
-        };
-        let enough =
-            attested.is_some_and(|at| at.age >= self.minimum_age && at.terms >= self.terms_version);
-        if enough {
-            return None;
         }
         let message = format!(
             "The desk needs your word first: you are {} or older, and you accept terms version {} \
@@ -334,6 +349,22 @@ impl SignIn {
         ))
     }
 
+    /// The refusal for an identity that owns a suspended account, else `None`.
+    fn suspension_gate(&self, key: &IdentityKey) -> Option<Reply> {
+        match store::owns_suspended(&self.store, key) {
+            Ok(false) => None,
+            Ok(true) => {
+                info!(handle = %keys::handle(key), "refused: the identity owns a suspended account");
+                Some(http::error(
+                    StatusCode::FORBIDDEN,
+                    "suspended",
+                    "An account of this sign-in is suspended. Write to Member Services.",
+                ))
+            }
+            Err(error) => Some(server_error(&error)),
+        }
+    }
+
     fn create_account(&self, key: &IdentityKey, body: Option<Value>) -> Reply {
         if !self.enrolment.web_creates() {
             return http::error(
@@ -342,7 +373,14 @@ impl SignIn {
                 "New accounts are not being taken.",
             );
         }
-        if let Some(refusal) = self.attestation_gate(key) {
+        if !self.invited(key) {
+            info!(handle = %keys::handle(key), "account refused: not on the invite list");
+            return not_invited(key);
+        }
+        if let Some(refusal) = self
+            .attestation_gate(key)
+            .or_else(|| self.suspension_gate(key))
+        {
             return refusal;
         }
         // No body, `{}` or a null persona opens an account with no persona yet: the client's own
@@ -356,7 +394,7 @@ impl SignIn {
                     return http::error(
                         StatusCode::BAD_REQUEST,
                         "bad_persona",
-                        "Use 1 to 10 letters or digits.",
+                        "Use 1 to 10 letters or digits, and not a staff name.",
                     )
                 }
             },
@@ -415,7 +453,10 @@ impl SignIn {
             }
             Err(error) => return server_error(&error),
         }
-        if let Some(refusal) = self.attestation_gate(key) {
+        if let Some(refusal) = self
+            .attestation_gate(key)
+            .or_else(|| self.suspension_gate(key))
+        {
             return refusal;
         }
         let password = keys::new_password();
@@ -530,6 +571,20 @@ impl SignIn {
     }
 }
 
+/// A login back from the provider, opened from its sealed `state`.
+struct Login {
+    rp: PendingRp,
+    page: PageReturn,
+}
+
+/// The page's login nonce: 16 to 64 base64url characters, so it is echoed back unchanged.
+fn page_nonce_ok(text: &str) -> bool {
+    (16..=64).contains(&text.len())
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
 /// `<age>+v<terms>`, for example `18+v1`.
 pub(crate) fn parse_attest(text: &str) -> Option<(u32, u32)> {
     let (age, terms) = text.split_once("+v")?;
@@ -546,11 +601,13 @@ fn named(persona: &str) -> Option<&str> {
     (!persona.trim().is_empty()).then_some(persona)
 }
 
-/// 1 to 10 of A-Z, a-z and 0-9, the rule for a persona given when the account is opened.
+/// 1 to 10 of A-Z, a-z and 0-9 and no staff or service name, the rule for a persona given when
+/// the account is opened.
 pub(crate) fn persona_ok(persona: &str) -> bool {
     !persona.is_empty()
         && persona.len() <= MAX_PERSONA
         && persona.bytes().all(|b| b.is_ascii_alphanumeric())
+        && !innkeeper_world::is_reserved_name(persona)
 }
 
 /// `/auth/accounts/<id>/saves`.
@@ -611,6 +668,19 @@ fn unauthorized() -> Reply {
     )
 }
 
+/// The `enrolment_closed` answer the page already shows, with the identity's own key to send the
+/// operator, as the portal's refusal page does. The key is not a secret, and only its holder sees it.
+fn not_invited(key: &IdentityKey) -> Reply {
+    let hex = crate::admin::allowlist::hex(key);
+    let message = format!(
+        "New accounts are by invitation only. To be invited, send the operator your identity key: {hex}"
+    );
+    http::json_reply(
+        StatusCode::FORBIDDEN,
+        &json!({"error": "enrolment_closed", "message": message, "identityKey": hex}),
+    )
+}
+
 fn not_found() -> Reply {
     http::error(StatusCode::NOT_FOUND, "not_found", "No such endpoint.")
 }
@@ -652,7 +722,15 @@ mod tests {
         for good in ["Guybrush", "A", "Abcdefghij", "R2D2"] {
             assert!(persona_ok(good), "{good}");
         }
-        for bad in ["", "Abcdefghijk", "two words", "a-b", "é"] {
+        for bad in [
+            "",
+            "Abcdefghijk",
+            "two words",
+            "a-b",
+            "é",
+            "Sysop",
+            "TSNstaff",
+        ] {
             assert!(!persona_ok(bad), "{bad}");
         }
     }

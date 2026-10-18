@@ -7,7 +7,9 @@ are the one addition that is written in every mode, and only when an audit recip
 ## 1. What is stored
 
 The SQLite file is `DIR/innkeeper.db` (`--data-dir DIR`). A row that a player or the operator deletes
-stays in the file until the retention job in section 6 hard-purges it. The schema is the baseline of
+stays in the file until the retention job in section 6 hard-purges it. A hard purge leaves no bytes
+behind: `secure_delete` zeroes the row where it lay, and the purge then hands the freed pages back
+([store.md](store.md) section 3.1). The schema is the baseline of
 [store.md](store.md) section 3 (`crates/innkeeperd/src/sqlite_store.rs`, version 5): every table is
 STRICT, every column that names another row is a foreign key, and every time is a `*_at` column of
 Unix milliseconds UTC.
@@ -47,9 +49,23 @@ erased with the account like the row. Names are not unique, as in the original, 
 attributed by name**. Every post records the account that wrote it (`posts.account`): board posts
 (27/0), the hub's complaints (27/9), Town Hall "Ask Member Services" messages (37/30) and the
 conference and trivia topic text. Every letter records the account that sent it
-(`letters.from_account`); the envelope's `from` mailbox and names are the client's bytes and are not
-used to find an account. The account export, `account delete` and its restore, the retention purge
-and its legal holds, the operator portal's links and the bulletin board's "erase your own message"
+(`letters.from_account`). The envelope's addressee name is the client's; its `from` mailbox and
+sender name are stamped by the host with the sending account's own box and the session's persona,
+and are still not used to find an account. A board post (27/0) is stored as `persona|text` with the
+session's persona in place of whatever name the client put before the `|`.
+
+**Nobody may pass for the staff.** A persona that reads as a staff title or a name of the service is
+refused wherever a name is taken: at Login (a Nak with its reason), on a 40/4 (no reply exists, so the
+session keeps its name) and in `POST /auth/accounts` (`bad_persona`). The test is
+`innkeeper_world::is_reserved_name`: case, spaces, punctuation and look-alike digits are ignored
+(`S.Y.S.0.P` is `sysop`), and the names are sysop, admin, administrator, moderator, staff, guide,
+ImagiNation, innkeeper and the client's own service box names `MemberServ` and `AcctUpdate` anywhere
+at the start or end of a name (sysop, moderator, administrator, ImagiNation, innkeeper and
+MemberServ anywhere in it), and inn, TSN, host, system, Sierra, mod, GM, operator, official,
+support, accounting, root and network as the whole name or two of them run together ("INN Host").
+The host has no staff accounts of its own; an operator who wants one picks a plain name.
+
+The account export, `account delete` and its restore, the retention purge and its legal holds, the operator portal's links and the bulletin board's "erase your own message"
 all use those columns, so two accounts that share a persona never see, hide, erase or hold each
 other's posts or letters. There is no fallback to the name at the head of a post body.
 
@@ -67,8 +83,10 @@ lookups use `identity_key` only. The raw issuer and subject exist in the databas
 behind one account under legal process. Without an audit recipient `subject_sealed` is NULL and
 startup warns. The player sees a handle such as `Caller 7F3A`, the first two bytes of the key. The
 session token itself is never stored or logged; the table keeps its SHA-256. The age and terms
-answer is a self-declaration and is stored as given. Pending logins (state, PKCE verifier, nonce)
-live in memory for up to ten minutes and are never written.
+answer is a self-declaration and is stored as given. A login in flight is kept nowhere: its PKCE
+verifier, nonce and page return travel inside the `state` value, encrypted under a key that exists
+only in the process's memory, and expire after ten minutes. The only thing remembered is which
+states have already come back, until each expires ([innkeeperd.md](innkeeperd.md) section 8.2).
 
 ## 2. Public mode (`innkeeperd --public`)
 
@@ -79,7 +97,9 @@ Opt-in. The default log and capture format stay exactly as they are.
   no hex dump. The raw line `client message` keeps `len=N` and drops the bytes.
 - **No IP addresses in logs.** The `peer=` field in spans and lines is the first eight hex characters of
   HMAC-SHA256 over the IP (not the port), keyed by a random per-process secret. Sessions correlate
-  within one run and are not reversible or stable across restarts.
+  within one run and are not reversible or stable across restarts. On a WebSocket the IP is the
+  client's, the right-most `X-Forwarded-For` entry of the loopback proxy, not the proxy's
+  ([hardening.md](hardening.md) section 1).
 - **No free text.** Persona names in info/warn lines become the account number. PAD commands, dial
   strings and AT lines log the event kind only.
 - **Sealed records.** With `--key-vault` the audit key is read from the server vault (section 7),
@@ -165,8 +185,11 @@ the highest one included.
 - **Reverse proxy:** no access logs. Nginx `access_log off;` on the WebSocket and TCP upgrade
   location; Caddy `log` off for that site. The proxy otherwise records client IPs that `--public`
   just hashed.
-- **Backups:** the live database is the only long store. Copy it to Azure Blob Storage, encrypted at
-  rest, with access by identity only (no Private Endpoints):
+- **Backups:** the live database is the only long store. Take the copy with `VACUUM INTO`
+  (`sqlite3 -readonly DB "VACUUM INTO '/path/copy.db'"`, SQLite 3.27 or later), which writes a
+  consistent snapshot of the live rows only, rather than `.backup`, which copies every page as it
+  is. Copy it to Azure Blob Storage, encrypted at rest, with access by identity only (no Private
+  Endpoints):
   - anonymous blob access and shared-key access are off, so Entra ID is the only way in;
   - the VM's managed identity has a role on the backup container that can read and write but not
     delete;
@@ -199,13 +222,20 @@ On open the row's `sealed` blob is the envelope of this JSON:
 {peer_ip, peer_port, transport: "tcp"|"websocket", started_at, ended_at, account_id}
 ```
 
+`peer_ip` is the client: on a WebSocket in public mode, the right-most `X-Forwarded-For` entry the
+loopback proxy sent ([hardening.md](hardening.md) section 1). The proxy does not pass the client's
+port, so `peer_port` is null there; it is the socket's port on a line that arrived directly.
+An upgrade with no usable header is refused before a row is written, so no record names the proxy.
 `started_at` and `ended_at` are Unix milliseconds, here and in the row's clear columns. The JSON key
 stays `account_id`; the column is `account`. `transport` is `tcp` for a legacy line and for INT 14h,
 and `websocket` for a WebSocket line. The row
 is written when the connection opens (`account_id` and `ended_at` null). It is sealed again when
 Login is accepted and when the connection ends. A line that carried a session token gets the
 identity's HMAC in `identity_key`, in the clear like `account`, so a request about one identity
-finds its connections. A failure to seal is a warning without the IP, and the connection continues.
+finds its connections. A failure to seal is a warning without the IP. In public mode the line then ends at once, before
+the session starts, so no player is served without a record; elsewhere the connection continues.
+A later reseal (at Login or at the end) that fails is a warning and the line goes on, since the
+row with the address already exists.
 
 **Who can read them.** Only the holder of the operator private key, and that key is not on the
 server (section 7). Decryption is only for specific accounts named in valid legal process, or for a
@@ -329,7 +359,9 @@ when its author account is held, and a complaint also when its `about_account` i
 account number only: an account that shares a persona with a held one is not held.
 
 Backups rotate within 30 days (section 4) so a hard-purged row leaves backups within 30 days of
-its purge.
+its purge. A backup taken after the purge never holds it: the purge zeroes the row's bytes in the
+live file at once (`secure_delete`), and `VACUUM INTO` copies live rows only. Tested by
+`a_purged_letter_leaves_no_bytes_in_the_file_or_its_backup`.
 
 ## 7. Key handling
 

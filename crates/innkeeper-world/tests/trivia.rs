@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 use common::Table;
 use innkeeper_world::{
-    AccountId, AccountRecord, BbsReply, BbsRequest, BoardRef, ClientMessage, Cookie,
-    EncodedPassword, HostMessage, JoinNet, LandType, MemoryStore, MessagePosition, NtnMessage,
-    ObjectKind, ReadStep, Sid, Store, TextFraming, TriviaHeader, TriviaReply, TriviaRequest, World,
-    NTN_SERVER,
+    AccountId, AccountRecord, BbsReply, BbsRequest, BoardRef, CheckedFailure, ClientMessage,
+    Cookie, EncodedPassword, HostMessage, JoinNet, LandType, MemoryStore, MessagePosition,
+    NtnMessage, ObjectKind, RawQuestion, ReadStep, Sid, Store, TextFraming, TriviaHeader,
+    TriviaPools, TriviaReply, TriviaRequest, World, NTN_SERVER,
 };
 
 const LOGIN_PASSWORD: [u8; 10] = [0x1d, 0x7a, 0x01, 0x66, 0x16, 0x66, 0x18, 0x73, 0x03, 0x00];
@@ -131,9 +131,54 @@ fn logon_burst(number: u16, sid: u16) -> String {
     )
 }
 
+/// A pool of one question in every room, so a JOIN is seated rather than told the show is down.
+fn one_question_each() -> TriviaPools {
+    let item = innkeeper_world::fit(&RawQuestion {
+        question: "Who founded Sierra?".into(),
+        correct: "Ken Williams".into(),
+        incorrect: vec!["Al Lowe".into()],
+        boolean: false,
+    })
+    .unwrap();
+    TriviaPools {
+        adventure: vec![item.clone()],
+        general: vec![item.clone()],
+        screens: vec![item],
+        screens_ours: Vec::new(),
+    }
+}
+
+#[test]
+fn a_room_with_no_questions_answers_the_join_with_the_show_down_word() {
+    let mut table = Table::new();
+    let pms = 0x0301;
+    let join = client(ClientMessage::Trivia(TriviaRequest::Join {
+        header: routing(0, pms),
+        extra: vec![0, 0],
+    }));
+    let down = host(HostMessage::Trivia(TriviaReply::Checked {
+        which: CheckedFailure::Join,
+        header: TriviaHeader {
+            host: 7,
+            ..routing(0, pms)
+        },
+        word: 42,
+    }));
+    let steps = format!(
+        "
+        A > login | {{login}}
+        A < login ack | {{login ack}}
+        A > trivia JOIN, no questions loaded | {join}
+        A < NTN Trivia has gone down | {down}
+        "
+    );
+    table.run(&steps);
+}
+
 #[test]
 fn one_player_joins_a_room_and_registers_a_handle() {
     let mut table = Table::new();
+    table.world.install_trivia(one_question_each());
     let pms = 0x0103;
     let steps = format!(
         "

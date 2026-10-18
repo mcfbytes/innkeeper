@@ -216,6 +216,7 @@ pub(crate) fn purge_now(
         .map_err(StoreError::backend)?;
     tombstone(&tx, account, now)?;
     tx.commit().map_err(StoreError::backend)?;
+    crate::sqlite_store::release_free_pages(&conn)?;
     Ok(PurgeNow::Done {
         letters,
         posts,
@@ -319,6 +320,7 @@ pub(crate) fn purge_expired(
     counts.identities = purge_identities(&tx, now)?;
     purge_admin(&tx, now, policy, &mut counts)?;
     tx.commit().map_err(StoreError::backend)?;
+    crate::sqlite_store::release_free_pages(&conn)?;
     Ok(counts)
 }
 

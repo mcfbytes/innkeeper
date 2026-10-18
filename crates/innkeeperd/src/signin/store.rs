@@ -277,6 +277,24 @@ pub(crate) fn owns(
     Ok(found.is_some())
 }
 
+/// True when any account the identity owns, deleted or not, is suspended: a way back in through a
+/// new account or a fresh password is closed while it is.
+pub(crate) fn owns_suspended(store: &SqliteStore, key: &IdentityKey) -> Result<bool, StoreError> {
+    let found: Option<i64> = store
+        .connection()
+        .query_row(
+            "SELECT 1 FROM identity_accounts
+             JOIN accounts ON accounts.id = identity_accounts.account
+             WHERE identity_accounts.identity_key = ?1 AND accounts.suspended_at IS NOT NULL
+             LIMIT 1",
+            [key.as_slice()],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(backend)?;
+    Ok(found.is_some())
+}
+
 pub(crate) fn accounts_created_since(
     store: &SqliteStore,
     key: &IdentityKey,

@@ -17,6 +17,8 @@ pub(crate) const AUDIT_KEY_SECRET: &str = "audit-public-key";
 pub(crate) const AUDIT_KID_SECRET: &str = "audit-key-id";
 /// The operator portal's staff allowlist (docs/server/innkeeperd.md section 9). Optional.
 pub(crate) const ADMIN_SECRET: &str = "admin-identities";
+/// The identities `--enrolment invite` lets open an account. Optional.
+pub(crate) const INVITE_SECRET: &str = "invite-identities";
 const API_VERSION: &str = "7.4";
 const IMDS: &str = "http://169.254.169.254";
 const AUTHORITY: &str = "https://login.microsoftonline.com";
@@ -87,6 +89,15 @@ pub(crate) struct StartupSecrets {
     pub(crate) audit_key_id: String,
     /// `admin-identities`: asked for only when the portal is on; `None` when the vault has none.
     pub(crate) admin_identities: Option<Zeroizing<String>>,
+    /// `invite-identities`: asked for only under `--enrolment invite`; `None` when absent.
+    pub(crate) invite_identities: Option<Zeroizing<String>>,
+}
+
+/// The optional secrets startup asks for.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Wanted {
+    pub(crate) admin: bool,
+    pub(crate) invites: bool,
 }
 
 /// Fetches the startup secrets on a runtime of its own, before the sandbox and the server's
@@ -95,7 +106,7 @@ pub(crate) fn fetch_startup(
     endpoints: &Endpoints,
     credential: Credential,
     client_secret_names: &[String],
-    want_admin: bool,
+    wanted: Wanted,
 ) -> Result<StartupSecrets, VaultError> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -103,7 +114,7 @@ pub(crate) fn fetch_startup(
         .map_err(|error| VaultError::Client(error.to_string()))?;
     let result = runtime.block_on(async {
         VaultClient::new(endpoints.clone(), credential)?
-            .startup(client_secret_names, want_admin)
+            .startup(client_secret_names, wanted)
             .await
     });
     runtime.shutdown_timeout(Duration::from_secs(1));
@@ -140,7 +151,7 @@ impl VaultClient {
     pub(crate) async fn startup(
         &self,
         client_secret_names: &[String],
-        want_admin: bool,
+        wanted: Wanted,
     ) -> Result<StartupSecrets, VaultError> {
         let token = self.token().await?;
         let hmac_keys = self.all_versions(&token, HMAC_SECRET).await?;
@@ -162,8 +173,12 @@ impl VaultClient {
             .value
             .trim()
             .to_owned();
-        let admin_identities = match want_admin {
+        let admin_identities = match wanted.admin {
             true => self.optional_secret(&token, ADMIN_SECRET).await?,
+            false => None,
+        };
+        let invite_identities = match wanted.invites {
+            true => self.optional_secret(&token, INVITE_SECRET).await?,
             false => None,
         };
         Ok(StartupSecrets {
@@ -172,6 +187,7 @@ impl VaultClient {
             audit_public_key,
             audit_key_id,
             admin_identities,
+            invite_identities,
         })
     }
 

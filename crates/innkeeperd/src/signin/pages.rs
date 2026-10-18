@@ -35,19 +35,25 @@ const EXPIRED: &str = r#"<!doctype html><meta charset="utf-8"><title>Sign-in exp
 pub(super) fn finish(page: &PageReturn, outcome: Result<&str, &str>) -> Reply {
     match page.mode {
         Mode::Redirect => {
-            let fragment = match outcome {
+            let mut fragment = match outcome {
                 Ok(token) => format!("inn-session={token}"),
                 Err(code) => format!("inn-error={code}"),
             };
+            if let Some(nonce) = &page.page_nonce {
+                fragment.push_str(&format!("&inn-nonce={nonce}"));
+            }
             let mut url = page.url.clone();
             url.set_fragment(Some(&fragment));
             redirect(url.as_str())
         }
         Mode::Popup => {
-            let message = match outcome {
+            let mut message = match outcome {
                 Ok(token) => json!({"type": "inn-auth", "session": token}),
                 Err(code) => json!({"type": "inn-auth", "error": code}),
             };
+            if let (Some(nonce), Some(fields)) = (&page.page_nonce, message.as_object_mut()) {
+                fields.insert("nonce".to_owned(), json!(nonce));
+            }
             popup(&message, &page.origin)
         }
     }
@@ -126,6 +132,7 @@ mod tests {
             origin: "https://play.example.org".into(),
             mode,
             attest: None,
+            page_nonce: None,
         }
     }
 
@@ -173,6 +180,26 @@ mod tests {
             "https://play.example.org/inn.html?auth=x#inn-error=access_denied"
         );
         assert_eq!(denied.headers()["referrer-policy"], "no-referrer");
+    }
+
+    #[tokio::test]
+    async fn the_page_nonce_comes_back_with_the_result_in_both_modes() {
+        let mut redirect = page(Mode::Redirect);
+        redirect.page_nonce = Some("abcdefghijklmnop".into());
+        let reply = finish(&redirect, Ok("TOKEN"));
+        assert_eq!(
+            reply.headers()[LOCATION],
+            "https://play.example.org/inn.html?auth=x#inn-session=TOKEN&inn-nonce=abcdefghijklmnop"
+        );
+        let mut popup = page(Mode::Popup);
+        popup.page_nonce = Some("abcdefghijklmnop".into());
+        let text = body(finish(&popup, Err("access_denied"))).await;
+        assert!(
+            text.contains(
+                r#"{"error":"access_denied","nonce":"abcdefghijklmnop","type":"inn-auth"}"#
+            ),
+            "{text}"
+        );
     }
 
     #[test]

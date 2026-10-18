@@ -14,7 +14,7 @@ use tsn_link::LinkError;
 
 use crate::connection::ConnectionSettings;
 use crate::connection_gate::Binding;
-use crate::signin::SignIn;
+use crate::signin::{LoginGate, SignIn};
 use crate::switchboard::{Inbox, Switchboard};
 
 /// The reply `logon` gives a wrong password, so a refused sign-in looks like one to the client.
@@ -204,14 +204,23 @@ impl<'s> Host<'s> {
         match received {
             ClientMessage::Login(login) => {
                 let (binding, sign_in) = (self.binding.as_ref()?, self.sign_in?);
-                if sign_in.may_log_in(binding, login.account) {
-                    return None;
+                match sign_in.may_log_in(binding, login.account) {
+                    LoginGate::Open => None,
+                    LoginGate::NotOwned => {
+                        warn!(
+                            account = login.account.0,
+                            "login refused: not an account of this sign-in"
+                        );
+                        Some(vec![wrong_password()])
+                    }
+                    LoginGate::NeedsAttestation => {
+                        warn!(
+                            account = login.account.0,
+                            "login refused: the age and terms answer is missing or out of date"
+                        );
+                        Some(vec![needs_attestation()])
+                    }
                 }
-                warn!(
-                    account = login.account.0,
-                    "login refused: not an account of this sign-in"
-                );
-                Some(vec![wrong_password()])
             }
             ClientMessage::Signup(_) if !self.signup_open => {
                 warn!("signup refused: new accounts are made through sign-in");
@@ -255,6 +264,15 @@ impl<'s> Host<'s> {
         }
         own
     }
+}
+
+/// The client shows the text and hangs up; the page asks the age and terms question again.
+fn needs_attestation() -> HostMessage {
+    HostMessage::Nak(Nak::login(
+        LoginNakReason::UnknownAccount,
+        0,
+        "Accept the current terms on the sign-in page first, then dial again.",
+    ))
 }
 
 fn wrong_password() -> HostMessage {

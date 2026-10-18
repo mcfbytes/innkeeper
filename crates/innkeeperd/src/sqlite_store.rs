@@ -24,6 +24,9 @@ pub(crate) const BASELINE_VERSION: i32 = 5;
 /// one more. Each runs in the transaction that also writes the new `user_version`. Empty so far.
 const MIGRATIONS: &[&str] = &[];
 
+/// `PRAGMA auto_vacuum` value 2: free pages wait for `incremental_vacuum`.
+const AUTO_VACUUM_INCREMENTAL: i64 = 2;
+
 /// The version this build writes and reads.
 pub(crate) const SCHEMA_VERSION: i32 = BASELINE_VERSION + MIGRATIONS.len() as i32;
 
@@ -230,6 +233,8 @@ pub(crate) enum SchemaError {
     Newer { found: i32 },
     /// `PRAGMA foreign_keys` did not stick (an SQLite built without them).
     NoForeignKeys,
+    /// `PRAGMA secure_delete` did not stick.
+    NoSecureDelete,
 }
 
 impl fmt::Display for SchemaError {
@@ -249,6 +254,9 @@ impl fmt::Display for SchemaError {
             ),
             SchemaError::NoForeignKeys => {
                 write!(f, "this SQLite does not enforce foreign keys")
+            }
+            SchemaError::NoSecureDelete => {
+                write!(f, "this SQLite does not overwrite deleted content")
             }
         }
     }
@@ -277,7 +285,9 @@ impl SqliteStore {
     fn with_connection(opened: rusqlite::Result<Connection>) -> Result<Self, StoreError> {
         let connection = opened.map_err(backend)?;
         enforce_foreign_keys(&connection)?;
+        overwrite_deleted_content(&connection)?;
         prepare_schema(&connection)?;
+        vacuum_incrementally(&connection)?;
         Ok(SqliteStore {
             connection: Mutex::new(connection),
         })
@@ -370,6 +380,44 @@ fn enforce_foreign_keys(connection: &Connection) -> Result<(), StoreError> {
         true => Ok(()),
         false => Err(StoreError::backend(SchemaError::NoForeignKeys)),
     }
+}
+
+/// A deleted row's bytes are zeroed in the file at once, not left in a free page for the file and
+/// its backups to carry (docs/server/privacy.md section 6). Per connection, so set on each one.
+fn overwrite_deleted_content(connection: &Connection) -> Result<(), StoreError> {
+    connection
+        .pragma_update(None, "secure_delete", true)
+        .map_err(backend)?;
+    let on: i64 = connection
+        .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+        .map_err(backend)?;
+    match on {
+        1 => Ok(()),
+        _ => Err(StoreError::backend(SchemaError::NoSecureDelete)),
+    }
+}
+
+/// `auto_vacuum = INCREMENTAL`, so a purge can hand its free pages back. An empty file takes it
+/// before the baseline is written; an older file is converted once by a full `VACUUM`.
+fn vacuum_incrementally(connection: &Connection) -> Result<(), StoreError> {
+    let mode: i64 = connection
+        .query_row("PRAGMA auto_vacuum", [], |row| row.get(0))
+        .map_err(backend)?;
+    if mode == AUTO_VACUUM_INCREMENTAL {
+        return Ok(());
+    }
+    connection
+        .pragma_update(None, "auto_vacuum", AUTO_VACUUM_INCREMENTAL)
+        .map_err(backend)?;
+    connection.execute_batch("VACUUM").map_err(backend)
+}
+
+/// Truncates the free pages a purge left off the end of the file. Their content is already zero
+/// (`secure_delete`); this only shrinks the file, under the store's lock for a few milliseconds.
+pub(crate) fn release_free_pages(connection: &Connection) -> Result<(), StoreError> {
+    connection
+        .execute_batch("PRAGMA incremental_vacuum")
+        .map_err(backend)
 }
 
 fn user_version(connection: &Connection) -> Result<i32, StoreError> {
@@ -948,4 +996,4 @@ fn last_id(connection: &Connection) -> Result<u32, StoreError> {
 
 #[cfg(test)]
 #[path = "sqlite_store_tests.rs"]
-mod tests;
+pub(crate) mod tests;

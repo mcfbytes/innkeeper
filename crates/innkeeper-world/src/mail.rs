@@ -3,7 +3,7 @@
 
 use std::ops::RangeInclusive;
 
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::assumptions::{
     NO_ACCOUNT_MAILBOX_STATUS_ASSUMED, OTHER_BOXES_ARE_PRIVATE_ASSUMED,
@@ -67,6 +67,7 @@ pub(crate) fn answer(world: &World, account: &Account, request: &MailRequest) ->
         Ok(own) => PostOffice {
             world,
             account: account.id,
+            persona: &account.persona,
             own,
         }
         .handle(request),
@@ -100,6 +101,8 @@ fn refusal_of(error: &StoreError) -> MailFault {
 struct PostOffice<'w> {
     world: &'w World,
     account: AccountId,
+    /// The session's persona: what a letter it sends says it is from.
+    persona: &'w str,
     own: MailboxNumber,
 }
 
@@ -180,7 +183,7 @@ impl PostOffice<'_> {
     }
 
     fn deliver(&self, sub: u8, letter: &OutgoingLetter) -> Outcome {
-        self.put(letter.to, &letter.envelope)?;
+        self.put(letter.to, &self.stamped(&letter.envelope))?;
         Ok(Some(MailReply::Delivered {
             sub,
             to: letter.sid,
@@ -226,6 +229,28 @@ impl PostOffice<'_> {
         }))
     }
 
+    /// The envelope with the sender's own box and the session's persona in its `from` fields, so a
+    /// letter cannot pass for another player's or the staff's. An honest client's bytes stay as sent.
+    fn stamped(&self, envelope: &Envelope) -> Envelope {
+        let mut stamped = envelope.clone();
+        if stamped.from != self.own {
+            info!(
+                account = self.account.0,
+                "letter named a box that is not the sender's: replaced"
+            );
+            stamped.from = self.own;
+        }
+        let persona = name_field(self.persona);
+        if field_text(&stamped.sender) != field_text(&persona) {
+            info!(
+                account = self.account.0,
+                "letter named a sender that is not the session's persona: replaced"
+            );
+            stamped.sender = persona;
+        }
+        stamped
+    }
+
     /// Only the requester's own box may be read from; other boxes are only written to.
     fn yours(&self, mailbox: MailboxNumber) -> Result<MailboxNumber, MailFault> {
         match !OTHER_BOXES_ARE_PRIVATE_ASSUMED || mailbox == self.own {
@@ -260,6 +285,24 @@ impl PostOffice<'_> {
             .append_letter(mailbox, self.account, &letter.to_body());
         appended.map(drop).map_err(|error| refusal_of(&error))
     }
+}
+
+/// A persona as the client's 10-byte name field: cut to 10 bytes, NUL padded.
+fn name_field(persona: &str) -> Name {
+    let mut field = [0u8; FIELD_LEN];
+    for (slot, byte) in field.iter_mut().zip(persona.bytes()) {
+        *slot = byte;
+    }
+    field
+}
+
+/// A name field's text: the bytes before the first NUL.
+fn field_text(field: &Name) -> &[u8] {
+    let end = field
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(FIELD_LEN);
+    field.get(..end).unwrap_or(field)
 }
 
 fn stored(id: LetterId, body: &[u8]) -> Option<StoredLetter> {

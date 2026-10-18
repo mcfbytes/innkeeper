@@ -10,6 +10,7 @@ mod connection_gate;
 mod dates;
 mod db;
 mod dev_oidc;
+mod forwarded;
 mod host;
 mod http;
 mod int14h_listener;
@@ -58,6 +59,7 @@ fn main() -> ExitCode {
     let confine = config.sandbox_enabled();
     let allow_root = config.allow_root;
     let log_only = config.sandbox_log;
+    let require_landlock = config.public;
     let prepared = match server::prepare(config) {
         Ok(prepared) => prepared,
         Err(error) => return failed(error),
@@ -75,6 +77,7 @@ fn main() -> ExitCode {
             capture_dir: prepared.capture_dir(),
             ports: &ports,
             read_dirs: &read_dirs,
+            require_landlock,
         };
         if let Err(error) = sandbox::confine(&request) {
             return failed(error);

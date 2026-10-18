@@ -147,9 +147,19 @@ pub fn location(response: &reqwest::Response) -> String {
 
 /// The redirect-mode login: our server, the mock's consent page (Allow), the callback, the page.
 pub async fn sign_in(base: &str, subject: &str) -> String {
+    let (_, page) = redirect_login(base, subject, "").await;
+    let token = page
+        .strip_prefix(&format!("{RETURN}#inn-session="))
+        .unwrap_or_else(|| panic!("{page}"));
+    token.to_owned()
+}
+
+/// One redirect-mode login with `extra` appended to its query: the callback URL the browser was
+/// sent to, and the page address (with its fragment) the callback answered with.
+pub async fn redirect_login(base: &str, subject: &str, extra: &str) -> (String, String) {
     let client = http();
     let login = format!(
-        "{base}/auth/login?provider=dev&mode=redirect&attest=18%2Bv1&return={}",
+        "{base}/auth/login?provider=dev&mode=redirect&attest=18%2Bv1&return={}{extra}",
         url::form_urlencoded::byte_serialize(RETURN.as_bytes()).collect::<String>()
     );
     let first = client.get(&login).send().await.unwrap();
@@ -166,11 +176,7 @@ pub async fn sign_in(base: &str, subject: &str) -> String {
     );
     let finished = client.get(&callback).send().await.unwrap();
     assert_eq!(finished.status(), 302, "the callback redirects to the page");
-    let page = location(&finished);
-    let token = page
-        .strip_prefix(&format!("{RETURN}#inn-session="))
-        .unwrap_or_else(|| panic!("{page}"));
-    token.to_owned()
+    (callback, location(&finished))
 }
 
 pub async fn call(

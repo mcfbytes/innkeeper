@@ -103,7 +103,13 @@ baseline. A file from a newer build is refused too. `innkeeperd db check` prints
 runs `PRAGMA integrity_check` and `PRAGMA foreign_key_check`.
 
 Every connection turns `PRAGMA foreign_keys` on and reads it back, since SQLite's setting is per
-connection (`foreign_keys_are_on_for_every_connection`). `rusqlite` is built with the `bundled`
+connection (`foreign_keys_are_on_for_every_connection`). It also turns `PRAGMA secure_delete` on and
+reads it back, so a deleted or overwritten row's bytes are zeroed in the file instead of lingering in a
+free page that the file and its backups would carry. The file is `auto_vacuum = INCREMENTAL`: a file
+from before that setting is converted by one full `VACUUM` the first time it is opened (which also
+rewrites any free pages left from before `secure_delete`), and each retention purge and
+`--purge-now` ends with `PRAGMA incremental_vacuum`, which truncates the freed pages off the file
+([privacy.md](privacy.md) section 6). `rusqlite` is built with the `bundled`
 feature, so no system SQLite is needed and `STRICT` tables (SQLite 3.37 and later) are available.
 
 ### 3.2 Conventions

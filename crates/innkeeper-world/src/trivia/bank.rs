@@ -111,6 +111,10 @@ impl RoomBag {
         }
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        matches!(self, RoomBag::Empty)
+    }
+
     pub(crate) fn draw(&mut self) -> Option<Item> {
         match self {
             RoomBag::Empty => None,

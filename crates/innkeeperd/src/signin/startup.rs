@@ -57,6 +57,9 @@ pub(crate) fn prepare(
         .as_deref()
         .map(AuthFile::load)
         .transpose()?;
+    if let (true, Some(file)) = (config.public, file.as_ref()) {
+        file.check_public()?;
+    }
     let names: Vec<String> = file
         .iter()
         .flat_map(|file| &file.providers)
@@ -74,7 +77,10 @@ pub(crate) fn prepare(
                 &endpoints,
                 Credential::from_env()?,
                 &names,
-                config.admin_bind.is_some(),
+                keyvault::Wanted {
+                    admin: config.admin_bind.is_some(),
+                    invites: config.enrolment() == super::EnrolmentMode::Invite,
+                },
             )?;
             info!(vault = %url, "server vault secrets read");
             Some(secrets)
@@ -148,6 +154,7 @@ fn build(
             "--auth-config requires --ws-bind: sign-in is served there".into(),
         ));
     };
+    let invites = invites(config, vault.as_deref())?;
     let (keys, secrets) = key_ring(config, &file, vault)?;
     let mut providers = Vec::new();
     for entry in &file.providers {
@@ -186,6 +193,7 @@ fn build(
         rp,
         origins,
         enrolment: config.enrolment(),
+        invites,
         session_lifetime: Duration::from_secs(u64::from(config.session_hours) * 3600),
         accounts_per_day: config.accounts_per_day,
         minimum_age: config.minimum_age,
@@ -193,6 +201,36 @@ fn build(
         recipient,
         required: config.public,
     }))
+}
+
+/// The invite list under `--enrolment invite`: the vault secret `invite-identities` and the
+/// `--invite-list` file, either or both. With neither, nobody can open an account, and startup says so.
+fn invites(
+    config: &Config,
+    vault: Option<&StartupSecrets>,
+) -> Result<super::Invites, StartupError> {
+    if config.enrolment() != super::EnrolmentMode::Invite {
+        return Ok(super::Invites::default());
+    }
+    let from_vault = vault
+        .and_then(|secrets| secrets.invite_identities.as_ref())
+        .map(|text| {
+            crate::admin::allowlist::parse_strict("the vault secret invite-identities", text)
+        })
+        .transpose()?;
+    let file = config
+        .invite_list
+        .clone()
+        .map(crate::admin::allowlist::KeyFile::open)
+        .transpose()?;
+    let invites = super::Invites {
+        vault: from_vault,
+        file,
+    };
+    if invites.is_empty() {
+        warn!("--enrolment invite with no invite list: nobody can open an account");
+    }
+    Ok(invites)
 }
 
 /// The identity HMAC keys and the client secrets: from the vault, or the development files.

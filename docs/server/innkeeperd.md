@@ -233,7 +233,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand, CasinoLand, Arena, Yserbius, Cawdor and Twinion, land number 1, on host 7. Arena is land type 5, listed after the three LSCI lands and before the RPG titles. `lsci()` is still the three-land capture |
 | 47/1 | occupancy for the same lands: maximum 64 for Clubhouse, SierraLand, CasinoLand and the Arena, and 100 for the three RPG titles, current the number of members in the land's waiting room (0 for a land nobody entered; the Clubhouse room itself holds 128, the size of the stock joinNet) |
-| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`). The name replaces the account's persona for the session, and is also written to the store as the account's persona (`Store::set_persona`) when it is 1 to 16 printable ASCII characters with no `\|`, no leading or trailing space; any other name only renames the session, and so does every name from a session whose latest land joinNet was an RPG title's land (land types 4, 6, 8: the name is the game character, `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`; Find and the online list still show it). It applies to every account, not only web accounts, so that phone-signup accounts (which start with an empty persona) are named the same way; the last name presented wins, and a name need not be unique |
+| 40/4 | nothing (`PERSONA_SET_UNANSWERED_ASSUMED`). The name replaces the account's persona for the session, and is also written to the store as the account's persona (`Store::set_persona`) when it is 1 to 16 printable ASCII characters with no `\|`, no leading or trailing space; a staff or service name (`is_reserved_name`, privacy.md section 1) is not taken at all, and the session keeps the name it had; any other name only renames the session, and so does every name from a session whose latest land joinNet was an RPG title's land (land types 4, 6, 8: the name is the game character, `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`; Find and the online list still show it). It applies to every account, not only web accounts, so that phone-signup accounts (which start with an empty persona) are named the same way; the last name presented wins, and a name need not be unique |
 | 40/3 | the bankroll from the store as `HostMessage::Money`; 500 (`MONEY_STARTING_BALANCE`) for an account with no balance yet, and nothing at all when the store fails, so the client keeps its own copy |
 | 40/2 | Ack 40/2 after the bankroll is stored, because the client waits for a reply naming command 40; Nak 40/2 with a text when the store fails |
 | 36/2 | `HostInfo` type 2: the host's wall-clock time as `b year-1900, b month0, b mday, b hour, b minute, b second` |
@@ -313,10 +313,27 @@ is [privacy.md](privacy.md) sections 1 and 6; the sandbox and outbound connectio
   `https://inn.example.net` or `http://127.0.0.1:8080`. It is the CORS allow list, the check on the
   login's `return` address and the `postMessage` target. No origin means no page can sign in, and
   startup warns.
-- `--enrolment open|web-only|closed`. `open` is the old behaviour: a Login for an unknown number
+- `--enrolment open|web-only|invite|closed`. `open` is the old behaviour: a Login for an unknown number
   creates the account, and sign-in also creates accounts. `web-only` creates accounts only through
-  `POST /auth/accounts`; a Login never does. `closed` creates none. The default is `open`, or
-  `web-only` with `--public`.
+  `POST /auth/accounts`; a Login never does. `invite` is `web-only` for the identities on the invite
+  list only (below). `closed` creates none. The default is `open`, or `web-only` with `--public`.
+- `--invite-list FILE` (needs `--enrolment invite`): identity keys that may open accounts, in the
+  admin allowlist's format (64 hex digits, one per line or comma separated, `#` comments). Read at
+  startup, strictly, and again whenever its size or modification time changes, so an edit takes
+  effect on the next request; an unreadable file lists nobody. The optional vault secret
+  `invite-identities` (8.3) is the same list, read at startup; the two are merged. With neither,
+  startup warns that nobody can open an account.
+
+**Inviting testers (`--enrolment invite`).** A tester signs in on the page. Not yet invited,
+`GET /auth/session` says `"canCreate": false` and carries the identity's own key as
+`identity.key` (in this mode only), and `POST /auth/accounts` is the usual 403 `enrolment_closed`,
+whose message reads "New accounts are by invitation only. To be invited, send the operator your
+identity key: <64 hex digits>" and whose body also has `identityKey`. The key is an HMAC of the
+provider and subject, the same one the operator portal's refusal page shows (9.2); it is not a
+secret, and only its holder sees it. The tester sends it to the operator, who appends it to the
+`--invite-list` file (`echo KEY >> FILE`; no restart) or to the vault secret `invite-identities`
+(then restarts). Existing accounts keep working when a key is removed; only new accounts need the
+list. Accounts per day, attestation and every other rule still apply.
 - `--session-hours 12`: how long a session token lives. Logout ends it at once.
 - `--minimum-age 18` and `--terms-version 1`: the least age and terms version an identity must have
   attested before the server opens an account or issues a password (8.6).
@@ -389,14 +406,31 @@ oidc-google = "not-a-real-secret"
   `token_url` and `userinfo_url`; `id_field` names the JSON field with the user id (default
   `id`). Its `scopes` must be the minimum the provider needs for that id, and `email`, `profile`,
   `address` and `phone` are refused.
+- With `--public`, every URL a provider is reached at (an `oidc` issuer; an `oauth2` provider's
+  three endpoints) and `public_url` and `admin_public_url` must be `https`, unless the host is
+  loopback (`localhost`, `127.0.0.0/8`, `[::1]`: a local run against the mock provider). Startup
+  stops otherwise, naming the field. Without `--public`, `http` is accepted as before.
 - `client_secret_name` is the secret's name in the server vault (1 to 127 of letters, digits
   and `-`). Without a vault it is looked up
   in `[dev_secrets]`, then in `INNKEEPERD_SECRET_<NAME>` (upper case, `-` as `_`).
 
-Each login uses PKCE (S256), a random `state` and, for OIDC, a `nonce`; the ID token's signature,
+Each login uses PKCE (S256), a `state` and, for OIDC, a `nonce`; the ID token's signature,
 issuer, audience, expiry and nonce are checked. Discovery metadata and signing keys are cached for an
-hour and fetched again when a token names an unknown key. Redirects are not followed. A login that
-has not come back within ten minutes is forgotten.
+hour and fetched again when a token names an unknown key. Redirects are not followed.
+
+**The server keeps nothing for a login in flight.** The `state` value is the pending login itself:
+the provider id, the audience (player or portal), the PKCE verifier, the OIDC nonce, an expiry ten
+minutes on and, for a player, the checked page return (address, origin, mode, `attest` and the page's
+`nonce`), as JSON sealed with AES-256-GCM under a key made at startup, the audience bound in as
+associated data (`crates/innkeeperd/src/signin/state.rs`). So `GET /auth/login` and
+`/admin/auth/login` allocate nothing, and no number of unfinished logins can turn a real one away.
+The callback opens the state, refuses one that is forged, expired, for the other audience or already
+used, and only then exchanges the code. Single use is a set of the states that came back, each kept
+until its own expiry; it holds at most 65536, and when full the entry closest to expiry goes, never a
+new login. (A state replayed after that eviction still needs its authorization code, which the
+provider redeems once, and the PKCE verifier sealed with it.) A restart makes every login in flight
+start again. A `return` longer than 1024 bytes is `bad_return`, so the state stays a few hundred
+characters.
 
 Apple is not supported: its client secret is a signed JWT, which this file cannot express yet. For
 Microsoft, use a tenant-specific issuer, or for personal accounts the consumer tenant's
@@ -430,8 +464,10 @@ allows):
 | each `client_secret_name` | the provider's client secret |
 | `audit-public-key` | SPKI PEM; replaces `--audit-public-key` |
 | `audit-key-id` | the escrow key version URL; replaces `--audit-key-id` |
+| `admin-identities` | optional: the portal's staff keys (9.1), read when `--admin-bind` is set |
+| `invite-identities` | optional: the invite list (8.1), read under `--enrolment invite` |
 
-A missing secret or a vault error stops startup. There is no
+A missing secret (other than the two optional lists) or a vault error stops startup. There is no
 periodic refresh: rotation is a restart. Old HMAC versions stay readable so an identity hashed under
 one is found and rewritten under the current version at its next sign-in (privacy.md section 7).
 The handle (`Caller 7F3A`) is taken from the key, so it changes after that rewrite.
@@ -449,8 +485,8 @@ null `persona`: the account then has no persona yet (the row's `persona` is empt
 JSON's `accounts` entry says `"persona": null`). The browser page now sends `{}`: the original
 client's own Select Player screen (Create) makes the persona, and the name it presents becomes the
 account's persona through 40/4, below. A `persona` in the body still works, for compatibility, with
-today's checks: 1 to 10 of A-Z, a-z and 0-9, unique without regard to case across every account row,
-deleted or not (`400 bad_persona`, `409 persona_taken`). A name that came from the client is not
+today's checks: 1 to 10 of A-Z, a-z and 0-9, not a staff or service name, unique without regard
+to case across every account row, deleted or not (`400 bad_persona`, `409 persona_taken`). A name that came from the client is not
 checked for uniqueness: the original let two players share a name, and the phone book and the board
 posts already cope with that (privacy.md section 1).
 
@@ -458,7 +494,9 @@ The session token is 32 random bytes, base64url. The `sessions` row keeps only i
 WebSocket upgrade takes it from `?session=` and nowhere else; the token is never logged. On a bound
 line a Login for an account the identity does not own gets the same reply as a wrong password
 (`That password is not right.`). The Login's name, which the client takes from the persona it picked
-in Select Player, is accepted as it is; the stored persona changes only on a 40/4 (the 40/4 row of
+in Select Player, is accepted as it is unless it reads as a staff or service name (privacy.md
+section 1): that Login gets a Nak, `That player name is kept for the staff. Choose another one.`,
+which the client shows before it hangs up; the stored persona changes only on a 40/4 (the 40/4 row of
 section 5). One INN account can hold several personas in the client's `PLAYER.DIR`; the server keeps
 the name the client last presented, for display (the session list, the operator portal, the phone
 book). The page keeps each account's `PLAYER.DIR` and persona files in that account's own save space,
@@ -501,7 +539,14 @@ What the server decided where the `docs/web.md` contract is open or silent:
   429 body is `rate_limited`.
 - 401 bodies are `unauthorized`; a credential request for an account the identity does not own is
   404 `no_such_account`.
-- More than 4096 logins in flight is 503 `busy`.
+- **The page's nonce (login CSRF).** `GET /auth/login` takes an optional `nonce`: 16 to 64 of A-Z,
+  a-z, 0-9, `-` and `_` (otherwise 400 `bad_nonce`), which the page makes fresh for each login and
+  keeps. It travels sealed in the `state` and comes back with the result, in either outcome: the
+  redirect fragment ends `&inn-nonce=<nonce>` and the popup message carries `"nonce"`. A page that
+  finds no nonce, or not its own, drops the result, so a `#inn-session=` or a callback link an
+  attacker made for their own login cannot sign the victim's page in as the attacker. Without the
+  parameter the result carries no nonce, as before.
+- There is no limit on logins in flight: nothing is stored for them (8.2).
 - **Attestation is enforced.** `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are
   403 `attest_required` unless the identity's stored answer (from `attest=` on the login URL or
   `POST /auth/attest`) has age at least `--minimum-age` and terms at least `--terms-version`. The
@@ -509,7 +554,15 @@ What the server decided where the `docs/web.md` contract is open or silent:
   version 1 or later. Say so, then ask again." The check runs whenever sign-in is configured, with or
   without `--public`: the paths exist only with `--auth-config`, so one rule is simpler than two. It
   comes after the enrolment check, so a closed host still says `enrolment_closed`. The session
-  JSON's `attested` field is unchanged, and a Login on an existing account is not gated.
+  JSON's `attested` field is unchanged. **A Login on a bound line is gated the same way**: when the
+  identity's stored answer no longer covers `--minimum-age` and `--terms-version` (a newer terms
+  version, or an answer withdrawn), the Login gets a Nak, "Accept the current terms on the sign-in
+  page first, then dial again.", which the client shows before it hangs up.
+- **A suspension closes the side doors.** While any account the identity owns (deleted or not) is
+  suspended, `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are 403 `suspended`
+  ("An account of this sign-in is suspended. Write to Member Services.") for every account of that
+  identity, and `canCreate` is false, so a suspended player cannot open a fresh account or take a
+  new password instead. The suspended account's own Login is refused as before (9.4).
 - `GET /auth/accounts/<id>/saves` (and `?path=P` for one file) hands a signed-in page the account's
   current save files before it dials, so a fresh browser does not overwrite them; 401 without a
   live token, 404 `no_such_account` when the identity does not own the account. The shape is in
@@ -576,7 +629,11 @@ handle /admin/* {
 }
 ```
 
-Add it beside the player routes; pass `Host` and `X-Forwarded-Proto` through as usual.
+Add it beside the player routes; pass `Host` and `X-Forwarded-Proto` through as usual. The player
+routes need Caddy's own `X-Forwarded-For` (its default): in `--public` an upgrade from loopback
+without it is refused, and its right-most entry is the address sealed for the line
+([hardening.md](hardening.md) section 1). Leave `trusted_proxies` unset unless a CDN really sits in
+front of Caddy, so a client-sent header is replaced and never believed.
 
 ### 9.4 What it does
 

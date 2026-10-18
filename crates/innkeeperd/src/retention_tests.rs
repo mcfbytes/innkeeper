@@ -637,3 +637,81 @@ fn expired_portal_cookies_and_unreferenced_operators_are_purged() {
     assert_eq!(count(&store, "SELECT COUNT(*) FROM admin_sessions"), 1);
     consistent(&store, "the portal purge");
 }
+
+fn file_holds(path: &std::path::Path, needle: &[u8]) -> bool {
+    let bytes = std::fs::read(path).unwrap();
+    bytes.windows(needle.len()).any(|window| window == needle)
+}
+
+/// A purged letter's text leaves the database file at once, and so a backup made with
+/// `VACUUM INTO` (the backup the infra runs) never holds it either.
+#[test]
+fn a_purged_letter_leaves_no_bytes_in_the_file_or_its_backup() {
+    let database = crate::sqlite_store::tests::TempDatabase::new();
+    let backup = crate::sqlite_store::tests::TempDatabase::new();
+    let marker = b"MY-HOME-ADDRESS-IS-42-SECRET-LANE";
+    let store = SqliteStore::open(&database.0).unwrap();
+    let settings: (i64, i64) = store
+        .connection()
+        .query_row(
+            "SELECT * FROM pragma_secure_delete, pragma_auto_vacuum",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        settings,
+        (1, 2),
+        "secure_delete on, auto_vacuum incremental"
+    );
+    let to = add_account(&store, 1, "alice");
+    add_account(&store, 2, "bob");
+    for n in 0..50 {
+        let filler = format!("filler {n} {}", "x".repeat(200));
+        store
+            .append_letter(to, AccountId(2), filler.as_bytes())
+            .unwrap();
+    }
+    let id = store.append_letter(to, AccountId(2), marker).unwrap();
+    assert!(store.delete_letter(to, id).unwrap());
+    assert!(
+        file_holds(&database.0, marker),
+        "a soft delete keeps the row"
+    );
+    let purged = purge_expired(&store, policy(), dates::now_ms() + 91 * DAY).unwrap();
+    assert_eq!(purged.letters, 1);
+    assert!(
+        !file_holds(&database.0, marker),
+        "the purge left the text in the file"
+    );
+    let into = backup.0.display().to_string();
+    store
+        .connection()
+        .execute("VACUUM INTO ?1", [&into])
+        .unwrap();
+    assert!(!file_holds(&backup.0, marker));
+    assert!(file_holds(&backup.0, b"filler 49"));
+}
+
+/// A file from before `auto_vacuum` is converted once at open, which also zeroes old free pages.
+#[test]
+fn an_older_file_is_vacuumed_once_into_incremental_mode() {
+    let database = crate::sqlite_store::tests::TempDatabase::new();
+    let marker = b"LEFT-BEHIND-BEFORE-SECURE-DELETE";
+    {
+        let store = SqliteStore::open(&database.0).unwrap();
+        let conn = store.connection();
+        conn.execute_batch("PRAGMA auto_vacuum = NONE; VACUUM; PRAGMA secure_delete = OFF;")
+            .unwrap();
+        conn.execute("CREATE TABLE scratch (body BLOB) STRICT", [])
+            .unwrap();
+        conn.execute("INSERT INTO scratch VALUES (?1)", [marker.as_slice()])
+            .unwrap();
+        conn.execute("DROP TABLE scratch", []).unwrap();
+    }
+    assert!(file_holds(&database.0, marker), "the test needs a leftover");
+    let reopened = SqliteStore::open(&database.0).unwrap();
+    assert_eq!(count(&reopened, "PRAGMA auto_vacuum"), 2);
+    drop(reopened);
+    assert!(!file_holds(&database.0, marker));
+}

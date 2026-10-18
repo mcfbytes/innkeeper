@@ -110,11 +110,81 @@ struct Cached {
     keys: HashSet<IdentityKey>,
 }
 
+/// A file of identity keys that is read again whenever its size or modification time changes, so
+/// a saved edit takes effect on the next request. The portal's staff list and the invite list.
+pub(crate) struct KeyFile {
+    path: PathBuf,
+    cache: Mutex<Cached>,
+}
+
+impl fmt::Debug for KeyFile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyFile")
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
+}
+
+impl KeyFile {
+    /// Reads the file once now, strictly, so a missing or malformed file stops startup.
+    pub(crate) fn open(path: PathBuf) -> Result<Self, AllowlistError> {
+        let text = std::fs::read_to_string(&path).map_err(|source| AllowlistError::Read {
+            path: path.display().to_string(),
+            source,
+        })?;
+        parse_strict(&path.display().to_string(), &text)?;
+        Ok(KeyFile {
+            path,
+            cache: Mutex::new(Cached {
+                stamp: None,
+                keys: HashSet::new(),
+            }),
+        })
+    }
+
+    /// The directory the sandbox must be able to read to follow the file as it changes.
+    pub(crate) fn dir(&self) -> PathBuf {
+        let parent = self.path.parent().filter(|dir| !dir.as_os_str().is_empty());
+        parent.map_or_else(|| PathBuf::from("."), PathBuf::from)
+    }
+
+    /// The keys now. An unreadable file lists nobody: access ends rather than lingers. Entries
+    /// that are not keys are skipped with a warning naming `what`.
+    pub(crate) fn keys(&self, what: &str) -> HashSet<IdentityKey> {
+        let stamp = std::fs::metadata(&self.path)
+            .ok()
+            .and_then(|meta| Some((meta.modified().ok()?, meta.len())));
+        let mut cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
+        if cache.stamp.is_some() && cache.stamp == stamp {
+            return cache.keys.clone();
+        }
+        let keys = match std::fs::read_to_string(&self.path) {
+            Ok(text) => {
+                let (keys, bad) = parse(&text);
+                if !bad.is_empty() {
+                    warn!(
+                        entries = bad.len(),
+                        list = what,
+                        "a key file has entries that are not identity keys; they are skipped"
+                    );
+                }
+                keys
+            }
+            Err(error) => {
+                warn!(%error, list = what, "a key file cannot be read; it lists nobody");
+                HashSet::new()
+            }
+        };
+        cache.stamp = stamp;
+        cache.keys.clone_from(&keys);
+        keys
+    }
+}
+
 /// The allowlist sources and the rule that merges them.
 pub(crate) struct Allowlist {
     vault: Option<HashSet<IdentityKey>>,
-    file: Option<PathBuf>,
-    cache: Mutex<Cached>,
+    file: Option<KeyFile>,
     forced_open: bool,
 }
 
@@ -136,23 +206,11 @@ impl Allowlist {
         file: Option<PathBuf>,
         forced_open: bool,
     ) -> Result<Self, AllowlistError> {
-        let list = Allowlist {
+        Ok(Allowlist {
             vault,
-            file,
-            cache: Mutex::new(Cached {
-                stamp: None,
-                keys: HashSet::new(),
-            }),
+            file: file.map(KeyFile::open).transpose()?,
             forced_open,
-        };
-        if let Some(path) = &list.file {
-            let text = std::fs::read_to_string(path).map_err(|source| AllowlistError::Read {
-                path: path.display().to_string(),
-                source,
-            })?;
-            parse_strict(&path.display().to_string(), &text)?;
-        }
-        Ok(list)
+        })
     }
 
     /// Whether any source is set up, ignoring the `staff` table.
@@ -162,9 +220,7 @@ impl Allowlist {
 
     /// The directory the sandbox must be able to read to follow the file as it changes.
     pub(crate) fn file_dir(&self) -> Option<PathBuf> {
-        let path = self.file.as_ref()?;
-        let parent = path.parent().filter(|dir| !dir.as_os_str().is_empty());
-        Some(parent.map_or_else(|| PathBuf::from("."), PathBuf::from))
+        self.file.as_ref().map(KeyFile::dir)
     }
 
     /// True when the door is open to any signed-in identity right now.
@@ -211,38 +267,10 @@ impl Allowlist {
         Ok(Decision::Denied)
     }
 
-    /// The file's keys, read again when its size or modification time changes. An unreadable file
-    /// lists nobody: access ends rather than lingers.
     fn file_keys(&self) -> HashSet<IdentityKey> {
-        let Some(path) = &self.file else {
-            return HashSet::new();
-        };
-        let stamp = std::fs::metadata(path)
-            .ok()
-            .and_then(|meta| Some((meta.modified().ok()?, meta.len())));
-        let mut cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
-        if cache.stamp.is_some() && cache.stamp == stamp {
-            return cache.keys.clone();
-        }
-        let keys = match std::fs::read_to_string(path) {
-            Ok(text) => {
-                let (keys, bad) = parse(&text);
-                if !bad.is_empty() {
-                    warn!(
-                        entries = bad.len(),
-                        "the admin allowlist file has entries that are not identity keys; they are skipped"
-                    );
-                }
-                keys
-            }
-            Err(error) => {
-                warn!(%error, "the admin allowlist file cannot be read; it lists nobody");
-                HashSet::new()
-            }
-        };
-        cache.stamp = stamp;
-        cache.keys.clone_from(&keys);
-        keys
+        self.file
+            .as_ref()
+            .map_or_else(HashSet::new, |file| file.keys("the admin allowlist"))
     }
 }
 

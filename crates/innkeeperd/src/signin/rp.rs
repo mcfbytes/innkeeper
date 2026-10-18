@@ -17,6 +17,7 @@ use url::Url;
 use zeroize::Zeroizing;
 
 use super::config::{ProviderEntry, ProviderKind};
+use super::state::{LoginState, PageState};
 
 /// Discovery and the signing keys are fetched again after this, or at once when a token fails.
 const METADATA_TTL: Duration = Duration::from_secs(3600);
@@ -24,7 +25,8 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 const USER_AGENT: &str = concat!("innkeeperd/", env!("CARGO_PKG_VERSION"));
 
 /// Who a login is for. Each has its own callback path, registered with the provider.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Audience {
     Player,
     /// The operator portal (docs/server/innkeeperd.md section 9).
@@ -134,7 +136,8 @@ impl Provider {
     }
 }
 
-/// A login between the redirect to the provider and its callback. Kept in memory only.
+/// A login between the redirect to the provider and its callback. It travels sealed inside the
+/// `state` value (`super::state`), so the server keeps nothing for it.
 pub(crate) struct PendingRp {
     provider: String,
     audience: Audience,
@@ -143,16 +146,26 @@ pub(crate) struct PendingRp {
 }
 
 impl PendingRp {
-    pub(crate) fn audience(&self) -> Audience {
-        self.audience
+    /// What the sealed `state` carries for this login.
+    pub(crate) fn to_state(&self, expires_at: i64, page: Option<PageState>) -> LoginState {
+        LoginState {
+            provider: self.provider.clone(),
+            audience: self.audience,
+            verifier: self.verifier.secret().clone(),
+            nonce: self.nonce.as_ref().map(|nonce| nonce.secret().clone()),
+            expires_at,
+            page,
+        }
     }
-}
 
-pub(crate) struct Started {
-    /// The `state` parameter; the callback finds the pending login by it.
-    pub(crate) state: String,
-    pub(crate) authorize: Url,
-    pub(crate) pending: PendingRp,
+    pub(crate) fn from_state(state: &LoginState) -> Self {
+        PendingRp {
+            provider: state.provider.clone(),
+            audience: state.audience,
+            verifier: PkceCodeVerifier::new(state.verifier.clone()),
+            nonce: state.nonce.clone().map(Nonce::new),
+        }
+    }
 }
 
 /// The provider account, as the caller needs it for the identity HMAC.
@@ -228,15 +241,28 @@ impl Rp {
     }
 
     /// Where to send the browser, with PKCE, `state` and (for OIDC) a nonce. Scope is `openid`.
+    /// `seal` turns the pending login into the `state` value; `None` from it fails the login.
+    /// The answer is the provider's authorize URL.
     pub(crate) async fn begin(
         &self,
         provider_id: &str,
         audience: Audience,
-    ) -> Result<Started, RpError> {
+        seal: impl FnOnce(&PendingRp) -> Option<String>,
+    ) -> Result<Url, RpError> {
         let provider = self.provider(provider_id).ok_or(RpError::UnknownProvider)?;
         let redirect = self.redirect(audience)?;
         let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-        let (authorize, state, nonce) = match &provider.flavour {
+        let nonce = matches!(provider.flavour, Flavour::Oidc { .. }).then(Nonce::new_random);
+        let pending = PendingRp {
+            provider: provider.id.clone(),
+            audience,
+            verifier,
+            nonce,
+        };
+        let state = seal(&pending)
+            .ok_or_else(|| RpError::Config("the login state could not be sealed".into()))?;
+        let csrf = CsrfToken::new(state);
+        let authorize = match &provider.flavour {
             Flavour::Oidc { .. } => {
                 let metadata = self.metadata(provider, false).await?;
                 let client = CoreClient::from_provider_metadata(
@@ -245,38 +271,30 @@ impl Rp {
                     Some(provider.client_secret()),
                 )
                 .set_redirect_uri(redirect);
-                let (url, state, nonce) = client
+                let nonce = pending.nonce.clone().unwrap_or_else(Nonce::new_random);
+                let (url, _, _) = client
                     .authorize_url(
                         CoreAuthenticationFlow::AuthorizationCode,
-                        CsrfToken::new_random,
-                        Nonce::new_random,
+                        move || csrf,
+                        move || nonce,
                     )
                     .set_pkce_challenge(challenge)
                     .url();
-                (url, state, Some(nonce))
+                url
             }
             Flavour::OAuth2(endpoints) => {
                 let client = BasicClient::new(provider.client_id.clone())
                     .set_auth_uri(endpoints.authorize.clone())
                     .set_redirect_uri(redirect);
-                let (url, state) = client
-                    .authorize_url(CsrfToken::new_random)
+                let (url, _) = client
+                    .authorize_url(move || csrf)
                     .add_scopes(endpoints.scopes.iter().cloned().map(Scope::new))
                     .set_pkce_challenge(challenge)
                     .url();
-                (url, state, None)
+                url
             }
         };
-        Ok(Started {
-            state: state.secret().clone(),
-            authorize,
-            pending: PendingRp {
-                provider: provider.id.clone(),
-                audience,
-                verifier,
-                nonce,
-            },
-        })
+        Ok(authorize)
     }
 
     /// Exchanges the code and returns the verified subject. Profile fields are dropped unread.
@@ -482,9 +500,15 @@ client_secret_name = "dev-secret"
         )
         .unwrap();
         for audience in [Audience::Player, Audience::Admin] {
-            let started = rp.begin("dev", audience).await.unwrap();
-            let query: Vec<(String, String)> =
-                started.authorize.query_pairs().into_owned().collect();
+            let mut sealed = None;
+            let authorize = rp
+                .begin("dev", audience, |pending| {
+                    sealed = Some(pending.to_state(1, None));
+                    Some("SEALED".to_owned())
+                })
+                .await
+                .unwrap();
+            let query: Vec<(String, String)> = authorize.query_pairs().into_owned().collect();
             let get = |name: &str| {
                 query
                     .iter()
@@ -493,14 +517,20 @@ client_secret_name = "dev-secret"
             };
             assert_eq!(get("scope").as_deref(), Some("openid"));
             assert_eq!(get("code_challenge_method").as_deref(), Some("S256"));
-            assert_eq!(get("state"), Some(started.state.clone()));
-            assert!(get("nonce").is_some());
+            assert_eq!(get("state").as_deref(), Some("SEALED"));
+            let sealed = sealed.unwrap();
+            assert_eq!(get("nonce"), sealed.nonce);
+            assert_eq!(sealed.audience, audience);
+            let challenge = PkceCodeChallenge::from_code_verifier_sha256(&PkceCodeVerifier::new(
+                sealed.verifier.clone(),
+            ));
+            assert_eq!(get("code_challenge").as_deref(), Some(challenge.as_str()));
             let expected = format!("https://inn.example.org{}", audience.callback_path());
             assert_eq!(get("redirect_uri"), Some(expected));
-            assert_eq!(started.pending.audience(), audience);
         }
         assert!(matches!(
-            rp.begin("nope", Audience::Player).await,
+            rp.begin("nope", Audience::Player, |_| Some(String::new()))
+                .await,
             Err(RpError::UnknownProvider)
         ));
     }
