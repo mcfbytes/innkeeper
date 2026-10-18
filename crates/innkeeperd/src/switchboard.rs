@@ -105,8 +105,11 @@ impl Switchboard {
     pub(crate) fn deliver(&self, delivery: Delivery) {
         let Delivery { to, message } = delivery;
         let inboxes = self.lock();
-        let sent = inboxes.get(&to).map(|line| line.sender.send(message));
-        if !matches!(sent, Some(Ok(()))) {
+        let dropped = match inboxes.get(&to) {
+            Some(line) => line.sender.send(message).is_err(),
+            None => true,
+        };
+        if dropped {
             debug!(connection = to.0, "delivery to a closed connection dropped");
         }
     }

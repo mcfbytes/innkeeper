@@ -4,9 +4,9 @@ use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
 use crate::objects::OnlinePlayer;
 use crate::{
     bbs, conference, hint_board, logon, mail, mall, money, object_list, presence, red_baron,
-    router, rpg, signup, town_hall, user_find, Account, AccountId, AccountRequest, ClientMessage,
-    ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, LogPolicy, Login, ObjectStore,
-    Place, Unexplained, UnexplainedCommand, World,
+    router, rpg, signup, town_hall, trivia, user_find, Account, AccountId, AccountRequest,
+    ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet, LogPolicy, Login,
+    ObjectStore, Place, TriviaRequest, Unexplained, UnexplainedCommand, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -32,6 +32,8 @@ struct Player {
     place: Option<Place>,
     /// True once the logon's 34/4 has been seen; later ones come from the Town Hall.
     logon_rates_seen: bool,
+    /// Topic 1, 2 or 3 from the last trivia group join (hub 16/17/18, SierraLand 7/8/9).
+    trivia_room: Option<u8>,
 }
 
 impl Player {
@@ -77,6 +79,7 @@ impl PlayerSession {
         let deliveries = match *message {
             ClientMessage::Signup(ref form) => reply(signup::answer(world, form)),
             ClientMessage::Login(ref login) => {
+                world.leave_trivia(connection);
                 let mut deliveries = objects.disconnect(connection);
                 deliveries.extend(reply(vec![self.log_in(world, login)]));
                 deliveries
@@ -167,10 +170,7 @@ impl PlayerSession {
             ClientMessage::Mall(ref request) => {
                 self.when_logged_in(|_| reply(mall::answer(request)))
             }
-            ClientMessage::Trivia(_) => {
-                info!(message = %self.log.debug(message), "decoded, no handler yet: ignored");
-                Vec::new()
-            }
+            ClientMessage::Trivia(ref request) => self.trivia(world, connection, request),
             ClientMessage::ObjNewList(ref request) => self.when_logged_in(|_| {
                 reply(vec![object_list::created(objects, connection, request)])
             }),
@@ -266,10 +266,33 @@ impl PlayerSession {
             warn!("message before Login ignored");
             return Vec::new();
         };
+        if let Some(room) = trivia::room_for(&join) {
+            player.trivia_room = Some(room);
+        }
         if let Some(place) = rpg::place_of(&join) {
             player.place = Some(place);
         }
         rpg::join(objects, connection, join, player.place)
+    }
+
+    fn trivia(
+        &mut self,
+        world: &World,
+        connection: ConnectionId,
+        request: &TriviaRequest,
+    ) -> Vec<Delivery> {
+        let PlayerState::LoggedIn(player) = &self.state else {
+            warn!("message before Login ignored");
+            return Vec::new();
+        };
+        let _player = self
+            .log
+            .player_span(player.account.id.0, &player.account.persona)
+            .entered();
+        let host = u16::from(world.host.0);
+        let messages = world
+            .with_trivia(|shows| shows.on_request(connection, player.trivia_room, host, request));
+        replies_to(connection, messages)
     }
 
     /// The Town Hall billing screens. The first 34/4 of a Login is the logon's and stays unanswered.
@@ -322,6 +345,7 @@ impl PlayerSession {
                     account,
                     place: None,
                     logon_rates_seen: false,
+                    trivia_room: None,
                 });
                 HostMessage::LoginAccepted(ack)
             }

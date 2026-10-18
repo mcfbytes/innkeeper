@@ -71,6 +71,7 @@ impl Table {
             }
             "!" => {
                 self.assert_nothing_pending(number);
+                self.world.leave_trivia(connection(who));
                 self.pending
                     .extend(self.objects.disconnect(connection(who)));
             }

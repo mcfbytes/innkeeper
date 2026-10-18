@@ -29,6 +29,7 @@ pub mod saves;
 mod signup;
 mod store;
 mod town_hall;
+mod trivia;
 mod user_find;
 mod world;
 
@@ -73,4 +74,5 @@ pub use store::{
     not_a_complaint, AccountRecord, BoardId, Letter, LetterId, MailboxNumber, MemoryStore, Post,
     PostId, Store, StoreError,
 };
+pub use trivia::TriviaShows;
 pub use world::World;
