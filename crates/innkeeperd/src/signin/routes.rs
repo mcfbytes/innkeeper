@@ -300,7 +300,10 @@ impl SignIn {
     }
 
     fn can_create(&self, key: &IdentityKey) -> Result<bool, innkeeper_world::StoreError> {
-        if !self.enrolment.web_creates() || !self.invited(key) {
+        if !self.enrolment.web_creates()
+            || !self.invited(key)
+            || store::owns_suspended(&self.store, key)?
+        {
             return Ok(false);
         }
         let since = dates::now_ms().saturating_sub(DAY);
@@ -329,14 +332,10 @@ impl SignIn {
 
     /// The refusal for an identity whose stored attestation is missing or too old, else `None`.
     fn attestation_gate(&self, key: &IdentityKey) -> Option<Reply> {
-        let attested = match store::identity(&self.store, key) {
-            Ok(row) => row.and_then(|row| row.attested),
+        match self.attested_enough(key) {
+            Ok(true) => return None,
+            Ok(false) => {}
             Err(error) => return Some(server_error(&error)),
-        };
-        let enough =
-            attested.is_some_and(|at| at.age >= self.minimum_age && at.terms >= self.terms_version);
-        if enough {
-            return None;
         }
         let message = format!(
             "The desk needs your word first: you are {} or older, and you accept terms version {} \
@@ -348,6 +347,22 @@ impl SignIn {
             "attest_required",
             &message,
         ))
+    }
+
+    /// The refusal for an identity that owns a suspended account, else `None`.
+    fn suspension_gate(&self, key: &IdentityKey) -> Option<Reply> {
+        match store::owns_suspended(&self.store, key) {
+            Ok(false) => None,
+            Ok(true) => {
+                info!(handle = %keys::handle(key), "refused: the identity owns a suspended account");
+                Some(http::error(
+                    StatusCode::FORBIDDEN,
+                    "suspended",
+                    "An account of this sign-in is suspended. Write to Member Services.",
+                ))
+            }
+            Err(error) => Some(server_error(&error)),
+        }
     }
 
     fn create_account(&self, key: &IdentityKey, body: Option<Value>) -> Reply {
@@ -362,7 +377,10 @@ impl SignIn {
             info!(handle = %keys::handle(key), "account refused: not on the invite list");
             return not_invited(key);
         }
-        if let Some(refusal) = self.attestation_gate(key) {
+        if let Some(refusal) = self
+            .attestation_gate(key)
+            .or_else(|| self.suspension_gate(key))
+        {
             return refusal;
         }
         // No body, `{}` or a null persona opens an account with no persona yet: the client's own
@@ -435,7 +453,10 @@ impl SignIn {
             }
             Err(error) => return server_error(&error),
         }
-        if let Some(refusal) = self.attestation_gate(key) {
+        if let Some(refusal) = self
+            .attestation_gate(key)
+            .or_else(|| self.suspension_gate(key))
+        {
             return refusal;
         }
         let password = keys::new_password();

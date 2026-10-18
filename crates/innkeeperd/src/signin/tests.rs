@@ -775,3 +775,52 @@ async fn invite_enrolment_opens_accounts_only_for_listed_identities_and_names_th
     assert_eq!(status, 201);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+async fn a_bound_login_needs_the_current_terms_and_a_suspension_closes_the_side_doors() {
+    let fx = fixture(EnrolmentMode::WebOnly, 5, true).await;
+    let (token, key) = fx.token("dana");
+    let record = AccountRecord::new(keys::encode_password("SWORDFISH").unwrap(), "Dana");
+    let Created::Account(mine) = store::create_owned_account(&fx.store, &key, &record, 0).unwrap()
+    else {
+        panic!("created");
+    };
+    let binding = fx.sign_in.bind(&token).unwrap().unwrap();
+    let mut host = Host::new(&fx.settings, ConnectionId(1));
+    host.bind(Some(binding));
+    assert!(accepted(&host.answer(&login(mine.0, "SWORDFISH")).outgoing));
+
+    // The terms moved on (or the answer was withdrawn): the next Login is refused with a reason.
+    let older = store::Attested {
+        age: 18,
+        terms: 0,
+        at: crate::dates::now_ms(),
+    };
+    store::record_attestation(&fx.store, &key, &older).unwrap();
+    let refused = host.answer(&login(mine.0, "SWORDFISH")).outgoing;
+    assert!(
+        matches!(refused.as_slice(), [HostMessage::Nak(nak)] if nak.text.contains("terms")),
+        "{refused:?}"
+    );
+    let current = store::Attested { terms: 1, ..older };
+    store::record_attestation(&fx.store, &key, &current).unwrap();
+    assert!(accepted(&host.answer(&login(mine.0, "SWORDFISH")).outgoing));
+
+    // A suspended account: no new account, no new password, for any account of the identity.
+    crate::admin::store::set_suspended(&fx.store, mine.0, true, 1).unwrap();
+    let post = reqwest::Method::POST;
+    let (status, body) = fx
+        .call(post.clone(), "/auth/accounts", &token, Some(json!({})))
+        .await;
+    assert_eq!((status, body["error"].as_str()), (403, Some("suspended")));
+    let path = format!("/auth/accounts/{}/credential", mine.0);
+    let (status, body) = fx.call(post.clone(), &path, &token, None).await;
+    assert_eq!((status, body["error"].as_str()), (403, Some("suspended")));
+    let (_, session) = fx
+        .call(reqwest::Method::GET, "/auth/session", &token, None)
+        .await;
+    assert_eq!(session["canCreate"], false);
+    crate::admin::store::set_suspended(&fx.store, mine.0, false, 2).unwrap();
+    let (status, _) = fx.call(post, &path, &token, None).await;
+    assert_eq!(status, 200);
+}

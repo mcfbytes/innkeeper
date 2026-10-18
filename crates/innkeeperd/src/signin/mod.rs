@@ -77,6 +77,16 @@ impl Invites {
     }
 }
 
+/// What a bound line's Login may do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LoginGate {
+    Open,
+    /// Not an account of this sign-in, or the token is no longer live.
+    NotOwned,
+    /// The identity has not answered the current age and terms question.
+    NeedsAttestation,
+}
+
 /// A WebSocket that presented a live session token, tied to its identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Binding {
@@ -228,21 +238,33 @@ impl SignIn {
         }))
     }
 
-    /// A Login on a bound line opens only an account the identity owns, while the token lives.
-    pub(crate) fn may_log_in(&self, binding: &Binding, account: AccountId) -> bool {
+    /// A Login on a bound line opens only an account the identity owns, while the token lives and
+    /// while the identity's age and terms answer is still the one this server asks for.
+    pub(crate) fn may_log_in(&self, binding: &Binding, account: AccountId) -> LoginGate {
         let now = dates::now_ms();
-        let check = || -> Result<bool, StoreError> {
+        let check = || -> Result<LoginGate, StoreError> {
             let live = store::session_identity(&self.store, &binding.token_hash, now)?;
-            if live != Some(binding.identity) {
-                return Ok(false);
+            if live != Some(binding.identity)
+                || !store::owns(&self.store, &binding.identity, account)?
+            {
+                return Ok(LoginGate::NotOwned);
             }
-            store::owns(&self.store, &binding.identity, account)
+            match self.attested_enough(&binding.identity)? {
+                true => Ok(LoginGate::Open),
+                false => Ok(LoginGate::NeedsAttestation),
+            }
         };
         check().unwrap_or_else(|error| {
             warn!(%error, "the sign-in store failed; the Login is refused");
             crate::metrics::counters().store_error();
-            false
+            LoginGate::NotOwned
         })
+    }
+
+    /// The identity's stored answer covers `--minimum-age` and `--terms-version`.
+    fn attested_enough(&self, key: &IdentityKey) -> Result<bool, StoreError> {
+        let attested = store::identity(&self.store, key)?.and_then(|row| row.attested);
+        Ok(attested.is_some_and(|at| at.age >= self.minimum_age && at.terms >= self.terms_version))
     }
 
     /// Notes which account the session's line is playing, for the session purge and holds.

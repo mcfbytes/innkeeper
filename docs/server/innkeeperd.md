@@ -550,7 +550,15 @@ What the server decided where the `docs/web.md` contract is open or silent:
   version 1 or later. Say so, then ask again." The check runs whenever sign-in is configured, with or
   without `--public`: the paths exist only with `--auth-config`, so one rule is simpler than two. It
   comes after the enrolment check, so a closed host still says `enrolment_closed`. The session
-  JSON's `attested` field is unchanged, and a Login on an existing account is not gated.
+  JSON's `attested` field is unchanged. **A Login on a bound line is gated the same way**: when the
+  identity's stored answer no longer covers `--minimum-age` and `--terms-version` (a newer terms
+  version, or an answer withdrawn), the Login gets a Nak, "Accept the current terms on the sign-in
+  page first, then dial again.", which the client shows before it hangs up.
+- **A suspension closes the side doors.** While any account the identity owns (deleted or not) is
+  suspended, `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are 403 `suspended`
+  ("An account of this sign-in is suspended. Write to Member Services.") for every account of that
+  identity, and `canCreate` is false, so a suspended player cannot open a fresh account or take a
+  new password instead. The suspended account's own Login is refused as before (9.4).
 - `GET /auth/accounts/<id>/saves` (and `?path=P` for one file) hands a signed-in page the account's
   current save files before it dials, so a fresh browser does not overwrite them; 401 without a
   live token, 404 `no_such_account` when the identity does not own the account. The shape is in
