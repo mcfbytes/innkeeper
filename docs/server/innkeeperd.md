@@ -406,6 +406,10 @@ oidc-google = "not-a-real-secret"
   `token_url` and `userinfo_url`; `id_field` names the JSON field with the user id (default
   `id`). Its `scopes` must be the minimum the provider needs for that id, and `email`, `profile`,
   `address` and `phone` are refused.
+- With `--public`, every URL a provider is reached at (an `oidc` issuer; an `oauth2` provider's
+  three endpoints) and `public_url` and `admin_public_url` must be `https`, unless the host is
+  loopback (`localhost`, `127.0.0.0/8`, `[::1]`: a local run against the mock provider). Startup
+  stops otherwise, naming the field. Without `--public`, `http` is accepted as before.
 - `client_secret_name` is the secret's name in the server vault (1 to 127 of letters, digits
   and `-`). Without a vault it is looked up
   in `[dev_secrets]`, then in `INNKEEPERD_SECRET_<NAME>` (upper case, `-` as `_`).

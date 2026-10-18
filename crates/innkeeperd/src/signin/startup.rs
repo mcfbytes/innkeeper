@@ -57,6 +57,9 @@ pub(crate) fn prepare(
         .as_deref()
         .map(AuthFile::load)
         .transpose()?;
+    if let (true, Some(file)) = (config.public, file.as_ref()) {
+        file.check_public()?;
+    }
     let names: Vec<String> = file
         .iter()
         .flat_map(|file| &file.providers)
