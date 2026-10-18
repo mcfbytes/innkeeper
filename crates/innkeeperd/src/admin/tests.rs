@@ -73,6 +73,7 @@ fn sign_in_for(store: &Arc<SqliteStore>) -> SignIn {
     let key = HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap();
     SignIn::new(SignInSetup {
         store: Arc::clone(store),
+        invites: Default::default(),
         keys: KeyRing::new(vec![key]).unwrap(),
         rp: Rp::new(vec![provider], Url::parse(ORIGIN).unwrap()).unwrap(),
         origins: PageOrigins::parse(&["http://127.0.0.1:2901".to_owned()]).unwrap(),

@@ -279,8 +279,15 @@ impl SignIn {
             let attested = row
                 .and_then(|row| row.attested)
                 .map(|at| json!({"age": at.age, "terms": at.terms}));
+            let mut identity = json!({"handle": keys::handle(&key), "provider": provider});
+            if let (true, Some(fields)) = (
+                self.enrolment == super::EnrolmentMode::Invite,
+                identity.as_object_mut(),
+            ) {
+                fields.insert("key".to_owned(), json!(crate::admin::allowlist::hex(&key)));
+            }
             Ok(json!({
-                "identity": {"handle": keys::handle(&key), "provider": provider},
+                "identity": identity,
                 "accounts": accounts,
                 "canCreate": self.can_create(&key)?,
                 "attested": attested,
@@ -293,7 +300,7 @@ impl SignIn {
     }
 
     fn can_create(&self, key: &IdentityKey) -> Result<bool, innkeeper_world::StoreError> {
-        if !self.enrolment.web_creates() {
+        if !self.enrolment.web_creates() || !self.invited(key) {
             return Ok(false);
         }
         let since = dates::now_ms().saturating_sub(DAY);
@@ -350,6 +357,10 @@ impl SignIn {
                 "enrolment_closed",
                 "New accounts are not being taken.",
             );
+        }
+        if !self.invited(key) {
+            info!(handle = %keys::handle(key), "account refused: not on the invite list");
+            return not_invited(key);
         }
         if let Some(refusal) = self.attestation_gate(key) {
             return refusal;
@@ -633,6 +644,19 @@ fn unauthorized() -> Reply {
         StatusCode::UNAUTHORIZED,
         "unauthorized",
         "The session is missing or has expired.",
+    )
+}
+
+/// The `enrolment_closed` answer the page already shows, with the identity's own key to send the
+/// operator, as the portal's refusal page does. The key is not a secret, and only its holder sees it.
+fn not_invited(key: &IdentityKey) -> Reply {
+    let hex = crate::admin::allowlist::hex(key);
+    let message = format!(
+        "New accounts are by invitation only. To be invited, send the operator your identity key: {hex}"
+    );
+    http::json_reply(
+        StatusCode::FORBIDDEN,
+        &json!({"error": "enrolment_closed", "message": message, "identityKey": hex}),
     )
 }
 

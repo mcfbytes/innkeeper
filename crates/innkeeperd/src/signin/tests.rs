@@ -56,6 +56,7 @@ fn sign_in_for(
     let key = HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap();
     SignIn::new(SignInSetup {
         store: Arc::clone(store),
+        invites: Default::default(),
         keys: KeyRing::new(vec![key]).unwrap(),
         rp: Rp::new(vec![provider], Url::parse("http://127.0.0.1:2900").unwrap()).unwrap(),
         origins: PageOrigins::parse(&[PAGE.to_owned()]).unwrap(),
@@ -71,7 +72,17 @@ fn sign_in_for(
 
 async fn fixture(enrolment: EnrolmentMode, per_day: u32, require_session: bool) -> Fixture {
     let store = Arc::new(SqliteStore::open_in_memory().unwrap());
-    let sign_in = Arc::new(sign_in_for(&store, enrolment, per_day, require_session));
+    let sign_in = sign_in_for(&store, enrolment, per_day, require_session);
+    serve(store, sign_in, enrolment, require_session).await
+}
+
+async fn serve(
+    store: Arc<SqliteStore>,
+    sign_in: SignIn,
+    enrolment: EnrolmentMode,
+    require_session: bool,
+) -> Fixture {
+    let sign_in = Arc::new(sign_in);
     let mut world = World::stored(Arc::clone(&store) as Arc<dyn innkeeper_world::Store>);
     world.accounts = crate::server::account_book(&store, enrolment);
     let mut settings = ConnectionSettings::new(SessionConfig::default(), world, None);
@@ -712,4 +723,55 @@ async fn the_saves_route_hands_an_owner_the_files_the_channel_would() {
         (status, body["error"].as_str()),
         (404, Some("no_such_file"))
     );
+}
+
+#[tokio::test]
+async fn invite_enrolment_opens_accounts_only_for_listed_identities_and_names_the_key() {
+    let dir = std::env::temp_dir().join(format!("inn-invites-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let list = dir.join("invites");
+    std::fs::write(&list, "# testers\n").unwrap();
+    let store = Arc::new(SqliteStore::open_in_memory().unwrap());
+    let mut sign_in = sign_in_for(&store, EnrolmentMode::Invite, 3, false);
+    sign_in.invites.file = Some(crate::admin::allowlist::KeyFile::open(list.clone()).unwrap());
+    let fx = serve(store, sign_in, EnrolmentMode::Invite, false).await;
+    let (token, key) = fx.token("tester");
+    let hex = crate::admin::allowlist::hex(&key);
+
+    let (status, session) = fx
+        .call(reqwest::Method::GET, "/auth/session", &token, None)
+        .await;
+    assert_eq!((status, session["canCreate"].as_bool()), (200, Some(false)));
+    assert_eq!(session["identity"]["key"], hex.as_str());
+    let (status, body) = fx
+        .call(
+            reqwest::Method::POST,
+            "/auth/accounts",
+            &token,
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("enrolment_closed"))
+    );
+    assert_eq!(body["identityKey"], hex.as_str());
+    assert!(body["message"].as_str().unwrap().contains(&hex));
+
+    // The operator adds the key; the next request sees it without a restart.
+    std::fs::write(&list, format!("# testers\n{hex}  # the tester\n")).unwrap();
+    let (status, session) = fx
+        .call(reqwest::Method::GET, "/auth/session", &token, None)
+        .await;
+    assert_eq!((status, session["canCreate"].as_bool()), (200, Some(true)));
+    let (status, _) = fx
+        .call(
+            reqwest::Method::POST,
+            "/auth/accounts",
+            &token,
+            Some(json!({})),
+        )
+        .await;
+    assert_eq!(status, 201);
+    let _ = std::fs::remove_dir_all(&dir);
 }

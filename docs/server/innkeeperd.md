@@ -313,10 +313,27 @@ is [privacy.md](privacy.md) sections 1 and 6; the sandbox and outbound connectio
   `https://inn.example.net` or `http://127.0.0.1:8080`. It is the CORS allow list, the check on the
   login's `return` address and the `postMessage` target. No origin means no page can sign in, and
   startup warns.
-- `--enrolment open|web-only|closed`. `open` is the old behaviour: a Login for an unknown number
+- `--enrolment open|web-only|invite|closed`. `open` is the old behaviour: a Login for an unknown number
   creates the account, and sign-in also creates accounts. `web-only` creates accounts only through
-  `POST /auth/accounts`; a Login never does. `closed` creates none. The default is `open`, or
-  `web-only` with `--public`.
+  `POST /auth/accounts`; a Login never does. `invite` is `web-only` for the identities on the invite
+  list only (below). `closed` creates none. The default is `open`, or `web-only` with `--public`.
+- `--invite-list FILE` (needs `--enrolment invite`): identity keys that may open accounts, in the
+  admin allowlist's format (64 hex digits, one per line or comma separated, `#` comments). Read at
+  startup, strictly, and again whenever its size or modification time changes, so an edit takes
+  effect on the next request; an unreadable file lists nobody. The optional vault secret
+  `invite-identities` (8.3) is the same list, read at startup; the two are merged. With neither,
+  startup warns that nobody can open an account.
+
+**Inviting testers (`--enrolment invite`).** A tester signs in on the page. Not yet invited,
+`GET /auth/session` says `"canCreate": false` and carries the identity's own key as
+`identity.key` (in this mode only), and `POST /auth/accounts` is the usual 403 `enrolment_closed`,
+whose message reads "New accounts are by invitation only. To be invited, send the operator your
+identity key: <64 hex digits>" and whose body also has `identityKey`. The key is an HMAC of the
+provider and subject, the same one the operator portal's refusal page shows (9.2); it is not a
+secret, and only its holder sees it. The tester sends it to the operator, who appends it to the
+`--invite-list` file (`echo KEY >> FILE`; no restart) or to the vault secret `invite-identities`
+(then restarts). Existing accounts keep working when a key is removed; only new accounts need the
+list. Accounts per day, attestation and every other rule still apply.
 - `--session-hours 12`: how long a session token lives. Logout ends it at once.
 - `--minimum-age 18` and `--terms-version 1`: the least age and terms version an identity must have
   attested before the server opens an account or issues a password (8.6).
@@ -443,8 +460,10 @@ allows):
 | each `client_secret_name` | the provider's client secret |
 | `audit-public-key` | SPKI PEM; replaces `--audit-public-key` |
 | `audit-key-id` | the escrow key version URL; replaces `--audit-key-id` |
+| `admin-identities` | optional: the portal's staff keys (9.1), read when `--admin-bind` is set |
+| `invite-identities` | optional: the invite list (8.1), read under `--enrolment invite` |
 
-A missing secret or a vault error stops startup. There is no
+A missing secret (other than the two optional lists) or a vault error stops startup. There is no
 periodic refresh: rotation is a restart. Old HMAC versions stay readable so an identity hashed under
 one is found and rewritten under the current version at its next sign-in (privacy.md section 7).
 The handle (`Caller 7F3A`) is taken from the key, so it changes after that rewrite.

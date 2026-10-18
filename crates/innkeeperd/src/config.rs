@@ -113,6 +113,10 @@ pub(crate) struct Config {
     /// Who creates accounts. Default open, or web-only with --public.
     #[arg(long, value_enum)]
     pub(crate) enrolment: Option<EnrolmentMode>,
+    /// With `--enrolment invite`: a file of identity keys (64 hex digits, newline or comma
+    /// separated, `#` comments) that may open accounts. Read again on every request.
+    #[arg(long, value_name = "FILE")]
+    pub(crate) invite_list: Option<PathBuf>,
     /// Hours a sign-in session token lives.
     #[arg(long, default_value_t = 12)]
     pub(crate) session_hours: u32,
@@ -473,6 +477,11 @@ impl Config {
         if self.auth_config.is_some() && self.data_dir.is_none() {
             return Err(conflict(
                 "--auth-config requires --data-dir: identities and sessions are stored there\n",
+            ));
+        }
+        if self.invite_list.is_some() && self.enrolment() != EnrolmentMode::Invite {
+            return Err(conflict(
+                "--invite-list needs --enrolment invite: only that mode reads it\n",
             ));
         }
         if self.session_hours == 0 {
@@ -926,6 +935,26 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("audit-public-key"));
+    }
+
+    #[test]
+    fn the_invite_list_belongs_to_invite_enrolment() {
+        let invite = Config::parse_from(["innkeeperd", "--enrolment", "invite"]);
+        assert_eq!(invite.enrolment(), EnrolmentMode::Invite);
+        assert!(!invite.enrolment().login_enrols());
+        let stray = Config::try_load_from(["innkeeperd", "--invite-list", "testers"]);
+        assert!(stray
+            .unwrap_err()
+            .to_string()
+            .contains("--enrolment invite"));
+        let paired = Config::try_load_from([
+            "innkeeperd",
+            "--enrolment",
+            "invite",
+            "--invite-list",
+            "testers",
+        ]);
+        assert!(paired.is_ok());
     }
 
     #[test]

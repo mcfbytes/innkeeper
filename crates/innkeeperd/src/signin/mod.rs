@@ -38,6 +38,9 @@ pub(crate) enum EnrolmentMode {
     Open,
     /// Only sign-in creates accounts; a Login never does.
     WebOnly,
+    /// As web-only, but only for an identity on the invite list (`--invite-list`, the vault
+    /// secret `invite-identities`): a test publish open to named testers.
+    Invite,
     /// Nobody creates accounts.
     Closed,
 }
@@ -49,6 +52,28 @@ impl EnrolmentMode {
 
     pub(crate) fn web_creates(self) -> bool {
         self != EnrolmentMode::Closed
+    }
+}
+
+/// Who `--enrolment invite` lets open an account: the vault secret and the file, merged.
+#[derive(Debug, Default)]
+pub(crate) struct Invites {
+    pub(crate) vault: Option<std::collections::HashSet<IdentityKey>>,
+    pub(crate) file: Option<crate::admin::allowlist::KeyFile>,
+}
+
+impl Invites {
+    fn lists(&self, key: &IdentityKey) -> bool {
+        let in_vault = self.vault.as_ref().is_some_and(|keys| keys.contains(key));
+        in_vault
+            || self
+                .file
+                .as_ref()
+                .is_some_and(|file| file.keys("the invite list").contains(key))
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.vault.is_none() && self.file.is_none()
     }
 }
 
@@ -66,6 +91,8 @@ pub(crate) struct SignInSetup {
     pub(crate) rp: Rp,
     pub(crate) origins: PageOrigins,
     pub(crate) enrolment: EnrolmentMode,
+    /// The invite list; read only under `EnrolmentMode::Invite`.
+    pub(crate) invites: Invites,
     pub(crate) session_lifetime: Duration,
     pub(crate) accounts_per_day: u32,
     /// An account or password needs an attestation of at least this age ...
@@ -125,6 +152,7 @@ pub(crate) struct SignIn {
     rp: Rp,
     origins: PageOrigins,
     enrolment: EnrolmentMode,
+    invites: Invites,
     session_lifetime: i64,
     accounts_per_day: u32,
     minimum_age: u32,
@@ -152,6 +180,7 @@ impl SignIn {
             rp: setup.rp,
             origins: setup.origins,
             enrolment: setup.enrolment,
+            invites: setup.invites,
             session_lifetime: i64::try_from(setup.session_lifetime.as_millis()).unwrap_or(i64::MAX),
             accounts_per_day: setup.accounts_per_day,
             minimum_age: setup.minimum_age,
@@ -170,6 +199,19 @@ impl SignIn {
     /// The identity key ring, for the portal's allowlist check.
     pub(crate) fn keys(&self) -> &KeyRing {
         &self.keys
+    }
+
+    /// The directory the sandbox must keep readable for the invite file.
+    pub(crate) fn invite_dir(&self) -> Option<std::path::PathBuf> {
+        self.invites
+            .file
+            .as_ref()
+            .map(crate::admin::allowlist::KeyFile::dir)
+    }
+
+    /// True unless enrolment is by invitation and `key` is on neither invite list.
+    fn invited(&self, key: &IdentityKey) -> bool {
+        self.enrolment != EnrolmentMode::Invite || self.invites.lists(key)
     }
 
     pub(crate) fn has_providers(&self) -> bool {

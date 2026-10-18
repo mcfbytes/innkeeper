@@ -84,13 +84,15 @@ impl Prepared {
         self.capture_dir.as_deref()
     }
 
-    /// Directories the sandbox keeps readable after startup: the portal's allowlist file lives in one.
+    /// Directories the sandbox keeps readable after startup: the portal's allowlist and the invite
+    /// list live there.
     pub(crate) fn read_dirs(&self) -> Vec<PathBuf> {
-        self.admin
+        let admin = self
+            .admin
             .as_ref()
-            .and_then(|(_, admin)| admin.allowlist_dir())
-            .into_iter()
-            .collect()
+            .and_then(|(_, admin)| admin.allowlist_dir());
+        let invites = self.settings.sign_in.as_ref().and_then(|s| s.invite_dir());
+        admin.into_iter().chain(invites).collect()
     }
 
     /// Ports already bound. Port 0 is not a Landlock rule (it means the ephemeral range).
@@ -513,6 +515,7 @@ pub(crate) mod tests {
         for (mode, enrols) in [
             (EnrolmentMode::Open, true),
             (EnrolmentMode::WebOnly, false),
+            (EnrolmentMode::Invite, false),
             (EnrolmentMode::Closed, false),
         ] {
             let store = Arc::new(SqliteStore::open_in_memory().unwrap());
