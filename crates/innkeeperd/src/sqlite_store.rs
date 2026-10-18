@@ -23,8 +23,33 @@ use crate::sqlite_listing;
 pub(crate) const BASELINE_VERSION: i32 = 5;
 
 /// Changes after the baseline, in order: entry `n` takes a database from `BASELINE_VERSION + n` to
-/// one more. Each runs in the transaction that also writes the new `user_version`. Empty so far.
-const MIGRATIONS: &[&str] = &[];
+/// one more. Each runs in the transaction that also writes the new `user_version`.
+const MIGRATIONS: &[&str] = &[IDENTITY_GROUPS];
+
+/// Version 6: accounts belong to an identity group, so linked sign-ins share them. Each existing
+/// identity becomes a group of one that owns its accounts (docs/server/store.md section 3.1).
+const IDENTITY_GROUPS: &str = "
+    CREATE TABLE identity_groups (
+        id INTEGER PRIMARY KEY,
+        created_at INTEGER NOT NULL
+    ) STRICT;
+    ALTER TABLE identities ADD COLUMN identity_group INTEGER REFERENCES identity_groups(id);
+    ALTER TABLE identities ADD COLUMN linked_at INTEGER;
+    INSERT INTO identity_groups (id, created_at) SELECT rowid, created_at FROM identities;
+    UPDATE identities SET identity_group = rowid, linked_at = created_at;
+    CREATE INDEX identities_by_group ON identities(identity_group);
+
+    CREATE TABLE group_accounts (
+        account INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        identity_group INTEGER NOT NULL REFERENCES identity_groups(id),
+        created_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX group_accounts_by_group ON group_accounts(identity_group, created_at);
+    INSERT INTO group_accounts (account, identity_group, created_at)
+        SELECT identity_accounts.account, identities.identity_group, identity_accounts.created_at
+        FROM identity_accounts JOIN identities USING (identity_key);
+    DROP TABLE identity_accounts;
+";
 
 /// `PRAGMA auto_vacuum` value 2: free pages wait for `incremental_vacuum`.
 const AUTO_VACUUM_INCREMENTAL: i64 = 2;

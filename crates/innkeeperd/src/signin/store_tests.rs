@@ -149,7 +149,7 @@ fn attestation_is_kept_on_the_identity() {
 }
 
 #[test]
-fn export_names_the_identity_without_its_subject_or_tokens() {
+fn export_names_every_linked_identity_without_its_subject_or_tokens() {
     let store = SqliteStore::open_in_memory().unwrap();
     let keys = ring(&[("v1", 1)]);
     let sealed = || Some(b"{\"v\":1}".to_vec());
@@ -161,13 +161,22 @@ fn export_names_the_identity_without_its_subject_or_tokens() {
         panic!("created");
     };
     create_session(&store, &key, &[7; 32], 10, 100).unwrap();
-    let exported = export_identity(&store, id).unwrap();
-    assert_eq!(exported["provider"], "dev");
-    assert_eq!(exported["accounts"], json!([id.0]));
-    assert_eq!(exported["sessions"][0]["expiry"], 100);
-    assert_eq!(exported["subject"], SUBJECT_SEALED);
+    let other = sign_in(&store, &keys, "iss2", "sub2", "github", || None, 20)
+        .unwrap()
+        .key;
+    crate::signin::groups::link(&store, &key, &other, 30).unwrap();
+    let exported = export_identities(&store, id).unwrap();
+    assert_eq!(exported.as_array().unwrap().len(), 2);
+    assert_eq!(exported[0]["provider"], "dev");
+    assert_eq!(exported[0]["accounts"], json!([id.0]));
+    assert_eq!(exported[0]["sessions"][0]["expiry"], 100);
+    assert_eq!(exported[0]["subject"], SUBJECT_SEALED);
+    assert_eq!(exported[1]["provider"], "github");
+    assert_eq!(exported[1]["linked_at"], 30);
+    assert_eq!(exported[1]["accounts"], json!([id.0]));
+    assert_eq!(exported[1]["subject"], SUBJECT_NOT_KEPT);
     let text = exported.to_string();
     assert!(!text.contains("sub\""), "{text}");
     assert!(!text.contains("0707070707"), "{text}");
-    assert_eq!(export_identity(&store, AccountId(9)).unwrap(), Value::Null);
+    assert_eq!(export_identities(&store, AccountId(9)).unwrap(), json!([]));
 }

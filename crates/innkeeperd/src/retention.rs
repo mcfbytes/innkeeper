@@ -74,6 +74,8 @@ pub(crate) fn log_counts(counts: &PurgeCounts) {
 
 /// The kinds that keep the complaint clock (365 days from arrival) and outlive an account purge.
 const COMPLAINT_KINDS: &str = "('complaint', 'member_services')";
+/// SQL for the identity group that owns account `?1`.
+const OWNING_GROUP: &str = "(SELECT identity_group FROM group_accounts WHERE account = ?1)";
 
 /// True when a hold on account `?` (the SQL text names it) is still running at `?2`.
 fn held_sql(account: &str) -> String {
@@ -112,17 +114,19 @@ pub(crate) fn disable_account(store: &SqliteStore, account: u32) -> Result<Disab
     Ok(Disable::Fresh(stamp))
 }
 
-/// The owning identity is stamped too once it has no live account left, and its sessions end.
+/// The owning group's identities are stamped too once it has no live account left, and their
+/// sessions end.
 fn disable_identity(conn: &Connection, account: u32, stamp: i64) -> Result<(), StoreError> {
     conn.execute(
-        "UPDATE identities SET deleted_at = ?2
-         WHERE deleted_at IS NULL
-         AND identity_key = (SELECT identity_key FROM identity_accounts WHERE account = ?1)
-         AND NOT EXISTS (
-             SELECT 1 FROM identity_accounts JOIN accounts ON accounts.id = identity_accounts.account
-             WHERE identity_accounts.identity_key = identities.identity_key
-             AND accounts.deleted_at IS NULL
-         )",
+        &format!(
+            "UPDATE identities SET deleted_at = ?2
+             WHERE deleted_at IS NULL AND identity_group = {OWNING_GROUP}
+             AND NOT EXISTS (
+                 SELECT 1 FROM group_accounts JOIN accounts ON accounts.id = group_accounts.account
+                 WHERE group_accounts.identity_group = identities.identity_group
+                 AND accounts.deleted_at IS NULL
+             )"
+        ),
         params![account, stamp],
     )
     .map_err(StoreError::backend)?;
@@ -153,6 +157,10 @@ pub(crate) fn restore_account(
     if now >= dates::add_days(stamp, policy.account_days) || purged(&tx, account)? {
         return Ok(Restored::WindowClosed { deleted_at: stamp });
     }
+    let identities = format!(
+        "UPDATE identities SET deleted_at = NULL WHERE deleted_at = ?2
+         AND identity_group = {OWNING_GROUP}"
+    );
     for sql in [
         "UPDATE letters SET deleted_at = NULL WHERE deleted_at = ?2
          AND (from_account = ?1 OR to_mailbox IN (SELECT number FROM mailboxes WHERE account = ?1))",
@@ -161,8 +169,7 @@ pub(crate) fn restore_account(
         "UPDATE saves SET deleted_at = NULL WHERE account = ?1 AND deleted_at = ?2",
         "UPDATE mailboxes SET deleted_at = NULL WHERE account = ?1 AND deleted_at = ?2",
         "UPDATE accounts SET deleted_at = NULL WHERE id = ?1 AND deleted_at = ?2",
-        "UPDATE identities SET deleted_at = NULL WHERE deleted_at = ?2
-         AND identity_key = (SELECT identity_key FROM identity_accounts WHERE account = ?1)",
+        identities.as_str(),
     ] {
         tx.execute(sql, params![account, stamp])
             .map_err(StoreError::backend)?;
@@ -230,7 +237,7 @@ struct Erased {
 }
 
 /// The rows that have no meaning without the account's data: its bankroll, its save files and
-/// the link to the identity that owned it.
+/// the link to the identity group that owned it.
 fn erase_personal_rows(conn: &Connection, account: u32) -> Result<Erased, StoreError> {
     let money = changed(
         conn.execute("DELETE FROM money WHERE account = ?1", [account])
@@ -240,11 +247,8 @@ fn erase_personal_rows(conn: &Connection, account: u32) -> Result<Erased, StoreE
         conn.execute("DELETE FROM saves WHERE account = ?1", [account])
             .map_err(StoreError::backend)?,
     );
-    conn.execute(
-        "DELETE FROM identity_accounts WHERE account = ?1",
-        [account],
-    )
-    .map_err(StoreError::backend)?;
+    conn.execute("DELETE FROM group_accounts WHERE account = ?1", [account])
+        .map_err(StoreError::backend)?;
     Ok(Erased { money, saves })
 }
 
@@ -425,7 +429,7 @@ fn purge_accounts(
     Ok(())
 }
 
-/// A hold on the session's account, or on any account its identity owns, keeps the row.
+/// A hold on the session's account, or on any account its identity's group owns, keeps the row.
 fn purge_sessions(conn: &Connection, now: i64, policy: RetentionPolicy) -> Result<u64, StoreError> {
     let n = conn
         .execute(
@@ -435,8 +439,10 @@ fn purge_sessions(conn: &Connection, now: i64, policy: RetentionPolicy) -> Resul
                  SELECT 1 FROM holds
                  WHERE holds.expires_at > ?2
                  AND (holds.account = sessions.account OR holds.account IN (
-                     SELECT account FROM identity_accounts
-                     WHERE identity_accounts.identity_key = sessions.identity_key
+                     SELECT account FROM group_accounts WHERE identity_group = (
+                         SELECT identity_group FROM identities
+                         WHERE identities.identity_key = sessions.identity_key
+                     )
                  ))
              )",
             params![cutoff(now, policy.session_days), now],
@@ -484,17 +490,18 @@ fn purge_admin(
     Ok(())
 }
 
-/// An identity that owns no account and has no session row left is gone; sealed records that
-/// named it keep their row with the link cleared (ON DELETE SET NULL). An hour's grace covers a
-/// sign-in between creating the identity and its session.
+/// An identity whose group owns no account and that has no session row left is gone; sealed
+/// records that named it keep their row with the link cleared (ON DELETE SET NULL). An hour's
+/// grace covers a sign-in between creating the identity and its session. A group left with no
+/// identity and no account goes with it.
 fn purge_identities(conn: &Connection, now: i64) -> Result<u64, StoreError> {
     let n = conn
         .execute(
             "DELETE FROM identities
              WHERE created_at < ?1
              AND NOT EXISTS (
-                 SELECT 1 FROM identity_accounts
-                 WHERE identity_accounts.identity_key = identities.identity_key
+                 SELECT 1 FROM group_accounts
+                 WHERE group_accounts.identity_group = identities.identity_group
              )
              AND NOT EXISTS (
                  SELECT 1 FROM sessions WHERE sessions.identity_key = identities.identity_key
@@ -502,6 +509,13 @@ fn purge_identities(conn: &Connection, now: i64) -> Result<u64, StoreError> {
             [now.saturating_sub(dates::HOUR)],
         )
         .map_err(StoreError::backend)?;
+    conn.execute(
+        "DELETE FROM identity_groups
+         WHERE NOT EXISTS (SELECT 1 FROM identities WHERE identity_group = identity_groups.id)
+         AND NOT EXISTS (SELECT 1 FROM group_accounts WHERE identity_group = identity_groups.id)",
+        [],
+    )
+    .map_err(StoreError::backend)?;
     Ok(changed(n))
 }
 

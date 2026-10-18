@@ -103,8 +103,8 @@ fn foreign_keys_are_on_for_every_connection() {
     assert!(on);
 }
 
-/// One live account (1), its mailbox (1), an identity (key 0x11) and an operator (key 0x22): the
-/// parents an orphan insert below lacks one of.
+/// One live account (1), its mailbox (1), an identity (key 0x11) in group 1 and an operator (key
+/// 0x22): the parents an orphan insert below lacks one of.
 fn parents() -> SqliteStore {
     let store = SqliteStore::open_in_memory().unwrap();
     store
@@ -116,8 +116,13 @@ fn parents() -> SqliteStore {
     store.assign_mailbox(AccountId(1)).unwrap();
     let conn = store.connection();
     conn.execute(
-        "INSERT INTO identities (identity_key, key_version, provider, created_at)
-         VALUES (?1, 'v', 'p', 1)",
+        "INSERT INTO identity_groups (id, created_at) VALUES (1, 1)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO identities (identity_key, key_version, provider, created_at, identity_group)
+         VALUES (?1, 'v', 'p', 1, 1)",
         [vec![0x11u8; 32]],
     )
     .unwrap();
@@ -133,8 +138,8 @@ fn parents() -> SqliteStore {
 #[test]
 fn an_orphan_insert_fails_for_every_foreign_key() {
     let store = parents();
-    // Each statement names a missing parent through exactly one column: account 9, mailbox 9,
-    // identity 0x99.., operator 0x98.. All other columns are valid, so each failure is that key.
+    // Each statement names one missing parent (account, mailbox or group 9, a zero identity or
+    // operator key) through exactly one column, so each failure is that key.
     let orphans: &[(&str, &str)] = &[
         ("mailboxes.account", "INSERT INTO mailboxes (account, created_at) VALUES (9, 1)"),
         (
@@ -170,14 +175,17 @@ fn an_orphan_insert_fails_for_every_foreign_key() {
             "INSERT INTO holds (account, placed_at, expires_at) VALUES (9, 1, 2)",
         ),
         (
-            "identity_accounts.account",
-            "INSERT INTO identity_accounts (account, identity_key, created_at)
-             VALUES (9, x'1111111111111111111111111111111111111111111111111111111111111111', 1)",
+            "identities.identity_group",
+            "INSERT INTO identities (identity_key, key_version, provider, created_at, identity_group)
+             VALUES (zeroblob(32), 'v', 'p', 1, 9)",
         ),
         (
-            "identity_accounts.identity_key",
-            "INSERT INTO identity_accounts (account, identity_key, created_at)
-             VALUES (1, zeroblob(32), 1)",
+            "group_accounts.account",
+            "INSERT INTO group_accounts (account, identity_group, created_at) VALUES (9, 1, 1)",
+        ),
+        (
+            "group_accounts.identity_group",
+            "INSERT INTO group_accounts (account, identity_group, created_at) VALUES (1, 9, 1)",
         ),
         (
             "sessions.identity_key",
@@ -237,8 +245,9 @@ fn an_orphan_insert_fails_for_every_foreign_key() {
         "money",
         "saves",
         "holds",
+        "identity_groups",
         "identities",
-        "identity_accounts",
+        "group_accounts",
         "sessions",
         "audit_sessions",
         "operators",
@@ -410,6 +419,59 @@ fn an_old_database_is_refused_untouched_with_the_remedy() {
         assert!(error.contains(".db.old"), "{error}");
         assert_eq!(std::fs::read(&file.0).unwrap(), before, "not converted");
     }
+}
+
+#[test]
+fn version_5_moves_each_identity_into_a_group_of_its_own_with_its_accounts() {
+    let file = TempDatabase::new();
+    let conn = Connection::open(&file.0).unwrap();
+    conn.execute_batch(BASELINE).unwrap();
+    conn.pragma_update(None, "user_version", BASELINE_VERSION)
+        .unwrap();
+    conn.execute_batch(
+        "INSERT INTO accounts (id, password, persona, user_flags, rating, status,
+                               password_expired, created_at)
+         VALUES (100001, zeroblob(10), 'a', 0, 0, 0, 0, 1), (100002, zeroblob(10), 'b', 0, 0, 0, 0, 1);
+         INSERT INTO identities (identity_key, key_version, provider, created_at)
+         VALUES (x'1111111111111111111111111111111111111111111111111111111111111111', 'v', 'p', 5),
+                (x'2222222222222222222222222222222222222222222222222222222222222222', 'v', 'q', 6);
+         INSERT INTO identity_accounts (account, identity_key, created_at)
+         VALUES (100001, x'1111111111111111111111111111111111111111111111111111111111111111', 7),
+                (100002, x'2222222222222222222222222222222222222222222222222222222222222222', 8);",
+    )
+    .unwrap();
+    drop(conn);
+    let store = file.open();
+    assert_eq!(version(&store), SCHEMA_VERSION);
+    let conn = store.connection();
+    let owners: Vec<(u32, i64, i64)> = conn
+        .prepare(
+            "SELECT account, group_accounts.created_at, linked_at FROM group_accounts
+             JOIN identities USING (identity_group) ORDER BY account",
+        )
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(owners, [(100_001, 7, 5), (100_002, 8, 6)]);
+    let groups: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT identity_group) FROM identities",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(groups, 2);
+    let old: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'identity_accounts'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(old, 0);
+    assert!(foreign_key_violations(&conn).unwrap().is_empty());
 }
 
 #[test]
