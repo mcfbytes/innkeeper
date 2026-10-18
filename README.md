@@ -13,6 +13,8 @@ reverse-engineering tools and notes behind it. The client side runs in a ScummVM
 | `crates/` | The server, a Rust workspace (below) |
 | `tools/` | Python extraction and analysis tools for the original media |
 | `tools/dosbox/` | Runs the original client in headless DOSBox-X against the server; see `docs/dosbox.md` |
+| `data/trivia/` | Original GPL-3.0 trivia questions the NTN rooms deal (`questions.json`) |
+| `third_party/opentdb/` | Open Trivia Database snapshot (CC BY-SA 4.0; see `LICENSE` and `ATTRIBUTION.md` there) |
 
 ## Crates
 
@@ -27,3 +29,9 @@ reverse-engineering tools and notes behind it. The client side runs in a ScummVM
 Everything below `innkeeperd` is synchronous and does no I/O. `cargo test` runs the golden byte tests.
 
 Game media and anything extracted from it are never committed. Bring your own disks.
+
+The NTN Trivia rooms mix original questions (`data/trivia/questions.json`, GPL-3.0-or-later, same
+licence as this repository) with a snapshot of the [Open Trivia Database](https://opentdb.com)
+(`third_party/opentdb/`, Creative Commons Attribution-ShareAlike 4.0). That snapshot is unmodified
+apart from the fetch script's percent-decoding and stable ids; the licence text is in
+`third_party/opentdb/LICENSE`.

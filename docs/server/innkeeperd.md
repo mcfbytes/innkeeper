@@ -59,6 +59,7 @@ events come out, and timers are a `next_deadline()` that the caller sleeps on. `
 cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures] [--no-capture]
                            [--public] [--sandbox | --no-sandbox] [--allow-root] [--sandbox-log]
                            [--data-dir DIR]
+                           [--trivia-dir data/trivia] [--opentdb third_party/opentdb/opentdb.json]
                            [--audit-public-key FILE --audit-key-id KID] [--audit-retention-days 90]
                            [--line auto|hayes|pad] [--connect-rate 2400]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
@@ -77,6 +78,8 @@ cargo run -p innkeeperd -- db reset --data-dir DIR
 - `--int14h-bind` is where transport clients connect (`docs/protocol/int14h-transport.md`), and `--no-int14h`
   leaves that listener off. A transport connection gets a capture file like a legacy one: `tx` and `rx` are
   the envelope bytes, `ev` the decoded client and host messages.
+- `--trivia-dir` is the GPL question bank (`questions.json`); `--opentdb` is the Open Trivia DB snapshot
+  (CC BY-SA 4.0). Both are read at start-up. The show is [trivia.md](trivia.md).
 - `--ws-bind` turns on WebSocket lines, used by the browser build of the client in the sibling project
   `INN-Decomp` (its `docs/web.md`). It is off unless given. A connection upgrades over plain HTTP (`ws://`;
   put a TLS proxy in front for `wss://`), then is a legacy session exactly like one on `--bind`: line
@@ -196,14 +199,15 @@ DATA frame per client message.
 | `player` | `PlayerSession`: one client from Login to hang-up, as an enum of `AwaitingLogin` and `LoggedIn`; turns each client message into `Delivery` values, with the object commands answered by the store; `persona()` reports the name the player plays now (the Login's, then the latest 40/4). Each message republishes the signed-on player for the phone book |
 | `rpg` | Yserbius, Cawdor and Twinion: the title table (land type, version, land size), the 41/2 service lookup, the place a land joinNet sets and the map groups shared within it, the land version gate, no echo of RPG sends. See [yserbius.md](../protocol/yserbius.md) and [cawdor.md](../protocol/cawdor.md) |
 | `bbs` | the RPG bulletin board (27) over the store's boards: a fixed directory per location, messages numbered in posting order |
-| `mall` | Shoppers Advantage (54): the gate launches Shop, the join is answered, and one line says the mall is closed |
+| `mall` | Shoppers Advantage (54, server 5): the gate launches Shop, the join is answered, and one line says the mall is closed |
+| `trivia` | NTN Trivia (54, server 4): three rooms, a handle logon, and a Countdown show. See [trivia.md](trivia.md) |
 | `signup` | command 55/1, before Login: create an account and return its number on Ack 55/1 |
 | `conference` | command 41/0: a free conference name is SID 0, a taken name is that object's SID |
 | `user_find` | command 49: who is logged in, by account (49/1) or by name (49/2), and the land they are still in |
 | `object_list` | commands 51/0 and 52/0: create a list of plain objects and free them the way leaveNet does |
 | `router` | `router::send` and `router::multicast`: a `Send` or a multicast becomes one `HostMessage::Send` per connection that holds the target, read from `ObjectStore::recipients`. See [router.md](router.md) |
 | `objects` | `ObjectStore`: every networked object of the host, its holders and the members of each group, with host-wide SIDs; `ConnectionId` and `Delivery { to, message }` address a message to a connection. It also keeps who is logged in, and drops them on hang-up. See [objects.md](objects.md) |
-| `world` | `World`: host number, accounts, lands, clock and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
+| `world` | `World`: host number, accounts, lands, clock, the trivia shows and the `Store` handle, shared read-only by every connection; `World::stock()` is the open dev host, `World::stored(store)` keeps accounts in a store |
 | `store` | `Store`: accounts, bankrolls, mailboxes and boards behind one synchronous trait, with `MemoryStore`; `innkeeperd::sqlite_store::SqliteStore` is the durable implementation. See [store.md](store.md) |
 | `assumptions` | values the client does not pin down, each naming its section of `messages.md`. A name ending `_ASSUMED` is an inference; `MONEY_STARTING_BALANCE` is an operator choice |
 
@@ -213,7 +217,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 |---|---|
 | Login (53, 59) | Ack `whichCmd` 22 carrying the account's `userFlags`, `status` and `rating` (all 0 on the open book). Nak 22 otherwise: reason 9 (the client asks for the password again, three tries) for a wrong password, reason 1 with a text for an unknown account or an unreadable store, reason 2 (INFERRED, `UNLISTED_LAND_NAK_ASSUMED`) for a land type the catalog lacks. A Login on a connection that holds objects first releases them, as a hang-up does. A signup row whose password is still the placeholder adopts the password this Login presents (`SIGNUP_ADOPTS_PRESENTED_PASSWORD_ASSUMED`) |
 | signup (55/1) | Ack 55/1 with the new account number at words 6 and 8, before Login, and the session stays logged out. The form has no password, so the row keeps `SIGNUP_PASSWORD_ASSUMED` until that first Login (`SIGNUP_KEEPS_ONLY_THE_ACCOUNT_ASSUMED`). Numbers start at `SIGNUP_FIRST_ACCOUNT_ASSUMED`. An explicit signup creates a row even when enrolment is closed (`SIGNUP_CREATES_WHEN_ENROLMENT_IS_CLOSED_ASSUMED`). The new account is given 500 CasinoBucks unless that number already has a balance. A store fault sends nothing |
-| 54/27, 54/25, 54/24, 54/26 | The gate launches Shop (`MALL_LAUNCHES_SHOP_ASSUMED`): one 54/19, then 54/17 and a 54/16 kind 1 that says the mall is closed (`MALL_CLOSED_TEXT_ASSUMED`, `MALL_NOTICE_FOLLOWS_JOIN_ASSUMED`). Word 2 of each reply is `MALL_HEADER_SLOT_ASSUMED`. A typed `/EXIT` also gets 54/20 kind `0x1A`. 54/26 gets 54/19 kind `0x1A`. There is no mall back end |
+| 54/27, 54/25, 54/24, 54/26 | Server word 5: the gate launches Shop (`MALL_LAUNCHES_SHOP_ASSUMED`): one 54/19, then 54/17 and a 54/16 kind 1 that says the mall is closed (`MALL_CLOSED_TEXT_ASSUMED`, `MALL_NOTICE_FOLLOWS_JOIN_ASSUMED`). Word 2 of each reply is `MALL_HEADER_SLOT_ASSUMED`. A typed `/EXIT` also gets 54/20 kind `0x1A`. 54/26 gets 54/19 kind `0x1A`. There is no mall back end. Server word 4: NTN Trivia ([trivia.md](trivia.md)): 54/17 then types 0, 1, 0; a handle on 24 is type 39 and type 2; an answer is scored when the question clock ends; 26 drops the seat |
 | 41/0 | `ObjectLocated` with the SID at word 6. Zero means the name is free; the bound object's SID means it is taken. The check does not create the conference. The key is the raw tail (`CONFERENCE_KEY_IS_THE_RAW_TAIL_ASSUMED`) |
 | 49/1, 49/2 | one reply to the requester. `whichCmd` echoes the sub, `toSID` is 0, and `w count` is at byte 4. Sub 1 echoes the account words before the records; sub 2 does not. Each record is `b host, b landType, b landNumber, s persona`. The search is logged-in players. A name matches the persona, and the Login name (`FIND_ALSO_MATCHES_LOGIN_NAME_ASSUMED`); the printed name is the persona. `host` is this world's host number. The land is the player's place only while they still hold a member of that land's waiting room; otherwise both are 0, so the client prints "the Map". Count 0 means not found. Order is connection order (`FIND_RESULTS_IN_CONNECTION_ORDER_ASSUMED`) |
 | 51/0 | one plain object per requested count, no `ObjID`. Command 51 echoes the caller's cookie at word 4 and lists the new SIDs from byte 8. A longer list is cut to `OBJ_NEW_LIST_MAX_ASSUMED`. The words at bytes 2 and 6 are `OBJ_NEW_LIST_PREFACE_WORD_ASSUMED` and `OBJ_NEW_LIST_UNREAD_WORD_ASSUMED` |
