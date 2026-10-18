@@ -45,11 +45,21 @@ The client then sends the version line `TRIVIA%V01.200\r\n` as sub 24. The logon
 then type 1 (`vocab.729` `proc_237`). Type 0 with `local3 == 0` drops `WaitForNTNInitMsg`. Type 1 opens
 the handle dialog because `local5` starts at 1 (`vocab.729` item 1 VARIABLES `[5]=0x0001`; Feb-94 the
 same). A later type 0, once `local3 == 1`, is the reject dialog (`"because: %s"`). This host sends that
-type 0 only when a handle is refused. A handle is 1..6 graphic characters plus CR LF, uppercased. Names
-starting TSN or INN are refused, as the client already refuses them for non-staff. A taken name in the
-same room is refused the same way. Type 39 carries the accepted handle (`subStr` of the whole payload)
+type 0 only when a handle is refused. A handle is 1..6 graphic characters plus CR LF, uppercased, with
+leading and trailing spaces dropped. Names starting TSN or INN (spaces inside ignored) are refused, as the
+client already refuses them for non-staff, and so is any other staff or service name
+(`is_reserved_name`, [privacy.md](privacy.md) section 1). A name already used in the same room is
+refused the same way, and two handles that differ only in spaces (`GUY`, `G UY`) count as the same name,
+so nobody can sit beside a player under a look-alike. In `--public` the log line for an accepted handle
+carries its length, not the handle. Type 39 carries the accepted handle (`subStr` of the whole payload)
 and type 2 with help byte 0 unlocks question types (`local4` becomes 2). CONFIRMED the flag stores and
 the local initialiser; the host does not implement a staff exception.
+
+**A room with no questions.** When a room's pool is empty (no bank was found at start-up, or every
+row was dropped), a JOIN is not seated: it is answered with whichCmd 18, the JOIN failure, with word 42
+at byte 12, the client's "NTN Trivia has gone down" path, instead of whichCmd 17. Otherwise the player
+would pick a handle and wait for a question that never comes. INFERRED that the client shows the
+gone-down dialog for 18 with 42 (the codec's reading of the receive-side handlers); not run live.
 
 Sub 26 (EXIT) and a hang-up drop the seat. The next JOIN on that connection is a new session number.
 
@@ -121,5 +131,5 @@ Each pool is a shuffle-bag: it is drawn without replacement until empty, then re
 ## 6. What this host does not do
 
 Clues, leaders, net rankings, Showdown, Sports Challenge, category votes, and chat in the trivia room
-are outside the Countdown path. Command 12 from the room is ignored. whichCmd 18/20/24/25/26 and inner
-command 42 are encoded and unused.
+are outside the Countdown path. Command 12 from the room is ignored. whichCmd 18 is sent only for an
+empty room (section 2); 20/24/25/26 and inner command 42 are encoded and unused.

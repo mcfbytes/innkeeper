@@ -544,9 +544,19 @@ mod tests {
             1,
         );
         assert_eq!(shows.join(A, Some(1), 7, header(0x10)).len(), 3);
-        assert_eq!(shows.text(A, b"GUY\r\n", T0).len(), 2);
+        assert_eq!(
+            shows
+                .text(A, b"GUY\r\n", T0, crate::LogPolicy::Public)
+                .len(),
+            2
+        );
         assert_eq!(shows.join(B, Some(1), 7, header(0x11)).len(), 3);
-        assert_eq!(shows.text(B, b"MAX\r\n", T0).len(), 2);
+        assert_eq!(
+            shows
+                .text(B, b"MAX\r\n", T0, crate::LogPolicy::Public)
+                .len(),
+            2
+        );
         assert!(shows.tick(T0).is_empty());
         let start_at = T0 + AFTER_HANDLE_MS;
         let start = shows.tick(start_at);

@@ -9,8 +9,11 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use tracing::{info, warn};
 
-use crate::message::{NtnMessage, TriviaHeader, TriviaReply, TriviaRequest};
-use crate::{ConnectionId, Delivery, HostMessage, JoinNet, ObjectKind, NTN_SERVER};
+use crate::message::{CheckedFailure, NtnMessage, TriviaHeader, TriviaReply, TriviaRequest};
+use crate::{
+    is_reserved_name, ConnectionId, Delivery, HostMessage, JoinNet, LogPolicy, ObjectKind,
+    NTN_SERVER,
+};
 
 pub use bank::{OpenQuestion, PoolCounts, TriviaPools};
 pub use text::{fit, wrap, Item, RawQuestion};
@@ -45,6 +48,8 @@ const HUB_GROUPS: [u16; 3] = [16, 17, 18];
 const SIERRA_GROUPS: [u16; 3] = [7, 8, 9];
 
 pub(super) const HANDLE_LIMIT: usize = 6;
+/// The word of a JOIN failure (whichCmd 18) that makes the client say NTN Trivia has gone down.
+const SHOW_DOWN: u16 = 42;
 /// whichCmd 16 bytes 14..20. The client ignores them (`proc_237`).
 const IGNORED_PAD: usize = 7;
 pub(super) const ROOMS: usize = 3;
@@ -122,7 +127,7 @@ impl Shows {
         &mut self,
         connection: ConnectionId,
         room: Option<u8>,
-        host: u16,
+        (host, log): (u16, LogPolicy),
         request: &TriviaRequest,
         now: u64,
     ) -> Vec<Delivery> {
@@ -134,7 +139,7 @@ impl Shows {
                 self.disconnect(connection);
                 Vec::new()
             }
-            TriviaRequest::Text { text, .. } => self.text(connection, text, now),
+            TriviaRequest::Text { text, .. } => self.text(connection, text, now, log),
         }
     }
 
@@ -170,6 +175,25 @@ impl Shows {
     ) -> Vec<HostMessage> {
         self.disconnect(connection);
         let index = room_index(room);
+        if self.bags.get(index).is_none_or(bank::RoomBag::is_empty) {
+            // No questions to deal: the player would wait forever, so the show says it is down.
+            warn!(
+                room = index + 1,
+                "trivia JOIN refused: the room has no questions"
+            );
+            let header = TriviaHeader {
+                server: NTN_SERVER,
+                number: 0,
+                host,
+                remote: 0,
+                sid: request.sid,
+            };
+            return vec![HostMessage::Trivia(TriviaReply::Checked {
+                which: CheckedFailure::Join,
+                header,
+                word: SHOW_DOWN,
+            })];
+        }
         let number = self.allocate();
         let seat = Seat {
             connection,
@@ -203,7 +227,13 @@ impl Shows {
         ]
     }
 
-    fn text(&mut self, connection: ConnectionId, text: &[u8], now: u64) -> Vec<Delivery> {
+    fn text(
+        &mut self,
+        connection: ConnectionId,
+        text: &[u8],
+        now: u64,
+        log: LogPolicy,
+    ) -> Vec<Delivery> {
         let Some(place) = self.place_of(connection) else {
             warn!("trivia line before JOIN: ignored");
             return Vec::new();
@@ -224,7 +254,7 @@ impl Shows {
             warn!(bytes = text.len(), "trivia handle refused");
             return into(connection, vec![game(view.header, NtnMessage::Version)]);
         };
-        if self.taken(place.room, &handle) {
+        if self.taken(place.room, &same_handle(&handle)) {
             warn!(
                 bytes = handle.len(),
                 "trivia handle already used in the room"
@@ -232,11 +262,18 @@ impl Shows {
             return into(connection, vec![game(view.header, NtnMessage::Version)]);
         }
         self.accept(place, handle.clone());
-        info!(
-            connection = connection.0,
-            handle = %String::from_utf8_lossy(&handle),
-            "trivia handle accepted"
-        );
+        match log {
+            LogPolicy::Verbose => info!(
+                connection = connection.0,
+                handle = %String::from_utf8_lossy(&handle),
+                "trivia handle accepted"
+            ),
+            LogPolicy::Public => info!(
+                connection = connection.0,
+                bytes = handle.len(),
+                "trivia handle accepted"
+            ),
+        }
         into(
             connection,
             vec![
@@ -266,13 +303,16 @@ impl Shows {
         seat.awaiting = false;
     }
 
-    fn taken(&self, room: usize, handle: &[u8]) -> bool {
+    /// `wanted` is in `same_handle` form: handles that differ only in spaces are the same handle.
+    fn taken(&self, room: usize, wanted: &[u8]) -> bool {
         let Some(room) = self.rooms.get(room) else {
             return false;
         };
-        room.seats
-            .iter()
-            .any(|seat| seat.handle.as_deref() == Some(handle))
+        room.seats.iter().any(|seat| {
+            seat.handle
+                .as_deref()
+                .is_some_and(|handle| same_handle(handle) == wanted)
+        })
     }
 
     fn view(&self, place: Place) -> Option<View> {
@@ -347,9 +387,10 @@ fn version_line(text: &[u8]) -> bool {
 }
 
 /// The client rejects `TSN` and `INN` prefixes for non-staff. This host has no staff
-/// exception on the trivia path, so every such name is refused and the dialog is reopened.
+/// exception on the trivia path, so every such name is refused and the dialog is reopened, as is
+/// any other staff or service name. Leading and trailing spaces are dropped.
 fn normalize_handle(text: &[u8]) -> Option<Vec<u8>> {
-    let line = line_of(text);
+    let line = line_of(text).trim_ascii();
     let fits = (1..=HANDLE_LIMIT).contains(&line.len());
     let graphic = line
         .iter()
@@ -358,11 +399,22 @@ fn normalize_handle(text: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     let handle: Vec<u8> = line.iter().map(u8::to_ascii_uppercase).collect();
-    let reserved = handle.starts_with(b"TSN") || handle.starts_with(b"INN");
+    let squeezed = same_handle(&handle);
+    let staff = std::str::from_utf8(&handle).map_or(true, is_reserved_name);
+    let reserved = squeezed.starts_with(b"TSN") || squeezed.starts_with(b"INN") || staff;
     match reserved {
         true => None,
         false => Some(handle),
     }
+}
+
+/// A handle with its spaces removed: what two handles are compared by, so `G UY` is `GUY`.
+fn same_handle(handle: &[u8]) -> Vec<u8> {
+    handle
+        .iter()
+        .copied()
+        .filter(|byte| *byte != b' ')
+        .collect()
 }
 
 pub(super) fn line_of(text: &[u8]) -> &[u8] {
@@ -415,9 +467,29 @@ mod tests {
         assert_eq!(replies.len(), 3);
     }
 
+    /// Three rooms with one question each, so a JOIN is seated.
+    fn stocked() -> Shows {
+        let item = text::fit(&RawQuestion {
+            question: "Who founded Sierra?".into(),
+            correct: "Ken Williams".into(),
+            incorrect: vec!["Al Lowe".into()],
+            boolean: false,
+        })
+        .unwrap();
+        let mut shows = Shows::new();
+        let pools = TriviaPools {
+            adventure: vec![item.clone()],
+            general: vec![item.clone()],
+            screens: vec![item],
+            screens_ours: Vec::new(),
+        };
+        shows.set_pools(pools, 1);
+        shows
+    }
+
     fn handle(shows: &mut Shows, connection: ConnectionId, text: &[u8]) -> Vec<HostMessage> {
         shows
-            .text(connection, text, 0)
+            .text(connection, text, 0, LogPolicy::Public)
             .into_iter()
             .map(|delivery| delivery.message)
             .collect()
@@ -441,7 +513,7 @@ mod tests {
 
     #[test]
     fn a_refused_handle_reopens_the_dialog_and_a_taken_one_does_too() {
-        let mut shows = Shows::new();
+        let mut shows = stocked();
         join(&mut shows, A, 1);
         assert!(handle(&mut shows, A, b"TRIVIA%V01.200\r\n").is_empty());
         assert!(handle(&mut shows, A, b"TSNBOB\r\n").len() == 1);
@@ -462,14 +534,54 @@ mod tests {
     }
 
     #[test]
-    fn exit_and_disconnect_free_the_handle() {
+    fn handles_that_differ_only_in_spaces_are_one_handle_and_staff_names_are_refused() {
+        let mut shows = stocked();
+        join(&mut shows, A, 1);
+        let accepted = handle(&mut shows, A, b" GUY \r\n");
+        assert!(matches!(
+            accepted.first(),
+            Some(HostMessage::Trivia(TriviaReply::Game {
+                message: NtnMessage::HandleRegistered { handle },
+                ..
+            })) if handle == b"GUY"
+        ));
+        join(&mut shows, B, 1);
+        for look_alike in [&b"GUY \r\n"[..], b" guy\r\n", b"G UY\r\n", b"g u y\r\n"] {
+            assert_eq!(handle(&mut shows, B, look_alike).len(), 1, "{look_alike:?}");
+        }
+        for staff in [&b"T SN\r\n"[..], b"SYSOP\r\n", b"ADMIN\r\n", b"   \r\n"] {
+            assert_eq!(handle(&mut shows, B, staff).len(), 1, "{staff:?}");
+        }
+        assert_eq!(handle(&mut shows, B, b"GUYS\r\n").len(), 2);
+    }
+
+    #[test]
+    fn a_room_with_no_questions_says_the_show_is_down_and_seats_nobody() {
         let mut shows = Shows::new();
+        let replies = shows.join(A, Some(2), 7, header(0x10));
+        assert!(matches!(
+            replies.as_slice(),
+            [HostMessage::Trivia(TriviaReply::Checked {
+                which: CheckedFailure::Join,
+                word: SHOW_DOWN,
+                header,
+            })] if header.sid == 0x10 && header.server == NTN_SERVER
+        ));
+        assert!(shows.place_of(A).is_none());
+        let mut stocked = stocked();
+        assert_eq!(stocked.join(A, Some(2), 7, header(0x10)).len(), 3);
+    }
+
+    #[test]
+    fn exit_and_disconnect_free_the_handle() {
+        let mut shows = stocked();
         join(&mut shows, A, 1);
         assert_eq!(handle(&mut shows, A, b"QUINN\r\n").len(), 2);
         shows.disconnect(A);
         join(&mut shows, B, 1);
         assert_eq!(handle(&mut shows, B, b"QUINN\r\n").len(), 2);
-        shows.on_request(B, Some(1), 7, &TriviaRequest::Exit(header(1)), 0);
+        let exit = TriviaRequest::Exit(header(1));
+        shows.on_request(B, Some(1), (7, LogPolicy::Public), &exit, 0);
         join(&mut shows, A, 1);
         assert_eq!(handle(&mut shows, A, b"QUINN\r\n").len(), 2);
     }

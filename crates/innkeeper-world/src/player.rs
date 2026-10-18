@@ -301,7 +301,7 @@ impl PlayerSession {
             .log
             .player_span(player.account.id.0, &player.account.persona)
             .entered();
-        let host = u16::from(world.host.0);
+        let host = (u16::from(world.host.0), self.log);
         let now = world.clock.millis();
         world.with_trivia(|shows| {
             shows.on_request(connection, player.trivia_room, host, request, now)
