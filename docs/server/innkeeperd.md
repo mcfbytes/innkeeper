@@ -166,7 +166,7 @@ serial1 = nullmodem server:127.0.0.1 port:2314 transparent:1
 
 | Stage | Server behaviour | Reference |
 |---|---|---|
-| line detection (`auto`) | skip CR, LF and space; a first byte of `A`, `a` or `+` means a raw line, anything else a modem emulator | `pad_thai::Line` |
+| line detection (`auto`) | skip CR, LF and space; a first byte of `A`, `a` or `+` means a raw line, anything else a modem emulator. The first 64 skipped bytes are replayed to the chosen side and the rest are dropped, so a line of endless noise holds no more | `pad_thai::Line` |
 | Hayes modem (raw lines) | echoes commands, answers `OK`, answers `ATD…` with `CONNECT <rate>`, `+++` with a 1 s guard time returns to command mode, `ATO` goes back online, `ATH`/`ATZ` hang up, `AT\B` sends a BREAK to the PAD | link-layer sections 4, 2.5, 5.2 |
 | PAD wake-up | `TERMINAL=` after the CR that follows `D`, then the `@` prompt; prompts anyway after two bare CRs | link-layer checklist 3 |
 | call | `c <host>` gets `<host> CONNECTED`; a new link starts with both sequences at 0 | checklist 4, 6 |
