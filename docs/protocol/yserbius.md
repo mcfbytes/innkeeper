@@ -38,7 +38,7 @@ exercised live), **INFERRED** (a host choice the client does not pin down; each 
 | 10/0 | `b 10, b 0, w group, w member` | echo to the joiner and the members; Nak 10 codes 1 to 3 | `objects::join_group` | CONFIRMED |
 | 11/0 | `b 11, b 0, w group, w member` | `GrpDel` to the remaining members | `objects::leave_group` | CONFIRMED |
 | 9/0 | `b 9, b 0, w sid` (4 bytes, no trailing word) | release; the last holder frees, peers get `ObjFree` | `ClientMessage::LeaveNet` | CONFIRMED |
-| 40/4 | `b 40, b 4, s characterName` | none; the session's persona becomes the character name | `SetPersona` | CONFIRMED |
+| 40/4 | `b 40, b 4, s characterName` | none; the session's persona (what Find and the online list show) becomes the character name, and the account's stored persona is left alone, because the session's place is an RPG title's land (kind 5 joinNet, step 3, comes first; `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`, land types 4, 6 and 8) | `SetPersona` | CONFIRMED layout; not storing INFERRED |
 | 2/0 | `b 2, b 0, w to, w from, b msgType @6, body` | relayed unchanged to the holders of `to` (an object) or of its members (a group), **not** to the sender | `router::send`, `rpg::echoes_sender` | CONFIRMED (relay); no echo INFERRED (`RPG_SENDS_ECHO_SENDER_ASSUMED`, section 4) |
 | 27/x | section 3 | section 3 | `bbs`, `message::bbs` | see section 3 |
 

@@ -276,3 +276,57 @@ fn a_persona_name_replaces_the_one_in_the_login() {
         .is_empty());
     assert_eq!(player.persona(), Some("elaine"));
 }
+
+fn land_join(land_type: u8) -> ClientMessage {
+    ClientMessage::JoinNet(JoinNet {
+        cookie: Cookie(7),
+        kind: ObjectKind::LandGroup,
+        land_type: LandType(land_type),
+        parameter: 1,
+        size: 100,
+    })
+}
+
+fn set_persona(name: &str) -> ClientMessage {
+    let mut bytes = vec![0x28, 0x04];
+    bytes.extend_from_slice(name.as_bytes());
+    bytes.push(0);
+    ClientMessage::parse(&bytes).unwrap()
+}
+
+#[test]
+fn an_rpg_sessions_character_name_renames_the_session_and_leaves_the_stored_persona() {
+    for title in [4, 6, 8] {
+        let store = Arc::new(MemoryStore::new());
+        let world = World::stored(store.clone());
+        let mut objects = ObjectStore::new();
+        let connection = ConnectionId(1);
+        let mut player = PlayerSession::new();
+        let login = ClientMessage::parse(&hex(LOGIN)).unwrap();
+        let _ = player.handle(&world, &mut objects, connection, &login);
+        let id = player.account().unwrap();
+        let _ = player.handle(&world, &mut objects, connection, &land_join(title));
+        let _ = player.handle(&world, &mut objects, connection, &set_persona("Jutara"));
+        assert_eq!(player.persona(), Some("Jutara"));
+        assert_eq!(store.account(id).unwrap().unwrap().persona, "guybrush");
+        assert_eq!(objects.online()[0].persona, "Jutara");
+    }
+}
+
+#[test]
+fn a_hub_land_sessions_persona_name_is_still_stored() {
+    let store = Arc::new(MemoryStore::new());
+    let world = World::stored(store.clone());
+    let mut objects = ObjectStore::new();
+    let connection = ConnectionId(1);
+    let mut player = PlayerSession::new();
+    let login = ClientMessage::parse(&hex(LOGIN)).unwrap();
+    let _ = player.handle(&world, &mut objects, connection, &login);
+    let id = player.account().unwrap();
+    for land in [1, 2, 3, 5] {
+        let _ = player.handle(&world, &mut objects, connection, &land_join(land));
+        let name = format!("Hub{land}");
+        let _ = player.handle(&world, &mut objects, connection, &set_persona(&name));
+        assert_eq!(store.account(id).unwrap().unwrap().persona, name);
+    }
+}
