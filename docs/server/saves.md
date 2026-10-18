@@ -55,7 +55,13 @@ upper case with `\`:
 | `INN\TWINION\TWINCHAR.DAT`, `INN\TWINION\AUTOMAPS.DAT` | Twinion characters and automaps |
 | `INN\PLAYER.DIR` and `INN\<name>.DTA`, name of 1 to 8 letters, digits, `_`, `$`, `-` | the INN persona files |
 | `INN\LL\PLAYER.DIR`, `INN\LL\<name>.DTA`, `INN\SL\PLAYER.DIR`, `INN\SL\<name>.DTA` | the CasinoLand and SierraLand personas |
+| `INN\CAWDOR\CAWCHAR.DAT`, `INN\CAWDOR\AUTOMAPS.DAT`, `INN\CAWDOR\CHARKEY.DAT` | Cawdor characters, automaps and the character key file (INN 2.4.46; `CHARKEY.DAT` is rewritten at every start, about 6.5 KB after years of play, its role is not known) |
+| `INN\PLAYER.LST`, `INN\<name>.PER`, `INN\ARENA\<name>.LND` | the Arena's personas (INN 2.4.46): the list, and per persona two files, named as `.DTA` is |
 | `INN\LL$$<digits>.DAT`, 1 to 4 digits | the CasinoLand bankroll, named from the account number; the client asks the host (command 40) only when it is missing |
+
+The paths are the 1994 client's (2.3.18). The 1995 client (2.4.46) keeps the Clubhouse's `PLAYER.DIR` and
+`.DTA` files in `INN\CC\`; the page maps them to `INN\` and back (docs/web.md in INN_Decomp), so one persona is
+one stored copy whichever version made it, and the host refuses `INN\CC\...`.
 
 `PASS_SET.DTA` is never stored or served, whatever its case or directory. Neither is `INN\LLSYSTEM.DAT`,
 CasinoLand's optional access password: like the INN password it belongs to the installation. Everything else (`.NEW` work files,

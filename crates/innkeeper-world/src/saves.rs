@@ -15,24 +15,38 @@ pub const KEPT_VERSIONS: usize = 3;
 const MAX_PATH_CHARS: usize = 64;
 
 /// Drive-relative paths (upper case, `\` separators) the server stores besides the personas
-/// (`*.DTA` in `PERSONA_DIRS`) and the CasinoLand bankroll (`INN\LL$$<digits>.DAT`).
-const FIXED_PATHS: [&str; 7] = [
+/// (`PERSONA_FILES`) and the CasinoLand bankroll (`INN\LL$$<digits>.DAT`). These are the 1994 client's
+/// (2.3.18) paths and stay the canonical ones; the 1995 client (2.4.46) keeps the Clubhouse's `PLAYER.DIR`
+/// and `.DTA` files in `INN\CC\`, which the page maps to `INN\` and back, so the host never sees `CC`.
+/// `CAWDOR\CHARKEY.DAT` and `PLAYER.LST` (the Arena's persona list) exist only in the 1995 client.
+const FIXED_PATHS: [&str; 11] = [
     "INN\\YSERBIUS\\MYCHARS.DAT",
     "INN\\YSERBIUS\\AUTOMAPS.DAT",
     "INN\\TWINION\\TWINCHAR.DAT",
     "INN\\TWINION\\AUTOMAPS.DAT",
+    "INN\\CAWDOR\\CAWCHAR.DAT",
+    "INN\\CAWDOR\\AUTOMAPS.DAT",
+    "INN\\CAWDOR\\CHARKEY.DAT",
+    "INN\\PLAYER.LST",
     "INN\\PLAYER.DIR",
     "INN\\LL\\PLAYER.DIR",
     "INN\\SL\\PLAYER.DIR",
 ];
 /// The password file is never stored.
 const PASSWORD_FILE_STEM: &str = "PASS_SET";
-/// Where personas live: the hub's, CasinoLand's (`LL`) and SierraLand's (`SL`).
-const PERSONA_DIRS: [&str; 3] = ["INN\\", "INN\\LL\\", "INN\\SL\\"];
+/// Per-persona files, `<stem><suffix>` with a DOS stem, in these folders: the `.DTA` personas of the hub,
+/// CasinoLand (`LL`) and SierraLand (`SL`), and the Arena's `INN\<stem>.PER` and `INN\ARENA\<stem>.LND`.
+const PERSONA_FILES: [(&str, &str); 5] = [
+    ("INN\\", ".DTA"),
+    ("INN\\LL\\", ".DTA"),
+    ("INN\\SL\\", ".DTA"),
+    ("INN\\", ".PER"),
+    ("INN\\ARENA\\", ".LND"),
+];
 /// CasinoLand keeps the bankroll in `INN\LL$$<digits>.DAT`, named from the account number.
 const BANKROLL_PREFIX: &str = "INN\\LL$$";
 const BANKROLL_SUFFIX: &str = ".DAT";
-const PERSONA_SUFFIX: &str = ".DTA";
+const PASSWORD_FILE_SUFFIX: &str = ".DTA";
 const DOS_STEM_MAX: usize = 8;
 
 /// The metadata of one stored version of a file.
@@ -104,13 +118,14 @@ pub fn canonical_path(raw: &str) -> Result<String, PathRefusal> {
     if bankroll {
         return Ok(path.to_owned());
     }
-    let stem = PERSONA_DIRS.iter().find_map(|dir| {
+    let stem = PERSONA_FILES.iter().find_map(|(dir, suffix)| {
         path.strip_prefix(dir)
-            .and_then(|name| name.strip_suffix(PERSONA_SUFFIX))
+            .and_then(|name| name.strip_suffix(suffix))
             .filter(|stem| !stem.is_empty() && stem.len() <= DOS_STEM_MAX && !stem.contains('\\'))
+            .map(|stem| (stem, *suffix))
     });
     match stem {
-        Some(PASSWORD_FILE_STEM) => Err(PathRefusal::PasswordFile),
+        Some((PASSWORD_FILE_STEM, PASSWORD_FILE_SUFFIX)) => Err(PathRefusal::PasswordFile),
         Some(_) => Ok(path.to_owned()),
         _ => Err(PathRefusal::NotASaveFile),
     }
@@ -135,6 +150,12 @@ mod tests {
             ("INN\\SL\\SUNNY.DTA", "INN\\SL\\SUNNY.DTA"),
             ("INN\\SL\\PLAYER.DIR", "INN\\SL\\PLAYER.DIR"),
             ("inn\\ll$$3446.dat", "INN\\LL$$3446.DAT"),
+            ("INN\\CAWDOR\\CAWCHAR.DAT", "INN\\CAWDOR\\CAWCHAR.DAT"),
+            ("inn/cawdor/automaps.dat", "INN\\CAWDOR\\AUTOMAPS.DAT"),
+            ("\\Inn\\Cawdor\\CharKey.dat", "INN\\CAWDOR\\CHARKEY.DAT"),
+            ("inn\\player.lst", "INN\\PLAYER.LST"),
+            ("INN\\bob.per", "INN\\BOB.PER"),
+            ("inn/arena/bob.lnd", "INN\\ARENA\\BOB.LND"),
         ] {
             assert_eq!(canonical_path(raw).unwrap(), canonical, "{raw}");
         }
@@ -160,6 +181,24 @@ mod tests {
         assert_eq!(refused("INN\\LL$$12A.DAT"), PathRefusal::NotASaveFile);
         assert_eq!(refused("INN\\LL\\LL$$3446.DAT"), PathRefusal::NotASaveFile);
         assert_eq!(refused("INN\\TOOLONGNAME.DTA"), PathRefusal::NotASaveFile);
+        // The 1995 client's Clubhouse folder is the page's business: the host keeps the 1994 paths.
+        assert_eq!(refused("INN\\CC\\PLAYER.DIR"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\CC\\ZELDA.DTA"), PathRefusal::NotASaveFile);
+        assert_eq!(
+            refused("INN\\CAWDOR\\CAWCHAR.NEW"),
+            PathRefusal::NotASaveFile
+        );
+        assert_eq!(refused("INN\\CAWDOR\\HELP.DAT"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\ARENA\\PLAYER.LST"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\ARENA\\BOB.PER"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\BOB.LND"), PathRefusal::NotASaveFile);
+        assert_eq!(
+            refused("INN\\ARENA\\SUB\\BOB.LND"),
+            PathRefusal::NotASaveFile
+        );
+        assert_eq!(refused("INN\\LL\\BOB.PER"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\TOOLONGNAME.PER"), PathRefusal::NotASaveFile);
+        assert_eq!(refused("INN\\.PER"), PathRefusal::NotASaveFile);
         assert_eq!(refused("INN\\.DTA"), PathRefusal::NotASaveFile);
         assert_eq!(refused(""), PathRefusal::Malformed);
         assert_eq!(refused("INN\\..\\INN\\PLAYER.DIR"), PathRefusal::Malformed);
