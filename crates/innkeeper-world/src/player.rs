@@ -572,7 +572,7 @@ mod tests {
         let relay = SendMessage {
             to: Sid(0x0100),
             from: Sid(0),
-            payload: vec![1, 0],
+            payload: vec![1, 0].into(),
         };
         let sent = ClientMessage::Send(relay.clone());
         let replies = messages(player.handle(&world, &mut objects, ME, &sent));

@@ -5,6 +5,10 @@ use crate::hayes_fever::{HayesConfig, HayesModem, ModemEvent, ModemOutput};
 use crate::pad::{Pad, PadOutput};
 use crate::PadEvent;
 
+/// Noise bytes kept for replay while the line kind is undecided; detection needs none of them,
+/// and further noise is dropped (docs/server/innkeeperd.md section 4).
+const HELD_NOISE_MAX: usize = 64;
+
 /// What sits between the client's UART and us.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LineKind {
@@ -72,7 +76,8 @@ impl Line {
         match &mut self.front {
             Front::Detecting { held } => {
                 let Some(&first) = bytes.iter().find(|&&byte| !is_line_noise(byte)) else {
-                    held.extend(bytes);
+                    let room = HELD_NOISE_MAX.saturating_sub(held.len());
+                    held.extend(bytes.iter().take(room));
                     return Vec::new();
                 };
                 let mut replay = std::mem::take(held);
@@ -201,6 +206,24 @@ mod tests {
             LineOutput::Event(LineEvent::Detected(LineKind::Hayes))
         );
         assert_eq!(replies(&outputs), "\rAT\r\r\nOK\r\n");
+    }
+
+    #[test]
+    fn endless_noise_is_held_only_up_to_the_limit() {
+        let mut line = Line::new(LineKind::Auto, HayesConfig::default());
+        let now = Instant::now();
+        for _ in 0..1024 {
+            assert!(line.handle_input(&[b' '; 4096], now).is_empty());
+        }
+        let Front::Detecting { held } = &line.front else {
+            panic!("still detecting");
+        };
+        assert_eq!(held.len(), HELD_NOISE_MAX);
+        let outputs = line.handle_input(b"AT\r", now);
+        assert_eq!(
+            outputs[0],
+            LineOutput::Event(LineEvent::Detected(LineKind::Hayes))
+        );
     }
 
     #[test]

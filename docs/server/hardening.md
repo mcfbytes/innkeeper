@@ -273,3 +273,27 @@ secret `admin-identities`, or `--admin-allowlist FILE`) and a Caddy `/admin/*` r
   allowlist file's directory**, so edits and replacements by rename are seen. Nothing else is added.
 - seccomp: the end-to-end test drives the portal under `--public` with the filter in kill mode and
   needed **no new syscalls**.
+
+## 10. Resource limits
+
+A public host runs on a 1 GiB virtual machine, so every line has a bounded share of memory and time.
+The limits live in `crates/innkeeperd/src/limits.rs` (`Limits`); the flags set them, and nothing in the
+original client depends on their exact values. The client evidence behind each choice is in the last column.
+
+| Limit | Default | Flag | What happens past it | Why this value |
+|---|---|---|---|---|
+| lines at once, over every listener | 64 | `--max-lines` | a raw TCP or INT 14h connection is closed at once; a WebSocket upgrade is answered 503 `server_full` | a line may hold its 2 MiB share below, a 2 MiB save message and its buffers, about 6 MiB at worst, so 64 lines stay within some 400 MiB of a 1 GiB machine |
+| lines of one signed-in identity | 2 | `--lines-per-identity` | the upgrade is answered 429 `too_many_lines` | the browser opens one line per game; the second covers a reload that reconnects before the old line's close has arrived. A line without a session (no `--public`) counts only against the total |
+| time with no byte from the client | 30 minutes | `--idle-timeout` (`0s` turns it off) | the line is ended | the link has no keepalive ([link-layer.md](../protocol/link-layer.md) section 6.6). LSCI polls land occupancy (47/1) every 60 s, 20 s on the map, while the host answers it (`ProcessLandInfo::changeState`), and the longest client gap in 40 captures is 60.4 s; but a DOS game (GOLF, Red Baron, the RPGs) sends nothing while its player waits, and an ACK of another player's traffic is the only sign of life. Half an hour drops abandoned and half-open lines without cutting off a reader |
+| bytes waiting for one client | 2 MiB | `--line-queue-kib` | the line is ended with a warning, its objects released as on a hang-up | the switchboard inbox and the link's unacknowledged frames are counted, each against the limit; the link sends one frame of at most 254 bytes per ACK, so 2 MiB is some ten minutes of a 2400 bps line, far more than any burst a client must take (a land directory, a full mailbox listing, a busy waiting room) |
+| one write to the client's socket | 60 s | `--write-timeout` | the line is ended | a peer that has not read for a minute has gone; the WebSocket relay, the legacy line and the INT 14h transport all write through `Limits::write_within` |
+| a DATA frame the client never acknowledges | 3 s, 10 resends | none (`tsn_link::LinkConfig`) | the line is ended | once the host abandons a frame its sequence number no longer matches the client's, which discards every later frame, so the session is over anyway; the client itself gives up after 12 resends of 5 s ([link-layer.md](../protocol/link-layer.md) section 6.6) |
+| messages a transport client leaves unreceived | 1024, or the byte share above | none | the call is ended (`LinkStatus::CarrierLost`) | [int14h-transport.md](../protocol/int14h-transport.md) section 7 |
+
+The line count is a semaphore in `Limits`; the WebSocket listener takes the place before it answers 101,
+so a refused browser sees an HTTP status rather than a socket that closes. Plain HTTP requests on that
+listener (`/healthz`, `/auth/*`) are not lines; their sockets are bounded by the 10 s header timeout.
+
+A full inbox stops taking messages at once and kicks its connection, so a client that stops
+acknowledging while others keep sending to it holds at most its share. Before these limits, a client that
+read nothing let other players' traffic pile up without end.

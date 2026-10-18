@@ -26,6 +26,7 @@ use innkeeper_world::AccountId;
 use crate::connection::{serve_line, ConnectionSettings, READ_CHUNK};
 use crate::connection_gate::{self, Binding};
 use crate::http::{self, Reply};
+use crate::limits::{Limits, Refusal};
 use crate::save_channel::SaveChannel;
 
 /// Serial bytes arrive a few at a time; a binary message larger than this is not a modem line.
@@ -86,8 +87,17 @@ pub(crate) fn accept(
             );
         }
     };
+    let identity = binding.as_ref().map(|binding| &binding.identity);
+    let permit = match settings.limits.admit(identity) {
+        Ok(permit) => permit,
+        Err(refusal) => {
+            warn!(%peer, %refusal, "websocket refused");
+            return line_refusal(refusal);
+        }
+    };
     let accept_key = derive_accept_key(key.as_bytes());
     tokio::spawn(async move {
+        let _permit = permit;
         match hyper::upgrade::on(request).await {
             Ok(upgraded) => run(TokioIo::new(upgraded), addr, settings, binding).await,
             Err(error) => warn!(%error, %peer, "websocket refused"),
@@ -101,6 +111,21 @@ pub(crate) fn accept(
         headers.insert(SEC_WEBSOCKET_ACCEPT, value);
     }
     response
+}
+
+fn line_refusal(refusal: Refusal) -> Reply {
+    match refusal {
+        Refusal::ServerFull => http::error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "server_full",
+            "Every line is taken. Try again later.",
+        ),
+        Refusal::IdentityFull => http::error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too_many_lines",
+            "This sign-in already has its lines open.",
+        ),
+    }
 }
 
 fn handshake_key<B>(request: &Request<B>) -> Option<String> {
@@ -142,8 +167,9 @@ async fn run<S>(
     let (line, session_end) = tokio::io::duplex(LINE_BUFFER);
     let (logon, signed_on) = watch::channel(None);
     let saves = SaveChannel::new(Arc::clone(&settings.world.store));
+    let shared = Arc::clone(&settings);
     let (relayed, ()) = tokio::join!(
-        relay(socket, line, saves, signed_on),
+        relay(socket, line, saves, signed_on, &shared.limits),
         serve_line(
             session_end,
             addr,
@@ -172,6 +198,7 @@ async fn relay<S>(
     line: DuplexStream,
     mut saves: SaveChannel,
     mut signed_on: watch::Receiver<Option<AccountId>>,
+    limits: &Limits,
 ) -> Result<(), RelayError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -193,7 +220,7 @@ where
                     Message::Text(text) => {
                         debug!(len = text.len(), "save channel request");
                         for reply in saves.handle(&text, now_millis()) {
-                            to_browser.send(Message::text(reply)).await?;
+                            limits.write_within(to_browser.send(Message::text(reply))).await??;
                         }
                     }
                     Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
@@ -206,15 +233,15 @@ where
                 }
                 let account = *signed_on.borrow_and_update();
                 for reply in saves.set_account(account) {
-                    to_browser.send(Message::text(reply)).await?;
+                    limits.write_within(to_browser.send(Message::text(reply))).await??;
                 }
             }
             read = from_session.read(&mut chunk) => {
                 let Some(bytes) = chunk.get(..read?).filter(|bytes| !bytes.is_empty()) else {
-                    to_browser.send(Message::Close(None)).await?;
+                    limits.write_within(to_browser.send(Message::Close(None))).await??;
                     return Ok(());
                 };
-                to_browser.send(Message::binary(bytes.to_vec())).await?;
+                limits.write_within(to_browser.send(Message::binary(bytes.to_vec()))).await??;
             }
         }
     }

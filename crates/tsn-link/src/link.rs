@@ -142,6 +142,15 @@ impl Link {
         matches!(self.sender, Sender::Idle) && self.packer.is_empty()
     }
 
+    /// Bytes queued for the client and not yet acknowledged: what a client that stops ACKing piles up.
+    pub fn queued_len(&self) -> usize {
+        let outstanding = match &self.sender {
+            Sender::AwaitingAck { frame, .. } => frame.len(),
+            Sender::Idle => 0,
+        };
+        self.packer.queued_len() + outstanding
+    }
+
     /// Holds new DATA frames until the client's next DATA frame, or for `longest` at most.
     pub fn hold_until_heard(&mut self, now: Instant, longest: Duration) {
         self.quiet_until = self.quiet_until.max(now + longest);

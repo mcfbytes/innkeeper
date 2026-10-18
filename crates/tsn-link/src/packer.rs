@@ -10,6 +10,8 @@ pub(crate) struct FramePacker {
     open: Vec<u8>,
     open_escaped: usize,
     closed: VecDeque<Vec<u8>>,
+    /// Payload bytes in `open` and `closed` together.
+    queued: usize,
 }
 
 impl FramePacker {
@@ -43,12 +45,20 @@ impl FramePacker {
     }
 
     pub(crate) fn pop_closed(&mut self) -> Option<Vec<u8>> {
-        self.closed.pop_front()
+        let frame = self.closed.pop_front()?;
+        self.queued = self.queued.saturating_sub(frame.len());
+        Some(frame)
+    }
+
+    /// Payload bytes waiting to leave, in closed frames and the open one.
+    pub(crate) fn queued_len(&self) -> usize {
+        self.queued
     }
 
     fn append(&mut self, byte: u8) {
         self.open.push(byte);
         self.open_escaped += escaped_len(byte);
+        self.queued += 1;
     }
 
     fn close(&mut self) {
@@ -90,6 +100,16 @@ mod tests {
         let mut parser = MessageParser::new();
         let parsed: Vec<Message> = frames.iter().flat_map(|f| parser.push(f)).collect();
         assert_eq!(parsed, messages);
+    }
+
+    #[test]
+    fn queued_bytes_count_until_a_frame_is_taken() {
+        let mut packer = FramePacker::default();
+        packer.push_message(&Message::try_new(vec![0x41; 1000]).unwrap());
+        assert_eq!(packer.queued_len(), 1003);
+        let frames = drain(&mut packer);
+        assert_eq!(frames.iter().map(Vec::len).sum::<usize>(), 1003);
+        assert_eq!(packer.queued_len(), 0);
     }
 
     #[test]

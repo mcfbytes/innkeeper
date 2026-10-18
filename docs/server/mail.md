@@ -57,7 +57,8 @@ fields. The client matches the box words with the box it asked about and ignores
 | Nak 37/sub | `b fault, w low, w high` of the box the request named | CONFIRMED layout |
 
 Faults are the client's own error numbers, which it turns into text (`script.145` export 10): 2 "the
-host had some kind of disk error" (a failing store), 6 "it does not exist" (an addressee's box nobody
+host had some kind of disk error" (a failing store), 5 "there is not enough room left" (a full box or a spent
+quota, section 9), 6 "it does not exist" (an addressee's box nobody
 has), 9 box number out of range, 12 "you do not have rights to do that" (another account's box), 14 "that
 letter does not exist", 21 "the post office is closed" (see section 6).
 
@@ -155,3 +156,19 @@ mailbox number is stable) and the golden rows, which replay the layouts the clie
   forms are refused with fault 12.)
 - Services (31) is an empty list; the service forms (30) are acknowledged ([services.md](services.md)).
 - Push delivery: a client learns of a letter at its next 18, not when it arrives.
+
+## 9. Quotas and box size
+
+A server choice, not the original host's (whose limits are unknown); the constants are in
+`innkeeper-world/src/assumptions.rs` and the counting in `quota.rs`.
+
+| Limit | Value | Past it | Why |
+|---|---|---|---|
+| letters one account sends in 24 hours (`LETTERS_PER_DAY_ASSUMED`) | 100 | the send or forward is refused with fault 5 | the client sends one letter to one box per typed send or forward (`hub/script.145 class_c8::send`, `script.142` export 0); nothing sends in bulk. Deleted letters still count |
+| live letters in one box (`MAILBOX_LETTERS_MAX_ASSUMED`) | 256 | a letter to the box is refused with fault 5 | four listings of the 64 rows the client shows (`hub/script.050 ServicesMailBox::handleMsg`) |
+
+Fault 5 is the client's own "because there is not enough room left" (`hub/script.145` export 10, the
+`ldi 5` arm, CONFIRMED text; its use for the quota is INFERRED). A listing reads only its 64 rows from the
+store (`first_letters`), a new-mail check only counts (`letter_count`), and a read or forward fetches one
+letter (`letter`), so a full box costs a request no more than a short one.
+

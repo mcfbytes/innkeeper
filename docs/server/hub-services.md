@@ -184,3 +184,14 @@ boards and the flag that may write them).
 - The meaning of the two words in the short 37/20 and 37/21, and what a sysop screen expected back.
 - The hub bulletin board's boards at location 66, and the top-score boards' keys and layouts (section 8).
 - The moderator topic write and the erase live, and trivia (an SL land program), with the real client.
+
+## 12. Quotas and board size
+
+| Limit | Value | Past it | Why |
+|---|---|---|---|
+| posts, complaints, topic texts and Member Services forms one account writes in 24 hours (`POSTS_PER_DAY_ASSUMED`) | 50 | a post, topic or complaint is dropped with a warning (27 has no reply to refuse with); a Member Services form is refused with mail fault 5 | a reader types each one; deleted posts still count |
+| live posts on one RPG board | 120 (`INDEX_LIMIT`) | the oldest live post is retired (soft-deleted, so the retention purge removes it) to make room | the client indexes 120 messages in a 120-byte buffer ([yserbius.md](../protocol/yserbius.md) section 3); a post beyond them could never be read |
+
+The directory and the index count posts without reading them (`post_count`), and a read or an erase
+fetches the one post it names (`post_at`), so the store never loads a whole board for a request.
+

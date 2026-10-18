@@ -145,6 +145,11 @@ fn member_services(
         },
     );
     let body = post_body(account, &letter.envelope.text);
+    match crate::quota::may_post(world.store.as_ref(), account.id) {
+        Ok(true) => {}
+        Ok(false) => return Err(MailFault::NoRoom),
+        Err(error) => warn!(%error, "the post quota could not be read"),
+    }
     match world.store.post(board, account.id, None, &body) {
         Ok(post) => {
             info!(

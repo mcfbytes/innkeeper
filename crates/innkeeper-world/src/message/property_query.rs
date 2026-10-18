@@ -87,6 +87,14 @@ impl PropertyValue {
         }
     }
 
+    /// Bytes the value takes in a reply: a word, or the text and its NUL.
+    pub fn encoded_len(&self) -> usize {
+        match self {
+            PropertyValue::Int(_) => 2,
+            PropertyValue::Text(bytes) => bytes.len() + 1,
+        }
+    }
+
     /// The value of a `SetStr`: the client reads text only up to its first NUL.
     pub fn text(bytes: &[u8]) -> Self {
         let text = bytes.split(|&byte| byte == 0).next().unwrap_or_default();

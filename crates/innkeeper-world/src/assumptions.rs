@@ -75,6 +75,9 @@ pub(crate) const REJOIN_REPLACES_KIND_ASSUMED: ObjectKind = ObjectKind::GameObje
 /// A `Send` to a group skips the sender's connection: MiniGolf replays its own shot otherwise (games.md
 /// 5.1). GOLF, Red Baron and PaintBall name their own SID when they want their copy, and get it.
 pub(crate) const GROUP_SEND_SKIPS_SENDER_ASSUMED: bool = true;
+/// The most distinct SIDs a multicast may list: twice the 127 of a full waiting room's chat line
+/// (router.md section 3). A longer list is no client's and is dropped whole.
+pub(crate) const MULTICAST_RECIPIENTS_MAX_ASSUMED: usize = 256;
 /// A 40/4 persona name gets no reply: the stock client sends it at logon and in the Clubhouse and
 /// carries on without one (section 3.3). The name renames the session; the store keeps it as the
 /// account's persona except under `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`.
@@ -167,6 +170,20 @@ pub(crate) const OBJ_NEW_LIST_UNREAD_WORD_ASSUMED: u16 = 0;
 /// The most objects one `ObjNewList` creates. `placeMen` asks for one per inventory item
 /// (`SL/script.780`). A capture of a longer list, or the original host's limit, would settle a higher cap.
 pub(crate) const OBJ_NEW_LIST_MAX_ASSUMED: u16 = 256;
+/// The most objects one connection may hold. A PaintBall leader holds one per item tile, 113 on the
+/// largest stock map, beside some ten others (objects.md section 6); 64 lines at this cap fill half the SIDs.
+pub(crate) const HELD_OBJECTS_MAX_ASSUMED: usize = 512;
+/// Reply bytes of mirrored properties one object keeps: a name, a game, a room and a looks array are
+/// a few dozen (objects.md section 9). A later value past it is still relayed, only not mirrored.
+pub(crate) const MIRRORED_BYTES_PER_OBJECT_MAX_ASSUMED: usize = 4096;
+/// Letters one account may send in 24 hours. The client sends one per typed letter to one box
+/// (`hub/script.145`); a hundred is far more than a person writes (mail.md section 9).
+pub(crate) const LETTERS_PER_DAY_ASSUMED: usize = 100;
+/// Live letters one mailbox holds: four listings of the client's 64 rows. A send to a full box is
+/// refused with fault 5, "there is not enough room left" (`hub/script.145` export 10).
+pub(crate) const MAILBOX_LETTERS_MAX_ASSUMED: usize = 256;
+/// Posts, complaints and Member Services forms one account may write in 24 hours (hub-services.md 12).
+pub(crate) const POSTS_PER_DAY_ASSUMED: usize = 50;
 /// `ObjFreeList` tells other connections the way leaveNet does: `ObjFree` (command 9), not command 52.
 /// PaintBall's `handleMsg` has no command-52 arm (`SL/script.780`). A peer that disposed on 52 would
 /// settle it the other way.

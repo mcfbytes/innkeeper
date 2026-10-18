@@ -22,6 +22,7 @@ use crate::connection::{
     open_capture, record, report, ConnectionSettings, FileCapture, READ_CHUNK,
 };
 use crate::host::{Exchange, Host};
+use crate::limits::Limits;
 use executive::Executive;
 
 const SERVER_NAME: &str = "innkeeperd";
@@ -49,8 +50,12 @@ pub(crate) async fn serve_transport(
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
-    let id = settings.new_connection();
     let peer = settings.peer_log(addr);
+    let _permit = match settings.limits.admit(None) {
+        Ok(permit) => permit,
+        Err(refusal) => return warn!(%peer, %refusal, "transport refused"),
+    };
+    let id = settings.new_connection();
     let span = info_span!("transport", id = id.0, %peer);
     async move {
         info!("client connected");
@@ -76,6 +81,7 @@ async fn drive(
         parser: EnvelopeParser::new(),
         capture,
         log: settings.world.log,
+        limits: &settings.limits,
     };
     wire.greet().await?;
     let mut host = Host::new(settings, id);
@@ -93,11 +99,26 @@ fn line_rate(settings: &ConnectionSettings) -> LineRate {
     LineRate(u16::try_from(settings.session.hayes.connect_rate).unwrap_or(u16::MAX))
 }
 
-async fn serve_calls(wire: &mut Wire, executive: &mut Executive<'_>) -> Result<(), TransportError> {
+async fn serve_calls(
+    wire: &mut Wire<'_>,
+    executive: &mut Executive<'_>,
+) -> Result<(), TransportError> {
     let kick = executive.kick_signal();
+    let idle_after = wire.limits.idle_timeout;
+    let mut heard = tokio::time::Instant::now();
     loop {
+        let idle = async {
+            match idle_after {
+                Some(idle) => tokio::time::sleep_until(heard + idle).await,
+                None => std::future::pending().await,
+            }
+        };
         tokio::select! {
+            () = idle => {
+                return Err(io::Error::new(io::ErrorKind::TimedOut, "the client was idle").into());
+            }
             envelope = wire.next_envelope() => {
+                heard = tokio::time::Instant::now();
                 let Some(Envelope { tag, body }) = envelope? else {
                     return Ok(());
                 };
@@ -126,14 +147,15 @@ async fn serve_calls(wire: &mut Wire, executive: &mut Executive<'_>) -> Result<(
 
 /// One transport socket: envelopes in and out, every byte and step in the capture.
 #[derive(Debug)]
-struct Wire {
+struct Wire<'s> {
     stream: TcpStream,
     parser: EnvelopeParser,
     capture: Option<FileCapture>,
     log: LogPolicy,
+    limits: &'s Limits,
 }
 
-impl Wire {
+impl Wire<'_> {
     async fn greet(&mut self) -> Result<(), TransportError> {
         let Envelope { tag, body } = self.next_envelope().await?.ok_or(TransportError::NoHello)?;
         let Body::Hello(hello) = body else {
@@ -180,7 +202,9 @@ impl Wire {
         record(&mut self.capture, |c| {
             c.record_bytes(Direction::ToClient, now, &bytes)
         });
-        self.stream.write_all(&bytes).await?;
+        self.limits
+            .write_within(self.stream.write_all(&bytes))
+            .await??;
         Ok(())
     }
 

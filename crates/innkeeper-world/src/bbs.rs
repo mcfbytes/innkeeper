@@ -8,6 +8,7 @@ use crate::assumptions::{
     ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED, MEMBER_SERVICES_SECTION_ASSUMED,
 };
 use crate::message::Command;
+use crate::quota;
 use crate::{
     Account, AccountId, BbsReply, BbsRequest, BoardId, BoardListing, BoardRef, HostMessage,
     LandType, MessagePosition, Nak, ObjectStore, Place, Post, ReadStep, Sid, StoreError, World,
@@ -208,7 +209,7 @@ impl Boards<'_> {
                 location,
                 section: section.number,
             };
-            let total = word(self.posts(board)?.len());
+            let total = word(self.count(board)?);
             boards.push(BoardListing {
                 readable: section.readable,
                 total,
@@ -226,7 +227,7 @@ impl Boards<'_> {
     }
 
     fn index(&self, to: Sid, board: BoardRef) -> Result<BbsReply, StoreError> {
-        let total = word(self.posts(board)?.len().min(INDEX_LIMIT));
+        let total = word(self.count(board)?.min(INDEX_LIMIT));
         Ok(BbsReply::Index {
             to,
             board,
@@ -241,14 +242,10 @@ impl Boards<'_> {
         step: ReadStep,
         message: u16,
     ) -> Result<BbsReply, StoreError> {
-        let posts = self.posts(board)?;
-        let stored_total = word(posts.len());
+        let stored_total = word(self.count(board)?);
         let stored_number = step_to(step, message, stored_total);
-        let stored = usize::from(stored_number)
-            .checked_sub(1)
-            .and_then(|index| posts.get(index))
-            .map(|post| post.body.clone())
-            .unwrap_or_default();
+        let stored = self.numbered(board, stored_number)?;
+        let stored = stored.map(|post| post.body).unwrap_or_default();
         let (number, total, body) = shown_topics(board, stored_number, stored_total, stored);
         Ok(BbsReply::Message {
             to,
@@ -271,6 +268,10 @@ impl Boards<'_> {
             warn!(?board, "post to a board no directory lists: dropped");
             return Ok(());
         }
+        if !quota::may_post(self.world.store.as_ref(), self.account)? {
+            return Ok(());
+        }
+        self.make_room(board)?;
         let body = authored(&author_of(self.account, self.persona), body);
         let id = self
             .world
@@ -288,6 +289,9 @@ impl Boards<'_> {
                 ?board,
                 "topic text from a reader without moderator rights: dropped"
             );
+            return Ok(());
+        }
+        if !quota::may_post(self.world.store.as_ref(), self.account)? {
             return Ok(());
         }
         let id = self.board_id(board);
@@ -312,11 +316,8 @@ impl Boards<'_> {
 
     /// Message `message` of a board goes when its author or a privileged reader asks.
     fn erase(&self, board: BoardRef, message: u16) -> Result<(), StoreError> {
-        let posts = self.posts(board)?;
-        let post = usize::from(message)
-            .checked_sub(1)
-            .and_then(|index| posts.get(index));
-        let Some(post) = post else {
+        let post = self.numbered(board, message)?;
+        let Some(post) = post.as_ref() else {
             info!(
                 ?board,
                 message, "erase of a message that is not there: ignored"
@@ -340,11 +341,38 @@ impl Boards<'_> {
         Ok(())
     }
 
-    fn posts(&self, board: BoardRef) -> Result<Vec<Post>, StoreError> {
+    /// The live posts of a board this host serves, counted without their bodies.
+    fn count(&self, board: BoardRef) -> Result<usize, StoreError> {
         if !is_listed(board) && !is_topic_board(board) {
-            return Ok(Vec::new());
+            return Ok(0);
         }
-        self.world.store.posts(self.board_id(board))
+        self.world.store.post_count(self.board_id(board))
+    }
+
+    /// Message `number` of a board, counting the oldest live post as 1.
+    fn numbered(&self, board: BoardRef, number: u16) -> Result<Option<Post>, StoreError> {
+        let Some(index) = usize::from(number).checked_sub(1) else {
+            return Ok(None);
+        };
+        if !is_listed(board) && !is_topic_board(board) {
+            return Ok(None);
+        }
+        self.world.store.post_at(self.board_id(board), index)
+    }
+
+    /// A full board lets its oldest posts go, so the newest stay within the client's index.
+    fn make_room(&self, board: BoardRef) -> Result<(), StoreError> {
+        let id = self.board_id(board);
+        let store = &self.world.store;
+        let excess = store.post_count(id)?.saturating_sub(INDEX_LIMIT - 1);
+        for _ in 0..excess {
+            let Some(oldest) = store.post_at(id, 0)? else {
+                break;
+            };
+            store.delete_post(id, oldest.id)?;
+            info!(?board, post = oldest.id.0, "oldest board message retired");
+        }
+        Ok(())
     }
 
     /// The land type in the top byte keeps each RPG title's boards of one location apart.
@@ -408,6 +436,9 @@ fn complaint(
         },
     );
     let about = offender(objects, account.id, text);
+    if !crate::quota::may_post(world.store.as_ref(), account.id).unwrap_or(true) {
+        return;
+    }
     match world.store.post(board, account.id, about, &body) {
         Ok(post) => info!(
             account = account.id.0,
@@ -523,6 +554,60 @@ fn word(count: usize) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn boards_of(world: &World, account: AccountId) -> Boards<'_> {
+        Boards {
+            world,
+            land: LandType(1),
+            privileged: false,
+            moderator: false,
+            account,
+            persona: "p",
+        }
+    }
+
+    const TAVERN: BoardRef = BoardRef {
+        location: 0x59,
+        section: 1,
+    };
+
+    fn stored_world(accounts: u32) -> World {
+        let world = World::stored(std::sync::Arc::new(crate::MemoryStore::new()));
+        for n in 0..accounts {
+            let record = crate::AccountRecord::new(crate::EncodedPassword([1; 10]), "p");
+            world
+                .store
+                .create_account(AccountId(100_001 + n), record)
+                .unwrap();
+        }
+        world
+    }
+
+    #[test]
+    fn a_full_board_lets_its_oldest_posts_go() {
+        let world = stored_world(3);
+        for n in 0..130u32 {
+            let boards = boards_of(&world, AccountId(100_001 + n % 3));
+            boards.post(TAVERN, &n.to_le_bytes()).unwrap();
+        }
+        let boards = boards_of(&world, AccountId(100_001));
+        assert_eq!(boards.count(TAVERN).unwrap(), INDEX_LIMIT);
+        let oldest = boards.numbered(TAVERN, 1).unwrap().unwrap();
+        assert!(oldest.body.ends_with(&10u32.to_le_bytes()));
+        let newest = boards.numbered(TAVERN, 120).unwrap().unwrap();
+        assert!(newest.body.ends_with(&129u32.to_le_bytes()));
+    }
+
+    #[test]
+    fn an_author_past_the_daily_quota_posts_nothing() {
+        let world = stored_world(1);
+        let boards = boards_of(&world, AccountId(100_001));
+        for _ in 0..crate::assumptions::POSTS_PER_DAY_ASSUMED + 5 {
+            boards.post(TAVERN, b"spam").unwrap();
+        }
+        let kept = boards.count(TAVERN).unwrap();
+        assert_eq!(kept, crate::assumptions::POSTS_PER_DAY_ASSUMED);
+    }
 
     #[test]
     fn steps_stay_on_the_board() {

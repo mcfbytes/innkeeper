@@ -135,7 +135,7 @@ kinds meet in the same rooms. Its choices, where section 1 and `int14h-api.md` l
 | Connect | result 0 for any dial string, also when already connected; the dial string is logged, not used |
 | Send | the body goes through the same message handler as a legacy client's; `true` once handled, `false` when not connected or empty |
 | Receive | the oldest waiting message: the replies to this client and the messages other connections caused, in the order the object store made them |
-| Poll, Service | 0, and 1 exactly once after the server ended the call; the server ends it when more than 1024 messages wait unreceived (`RECEIVE_QUEUE_LIMIT`) |
+| Poll, Service | 0, and 1 exactly once after the server ended the call; the server ends it when more than 1024 messages, or more than the line's byte share (2 MiB by default), wait unreceived (`RECEIVE_QUEUE_LIMIT`, `--line-queue-kib`) |
 | IsTransmitIdle | always true: calls are handled in order, so when a REPLY arrives nothing the client sent is still unprocessed |
 | SwitchHost | 0 for any address, and the waiting messages are dropped, as TSNEXEC flushes its queues; 1 when not connected. The login and the objects stay, since the client logs in again after a switch |
 | Disconnect | releases what the connection holds, as a hang-up does, and drops the waiting messages |

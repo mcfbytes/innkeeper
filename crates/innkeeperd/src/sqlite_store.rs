@@ -9,11 +9,13 @@ use innkeeper_world::saves::{hash_hex, SaveMeta, KEPT_VERSIONS};
 use innkeeper_world::{
     not_a_complaint, post_kind, AccountId, AccountRecord, BoardId, EncodedPassword, Letter,
     LetterId, LoginStatus, MailboxNumber, Money, Post, PostId, PostKind, Store, StoreError,
+    Written,
 };
 use rusqlite::types::Type;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use crate::dates;
+use crate::sqlite_listing;
 
 /// The schema every new database starts at. Earlier numbers (1 to 4) were a chain of in-place
 /// `ALTER TABLE` upgrades of test data; a database at one of them is refused with the remedy
@@ -788,6 +790,34 @@ impl Store for SqliteStore {
             })
             .map_err(backend)?;
         rows.collect::<Result<_, _>>().map_err(backend)
+    }
+
+    fn letter_count(&self, mailbox: MailboxNumber) -> Result<usize, StoreError> {
+        sqlite_listing::letter_count(&self.connection(), mailbox)
+    }
+
+    fn first_letters(
+        &self,
+        mailbox: MailboxNumber,
+        limit: usize,
+    ) -> Result<Vec<Letter>, StoreError> {
+        sqlite_listing::first_letters(&self.connection(), mailbox, limit)
+    }
+
+    fn letter(&self, mailbox: MailboxNumber, id: LetterId) -> Result<Option<Letter>, StoreError> {
+        sqlite_listing::letter(&self.connection(), mailbox, id)
+    }
+
+    fn post_count(&self, board: BoardId) -> Result<usize, StoreError> {
+        sqlite_listing::post_count(&self.connection(), board)
+    }
+
+    fn post_at(&self, board: BoardId, index: usize) -> Result<Option<Post>, StoreError> {
+        sqlite_listing::post_at(&self.connection(), board, index)
+    }
+
+    fn written_within(&self, author: AccountId, window_ms: i64) -> Result<Written, StoreError> {
+        sqlite_listing::written_within(&self.connection(), author, window_ms)
     }
 
     fn delete_post(&self, board: BoardId, post: PostId) -> Result<bool, StoreError> {

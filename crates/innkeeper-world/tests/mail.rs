@@ -357,3 +357,41 @@ fn a_letter_says_it_is_from_its_sender_whatever_the_envelope_claims() {
         "the sender is Alice's persona"
     );
 }
+
+#[test]
+fn a_sender_past_its_daily_quota_is_refused_with_fault_5() {
+    let mut host = Host::stored();
+    let (alice, bob) = (host.join(LOGIN_A), host.join(LOGIN_B));
+    host.mailbox_of(alice);
+    host.mailbox_of(bob);
+    let letter = || send(24, 2, envelope(1, b"Bob", b"Alice", b"hi\0"));
+    for _ in 0..100 {
+        assert_eq!(host.say(alice, &letter())[0][0], 0, "delivered");
+    }
+    let refused = [1, 0, 0, 1, 37, 24, 5, 2, 0, 0, 0];
+    assert_eq!(host.say(alice, &letter()), [refused]);
+}
+
+#[test]
+fn a_full_box_takes_no_more_letters() {
+    let store = Arc::new(MemoryStore::new());
+    let mut world = World::stored(Arc::clone(&store) as Arc<dyn innkeeper_world::Store>);
+    world.clock = Box::new(FixedClock { time: NOON });
+    let mut host = Host::on(world);
+    let bob = host.join(LOGIN_B);
+    let bob_box = innkeeper_world::MailboxNumber(host.mailbox_of(bob));
+    let bob_id = innkeeper_world::Store::highest_account_id(&*store)
+        .unwrap()
+        .unwrap();
+    for _ in 0..256 {
+        innkeeper_world::Store::append_letter(&*store, bob_box, bob_id, b"x").unwrap();
+    }
+    let alice = host.join(LOGIN_A);
+    host.mailbox_of(alice);
+    let sent = host.say(
+        alice,
+        &send(24, bob_box.0, envelope(2, b"Bob", b"Alice", b"hi\0")),
+    );
+    let refused = [1, 0, 0, 1, 37, 24, 5, bob_box.0 as u8, 0, 0, 0];
+    assert_eq!(sent, [refused]);
+}

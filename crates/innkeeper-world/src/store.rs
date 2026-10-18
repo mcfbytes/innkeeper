@@ -63,6 +63,13 @@ pub struct Letter {
     pub body: Vec<u8>,
 }
 
+/// What one account has written in a recent window, deleted rows included: the quotas count it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Written {
+    pub letters: usize,
+    pub posts: usize,
+}
+
 /// A board post as the client composed it; the store never looks inside the body.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Post {
@@ -130,6 +137,16 @@ pub trait Store: fmt::Debug + Send + Sync {
     fn letters(&self, mailbox: MailboxNumber) -> Result<Vec<Letter>, StoreError>;
     /// True when the letter was in that mailbox and is now gone.
     fn delete_letter(&self, mailbox: MailboxNumber, letter: LetterId) -> Result<bool, StoreError>;
+    /// How many live letters the mailbox holds, read without their bodies.
+    fn letter_count(&self, mailbox: MailboxNumber) -> Result<usize, StoreError>;
+    /// The oldest `limit` live letters of the mailbox, oldest first.
+    fn first_letters(
+        &self,
+        mailbox: MailboxNumber,
+        limit: usize,
+    ) -> Result<Vec<Letter>, StoreError>;
+    /// One live letter of the mailbox; none for another box's letter or a deleted one.
+    fn letter(&self, mailbox: MailboxNumber, id: LetterId) -> Result<Option<Letter>, StoreError>;
 
     /// Adds a post written by `author`, a live account. `about` is the account a complaint names
     /// and must exist; any other kind of post names nobody (`bbs::post_kind`).
@@ -142,6 +159,12 @@ pub trait Store: fmt::Debug + Send + Sync {
     ) -> Result<PostId, StoreError>;
     /// Oldest first; empty for a board nobody has posted to.
     fn posts(&self, board: BoardId) -> Result<Vec<Post>, StoreError>;
+    /// How many live posts the board holds, read without their bodies.
+    fn post_count(&self, board: BoardId) -> Result<usize, StoreError>;
+    /// The live post at `index` of the board, 0 being the oldest.
+    fn post_at(&self, board: BoardId, index: usize) -> Result<Option<Post>, StoreError>;
+    /// The letters and posts `author` wrote in the last `window_ms` milliseconds.
+    fn written_within(&self, author: AccountId, window_ms: i64) -> Result<Written, StoreError>;
 
     /// The current version of each file the account has stored, ordered by path.
     fn saves(&self, id: AccountId) -> Result<Vec<SaveMeta>, StoreError>;
@@ -237,6 +260,7 @@ struct AccountRow {
 #[derive(Clone, Debug)]
 struct HeldLetter {
     letter: Letter,
+    created_at: i64,
     deleted_at: Option<i64>,
 }
 
@@ -244,7 +268,28 @@ struct HeldLetter {
 #[derive(Clone, Debug)]
 struct HeldPost {
     post: Post,
+    created_at: i64,
     deleted_at: Option<i64>,
+}
+
+impl Tables {
+    fn live_letters(&self, mailbox: MailboxNumber) -> impl Iterator<Item = &Letter> {
+        let letters = self.letters.get(&mailbox).map(Vec::as_slice);
+        let live = letters
+            .unwrap_or(&[])
+            .iter()
+            .filter(|h| h.deleted_at.is_none());
+        live.map(|held| &held.letter)
+    }
+
+    fn live_posts(&self, board: BoardId) -> impl Iterator<Item = &Post> {
+        let posts = self.boards.get(&board).map(Vec::as_slice);
+        let live = posts
+            .unwrap_or(&[])
+            .iter()
+            .filter(|h| h.deleted_at.is_none());
+        live.map(|held| &held.post)
+    }
 }
 
 /// The versions kept of one file, oldest first, and the last version number handed out.
@@ -365,6 +410,7 @@ impl Store for MemoryStore {
                 from,
                 body: body.to_vec(),
             },
+            created_at: unix_millis(),
             deleted_at: None,
         });
         tables.letters_written = id.0;
@@ -397,6 +443,25 @@ impl Store for MemoryStore {
         Ok(true)
     }
 
+    fn letter_count(&self, mailbox: MailboxNumber) -> Result<usize, StoreError> {
+        Ok(self.tables().live_letters(mailbox).count())
+    }
+
+    fn first_letters(
+        &self,
+        mailbox: MailboxNumber,
+        limit: usize,
+    ) -> Result<Vec<Letter>, StoreError> {
+        let tables = self.tables();
+        Ok(tables.live_letters(mailbox).take(limit).cloned().collect())
+    }
+
+    fn letter(&self, mailbox: MailboxNumber, id: LetterId) -> Result<Option<Letter>, StoreError> {
+        let tables = self.tables();
+        let mut letters = tables.live_letters(mailbox);
+        Ok(letters.find(|letter| letter.id == id).cloned())
+    }
+
     fn post(
         &self,
         board: BoardId,
@@ -423,6 +488,7 @@ impl Store for MemoryStore {
                 account: author,
                 about,
             },
+            created_at: unix_millis(),
             deleted_at: None,
         });
         Ok(id)
@@ -437,6 +503,27 @@ impl Store for MemoryStore {
             .filter(|held| held.deleted_at.is_none())
             .map(|held| held.post.clone())
             .collect())
+    }
+
+    fn post_count(&self, board: BoardId) -> Result<usize, StoreError> {
+        Ok(self.tables().live_posts(board).count())
+    }
+
+    fn post_at(&self, board: BoardId, index: usize) -> Result<Option<Post>, StoreError> {
+        Ok(self.tables().live_posts(board).nth(index).cloned())
+    }
+
+    fn written_within(&self, author: AccountId, window_ms: i64) -> Result<Written, StoreError> {
+        let since = unix_millis().saturating_sub(window_ms);
+        let tables = self.tables();
+        let letters = tables.letters.values().flatten();
+        let letters = letters.filter(|h| h.letter.from == author && h.created_at > since);
+        let posts = tables.boards.values().flatten();
+        let posts = posts.filter(|h| h.post.account == author && h.created_at > since);
+        Ok(Written {
+            letters: letters.count(),
+            posts: posts.count(),
+        })
     }
 
     fn delete_post(&self, board: BoardId, post: PostId) -> Result<bool, StoreError> {
@@ -611,7 +698,7 @@ pub mod conformance {
 
     /// Runs every case, each on a store from `fresh`.
     pub fn run_all<S: Store>(fresh: impl Fn() -> S) {
-        let cases: [fn(&dyn Store); 20] = [
+        let cases: [fn(&dyn Store); 21] = [
             unknown_account_is_absent,
             persona_updates_replace_the_name_and_need_an_account,
             created_account_reads_back,
@@ -623,6 +710,7 @@ pub mod conformance {
             letters_keep_order_and_isolation,
             letters_need_a_live_sender_and_a_live_box,
             letters_are_opaque_bytes,
+            bounded_reads_match_the_full_lists_and_writes_are_counted,
             boards_keep_order_and_isolation,
             a_post_records_its_author_and_needs_a_live_one,
             only_a_complaint_names_an_account_and_it_must_exist,
@@ -774,6 +862,57 @@ pub mod conformance {
         }
         // Asking again for a box an account has uses up no number.
         assert_eq!(store.assign_mailbox(BOB).unwrap(), MailboxNumber(2));
+    }
+
+    fn bounded_reads_match_the_full_lists_and_writes_are_counted(store: &dyn Store) {
+        two_accounts(store);
+        let alice = store.assign_mailbox(ALICE).unwrap();
+        let bob = store.assign_mailbox(BOB).unwrap();
+        let letters: Vec<LetterId> = (0..5u8)
+            .map(|n| store.append_letter(alice, BOB, &[n]).unwrap())
+            .collect();
+        let theirs = store.append_letter(bob, BOB, b"theirs").unwrap();
+        store.delete_letter(alice, letters[0]).unwrap();
+        assert_eq!(store.letter_count(alice).unwrap(), 4);
+        assert_eq!(store.letter_count(MailboxNumber(999)).unwrap(), 0);
+        let page = store.first_letters(alice, 2).unwrap();
+        assert_eq!(bodies(&page, |l| &l.body), [vec![1], vec![2]]);
+        assert_eq!(store.first_letters(alice, 99).unwrap().len(), 4);
+        assert_eq!(store.letter(alice, letters[3]).unwrap().unwrap().body, [3]);
+        assert!(
+            store.letter(alice, letters[0]).unwrap().is_none(),
+            "deleted"
+        );
+        assert!(
+            store.letter(alice, theirs).unwrap().is_none(),
+            "another box"
+        );
+
+        let first = store.post(TAVERN, ALICE, None, b"one").unwrap();
+        store.post(TAVERN, ALICE, None, b"two").unwrap();
+        store.post(TAVERN, BOB, None, b"three").unwrap();
+        store.delete_post(TAVERN, first).unwrap();
+        assert_eq!(store.post_count(TAVERN).unwrap(), 2);
+        assert_eq!(store.post_at(TAVERN, 0).unwrap().unwrap().body, b"two");
+        assert_eq!(store.post_at(TAVERN, 1).unwrap().unwrap().account, BOB);
+        assert!(store.post_at(TAVERN, 2).unwrap().is_none());
+        assert_eq!(store.post_count(COMPLAINTS).unwrap(), 0);
+
+        let day = 24 * 60 * 60 * 1000;
+        let written = store.written_within(BOB, day).unwrap();
+        assert_eq!(
+            written,
+            Written {
+                letters: 6,
+                posts: 1
+            },
+            "deleted rows count"
+        );
+        assert_eq!(store.written_within(ALICE, day).unwrap().posts, 2);
+        assert_eq!(
+            store.written_within(ALICE, -day).unwrap(),
+            Written::default()
+        );
     }
 
     fn letters_keep_order_and_isolation(store: &dyn Store) {

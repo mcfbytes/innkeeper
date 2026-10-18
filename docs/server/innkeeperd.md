@@ -44,14 +44,17 @@ once per call and never for a connection that had no call. `innkeeperd` answers 
 store releases what the connection held and tells the others ([objects.md](objects.md) section 5), while
 the socket stays open for a new call. When the TCP connection closes, or a transport client calls
 Disconnect, the driver does the same.
-`Session::is_transmit_idle` says whether everything sent to the client has been acknowledged.
+`Session::is_transmit_idle` says whether everything sent to the client has been acknowledged, and
+`Session::queued_len` how many bytes still wait for that. A line whose inbox or link holds more than its
+share, whose writes stall, or whose link abandons a frame is ended (`src/limits.rs`,
+[hardening.md](hardening.md) section 10).
 `Session::begin_program_switch` holds the host's new DATA frames while the client chains programs
 (`int14h-api.md` 9.3), until the client's next DATA frame or `PROGRAM_SWITCH_QUIET_MAX_ASSUMED` (10 s),
 after which they leave in order; a frame already awaiting its ACK is still resent. Nothing arms it yet.
 
 Every crate below `innkeeperd` is synchronous and deterministic: bytes and an `Instant` go in, bytes and
 events come out, and timers are a `next_deadline()` that the caller sleeps on. `innkeeperd` depends on
-`tsn-link` directly only to choose log levels for link events.
+`tsn-link` directly only to choose log levels for link events and to end a line whose frame was abandoned.
 
 ## 2. Running
 
@@ -62,6 +65,8 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
                            [--trivia-dir data/trivia] [--opentdb third_party/opentdb/opentdb.json]
                            [--audit-public-key FILE --audit-key-id KID] [--audit-retention-days 90]
                            [--line auto|hayes|pad] [--connect-rate 2400]
+                           [--line-queue-kib 2048] [--write-timeout 60s]
+                           [--max-lines 64] [--lines-per-identity 2] [--idle-timeout 30m]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
                            [--ws-bind 127.0.0.1:2316]
                            [--auth-config FILE] [--page-origin ORIGIN ...]
@@ -131,6 +136,10 @@ cargo run -p innkeeperd -- db reset --data-dir DIR
 - `--line` says what the client's serial port reaches (section 4). `--connect-rate` is the rate in the
   emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes);
   the transport's GetLineRate answers the same rate.
+- `--line-queue-kib` and `--write-timeout` bound what one line may hold and how long a write to it may
+  stall; past either the line is ended. `--max-lines` caps the lines of every listener together,
+  `--lines-per-identity` those of one signed-in identity, and `--idle-timeout` ends a line that has sent
+  nothing for that long ([hardening.md](hardening.md) section 10).
 
 ## 3. Connecting the stock client from DOSBox-X
 
@@ -166,7 +175,7 @@ serial1 = nullmodem server:127.0.0.1 port:2314 transparent:1
 
 | Stage | Server behaviour | Reference |
 |---|---|---|
-| line detection (`auto`) | skip CR, LF and space; a first byte of `A`, `a` or `+` means a raw line, anything else a modem emulator | `pad_thai::Line` |
+| line detection (`auto`) | skip CR, LF and space; a first byte of `A`, `a` or `+` means a raw line, anything else a modem emulator. The first 64 skipped bytes are replayed to the chosen side and the rest are dropped, so a line of endless noise holds no more | `pad_thai::Line` |
 | Hayes modem (raw lines) | echoes commands, answers `OK`, answers `ATD…` with `CONNECT <rate>`, `+++` with a 1 s guard time returns to command mode, `ATO` goes back online, `ATH`/`ATZ` hang up, `AT\B` sends a BREAK to the PAD | link-layer sections 4, 2.5, 5.2 |
 | PAD wake-up | `TERMINAL=` after the CR that follows `D`, then the `@` prompt; prompts anyway after two bare CRs | link-layer checklist 3 |
 | call | `c <host>` gets `<host> CONNECTED`; a new link starts with both sequences at 0 | checklist 4, 6 |
@@ -229,7 +238,7 @@ What the host answers (`docs/protocol/messages.md` for the layouts):
 | delete (11) | `GrpDel` to the connections of the remaining members |
 | `GrpMem` (12) | the member list, from byte 6 in joining order |
 | `Send` (2) | the same `Send` to every connection that holds the object `to`, or a member of the group `to`, the sender's own connection included (INFERRED); nothing for a SID nobody holds, and no Nak |
-| multicast (28) | one `Send` of the body per recipient SID, in list order, under the same rules |
+| multicast (28) | one `Send` of the body per distinct recipient SID, in order of first listing, under the same rules; a list of more than 256 distinct SIDs is dropped ([router.md](router.md) section 2) |
 | 36/5 | `HostInfo` type 5: host number 7, the first host of the stock `HOSTADDR` |
 | 36/6 | the land directory, always (the stamp is not compared): Clubhouse, SierraLand, CasinoLand, Arena, Yserbius, Cawdor and Twinion, land number 1, on host 7. Arena is land type 5, listed after the three LSCI lands and before the RPG titles. `lsci()` is still the three-land capture |
 | 47/1 | occupancy for the same lands: maximum 64 for Clubhouse, SierraLand, CasinoLand and the Arena, and 100 for the three RPG titles, current the number of members in the land's waiting room (0 for a land nobody entered; the Clubhouse room itself holds 128, the size of the stock joinNet) |

@@ -17,6 +17,7 @@ use tsn_link::{LinkEvent, Message};
 use crate::capture::{Capture, Direction};
 use crate::connection_gate::Binding;
 use crate::host::{Exchange, Host, LoggedExchange, LogonSignal, ReplyError};
+use crate::limits::Limits;
 use crate::peer::{PeerLog, PeerTokens};
 use crate::switchboard::Switchboard;
 
@@ -45,6 +46,7 @@ pub(crate) struct ConnectionSettings {
     pub(crate) forwarding: crate::forwarded::Forwarding,
     /// Public mode: a line whose sealed record cannot be written is ended, not served unrecorded.
     pub(crate) seal_required: bool,
+    pub(crate) limits: Limits,
     next_connection: AtomicU64,
 }
 
@@ -63,6 +65,7 @@ impl ConnectionSettings {
             signup_open: true,
             forwarding: crate::forwarded::Forwarding::Direct,
             seal_required: false,
+            limits: Limits::default(),
             next_connection: AtomicU64::new(1),
             world,
         }
@@ -88,6 +91,10 @@ pub(crate) async fn serve_connection(
     settings: Arc<ConnectionSettings>,
 ) {
     let peer = settings.peer_log(addr);
+    let _permit = match settings.limits.admit(None) {
+        Ok(permit) => permit,
+        Err(refusal) => return warn!(%peer, %refusal, "connection refused"),
+    };
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
@@ -168,6 +175,8 @@ where
 {
     let mut chunk = Vec::with_capacity(READ_CHUNK);
     let kick = host.kick_signal();
+    let idle_after = host.limits().idle_timeout;
+    let mut heard = Instant::now();
     loop {
         chunk.clear();
         let run_deadline = capture.as_ref().and_then(Capture::run_deadline);
@@ -177,12 +186,19 @@ where
                     return Ok(());
                 }
                 let now = Instant::now();
+                heard = now;
                 record(capture, |c| c.record_bytes(Direction::FromClient, now, &chunk));
                 session.handle_input(&chunk, now);
             }
             () = sleep_until(session.next_deadline()) => session.handle_timeout(Instant::now()),
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
+            () = sleep_until(idle_after.map(|idle| heard + idle)) => {
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "the client was idle"));
+            }
             () = kick.notified() => {
+                if host.inbox_overflowed() {
+                    return Err(std::io::Error::other("the client's inbox is full"));
+                }
                 info!("connection ended by the operator");
                 return Ok(());
             }
@@ -197,6 +213,7 @@ where
             }
         }
         deliver_outputs(&mut session, host, stream, capture).await?;
+        host.limits().check_backlog(session.queued_len())?;
     }
 }
 
@@ -216,7 +233,9 @@ where
                 record(capture, |c| {
                     c.record_bytes(Direction::ToClient, now, &bytes)
                 });
-                stream.write_all(&bytes).await?;
+                host.limits()
+                    .write_within(stream.write_all(&bytes))
+                    .await??;
             }
             SessionOutput::Event(event) => {
                 log_event(&event, host.log_policy());
@@ -233,12 +252,19 @@ where
                         );
                     }
                     SessionEvent::LinkLost(_) => host.hang_up(),
+                    SessionEvent::Link(LinkEvent::GaveUp { .. }) => return Err(gave_up()),
                     SessionEvent::Line(_) | SessionEvent::Link(_) => {}
                 }
             }
         }
     }
     Ok(())
+}
+
+/// The client's sequence no longer matches the host's once a frame is abandoned, so the line is over.
+fn gave_up() -> std::io::Error {
+    let reason = "the client stopped acknowledging";
+    std::io::Error::new(std::io::ErrorKind::TimedOut, reason)
 }
 
 fn send_all(session: &mut Session, messages: Vec<HostMessage>, now: Instant) -> Vec<Exchange> {
