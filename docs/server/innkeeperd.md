@@ -66,6 +66,7 @@ cargo run -p innkeeperd -- [--bind 127.0.0.1:2314] [--capture-dir work/captures]
                            [--audit-public-key FILE --audit-key-id KID] [--audit-retention-days 90]
                            [--line auto|hayes|pad] [--connect-rate 2400]
                            [--line-queue-kib 2048] [--write-timeout 60s]
+                           [--max-lines 64] [--lines-per-identity 2] [--idle-timeout 30m]
                            [--int14h-bind 127.0.0.1:2315] [--no-int14h]
                            [--ws-bind 127.0.0.1:2316]
                            [--auth-config FILE] [--page-origin ORIGIN ...]
@@ -136,7 +137,9 @@ cargo run -p innkeeperd -- db reset --data-dir DIR
   emulated modem's `CONNECT` line, which the client stores as its line rate (link-layer section 4 notes);
   the transport's GetLineRate answers the same rate.
 - `--line-queue-kib` and `--write-timeout` bound what one line may hold and how long a write to it may
-  stall; past either the line is ended ([hardening.md](hardening.md) section 10).
+  stall; past either the line is ended. `--max-lines` caps the lines of every listener together,
+  `--lines-per-identity` those of one signed-in identity, and `--idle-timeout` ends a line that has sent
+  nothing for that long ([hardening.md](hardening.md) section 10).
 
 ## 3. Connecting the stock client from DOSBox-X
 

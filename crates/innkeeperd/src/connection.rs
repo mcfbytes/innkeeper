@@ -91,6 +91,10 @@ pub(crate) async fn serve_connection(
     settings: Arc<ConnectionSettings>,
 ) {
     let peer = settings.peer_log(addr);
+    let _permit = match settings.limits.admit(None) {
+        Ok(permit) => permit,
+        Err(refusal) => return warn!(%peer, %refusal, "connection refused"),
+    };
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
@@ -171,6 +175,8 @@ where
 {
     let mut chunk = Vec::with_capacity(READ_CHUNK);
     let kick = host.kick_signal();
+    let idle_after = host.limits().idle_timeout;
+    let mut heard = Instant::now();
     loop {
         chunk.clear();
         let run_deadline = capture.as_ref().and_then(Capture::run_deadline);
@@ -180,11 +186,15 @@ where
                     return Ok(());
                 }
                 let now = Instant::now();
+                heard = now;
                 record(capture, |c| c.record_bytes(Direction::FromClient, now, &chunk));
                 session.handle_input(&chunk, now);
             }
             () = sleep_until(session.next_deadline()) => session.handle_timeout(Instant::now()),
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
+            () = sleep_until(idle_after.map(|idle| heard + idle)) => {
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "the client was idle"));
+            }
             () = kick.notified() => {
                 if host.inbox_overflowed() {
                     return Err(std::io::Error::other("the client's inbox is full"));

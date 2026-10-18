@@ -50,8 +50,12 @@ pub(crate) async fn serve_transport(
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
 ) {
-    let id = settings.new_connection();
     let peer = settings.peer_log(addr);
+    let _permit = match settings.limits.admit(None) {
+        Ok(permit) => permit,
+        Err(refusal) => return warn!(%peer, %refusal, "transport refused"),
+    };
+    let id = settings.new_connection();
     let span = info_span!("transport", id = id.0, %peer);
     async move {
         info!("client connected");
@@ -100,9 +104,21 @@ async fn serve_calls(
     executive: &mut Executive<'_>,
 ) -> Result<(), TransportError> {
     let kick = executive.kick_signal();
+    let idle_after = wire.limits.idle_timeout;
+    let mut heard = tokio::time::Instant::now();
     loop {
+        let idle = async {
+            match idle_after {
+                Some(idle) => tokio::time::sleep_until(heard + idle).await,
+                None => std::future::pending().await,
+            }
+        };
         tokio::select! {
+            () = idle => {
+                return Err(io::Error::new(io::ErrorKind::TimedOut, "the client was idle").into());
+            }
             envelope = wire.next_envelope() => {
+                heard = tokio::time::Instant::now();
                 let Some(Envelope { tag, body }) = envelope? else {
                     return Ok(());
                 };

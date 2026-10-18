@@ -9,7 +9,9 @@ use innkeeper_session::SessionConfig;
 use innkeeper_world::RetentionPolicy;
 use pad_thai::{HayesConfig, LineKind};
 
-use crate::limits::{Limits, LINE_QUEUE_BYTES_DEFAULT};
+use crate::limits::{
+    Limits, LINES_PER_IDENTITY_DEFAULT, LINE_QUEUE_BYTES_DEFAULT, MAX_LINES_DEFAULT,
+};
 use crate::signin::config::PageOrigins;
 use crate::signin::EnrolmentMode;
 
@@ -174,6 +176,15 @@ pub(crate) struct Config {
     /// How long one write to a client may stall before its line is ended.
     #[arg(long, default_value = "60s", value_name = "DURATION")]
     pub(crate) write_timeout: humantime::Duration,
+    /// Lines served at once, over every listener; a line past it is refused.
+    #[arg(long, default_value_t = MAX_LINES_DEFAULT, value_name = "N")]
+    pub(crate) max_lines: usize,
+    /// Lines one signed-in identity may hold at once.
+    #[arg(long, default_value_t = LINES_PER_IDENTITY_DEFAULT, value_name = "N")]
+    pub(crate) lines_per_identity: usize,
+    /// A line that sends nothing for this long is ended; 0s keeps silent lines.
+    #[arg(long, default_value = "30m", value_name = "DURATION")]
+    pub(crate) idle_timeout: humantime::Duration,
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
 }
@@ -585,10 +596,12 @@ impl Config {
 
     /// The resource limits every line runs under.
     pub(crate) fn limits(&self) -> Limits {
-        Limits {
-            write_timeout: self.write_timeout.into(),
-            line_queue_bytes: self.line_queue_kib.saturating_mul(1024),
-        }
+        let idle: std::time::Duration = self.idle_timeout.into();
+        let mut limits = Limits::with_lines(self.max_lines, self.lines_per_identity);
+        limits.write_timeout = self.write_timeout.into();
+        limits.line_queue_bytes = self.line_queue_kib.saturating_mul(1024);
+        limits.idle_timeout = (!idle.is_zero()).then_some(idle);
+        limits
     }
 
     pub(crate) fn session_config(&self) -> SessionConfig {

@@ -26,7 +26,7 @@ use innkeeper_world::AccountId;
 use crate::connection::{serve_line, ConnectionSettings, READ_CHUNK};
 use crate::connection_gate::{self, Binding};
 use crate::http::{self, Reply};
-use crate::limits::Limits;
+use crate::limits::{Limits, Refusal};
 use crate::save_channel::SaveChannel;
 
 /// Serial bytes arrive a few at a time; a binary message larger than this is not a modem line.
@@ -87,8 +87,17 @@ pub(crate) fn accept(
             );
         }
     };
+    let identity = binding.as_ref().map(|binding| &binding.identity);
+    let permit = match settings.limits.admit(identity) {
+        Ok(permit) => permit,
+        Err(refusal) => {
+            warn!(%peer, %refusal, "websocket refused");
+            return line_refusal(refusal);
+        }
+    };
     let accept_key = derive_accept_key(key.as_bytes());
     tokio::spawn(async move {
+        let _permit = permit;
         match hyper::upgrade::on(request).await {
             Ok(upgraded) => run(TokioIo::new(upgraded), addr, settings, binding).await,
             Err(error) => warn!(%error, %peer, "websocket refused"),
@@ -102,6 +111,21 @@ pub(crate) fn accept(
         headers.insert(SEC_WEBSOCKET_ACCEPT, value);
     }
     response
+}
+
+fn line_refusal(refusal: Refusal) -> Reply {
+    match refusal {
+        Refusal::ServerFull => http::error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "server_full",
+            "Every line is taken. Try again later.",
+        ),
+        Refusal::IdentityFull => http::error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "too_many_lines",
+            "This sign-in already has its lines open.",
+        ),
+    }
 }
 
 fn handshake_key<B>(request: &Request<B>) -> Option<String> {
