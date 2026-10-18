@@ -456,12 +456,17 @@ impl Admin {
             rows.push_str(&tr(&[
                 esc(&keys::handle(&identity.key)),
                 esc(&identity.provider),
+                format!(
+                    "<code>{}</code>",
+                    crate::admin::allowlist::hex(&identity.key)
+                ),
+                esc(&dates::format_date(identity.linked_at)),
             ]));
         }
         let identities = if d.identities.is_empty() {
             "<p class=\"muted\">No sign-in is linked: this account was made at a Login, not on the web.</p>".to_owned()
         } else {
-            table(&["Identity", "Provider"], &rows)
+            table(&["Identity", "Provider", "Key", "Linked"], &rows)
         };
         let now = dates::now_ms();
         let mut rows = String::new();
@@ -484,7 +489,7 @@ impl Admin {
         };
         format!(
             "<div class=\"grid\">{}{}</div>",
-            window("Linked identities", &format!("{identities}<p class=\"muted\">Handle and provider only: the portal never sees who a person is.</p>")),
+            window("Linked identities", &format!("{identities}<p class=\"muted\">Every sign-in linked to this account's owner. Key and provider only: the portal never sees who a person is. Staff access is per key, never per group.</p>")),
             window("Web sessions", &sessions)
         )
     }

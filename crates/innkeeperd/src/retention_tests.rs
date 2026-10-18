@@ -41,21 +41,33 @@ fn consistent(store: &SqliteStore, step: &str) {
     assert!(violations.is_empty(), "after {step}: {violations:?}");
 }
 
+/// An identity in a group of its own, numbered like its key byte, owning `account` when given.
 fn add_identity(store: &SqliteStore, key: u8, account: Option<u32>, now: i64) {
+    add_identity_in(store, key, key, now);
+    if let Some(account) = account {
+        store
+            .connection()
+            .execute(
+                "INSERT INTO group_accounts (account, identity_group, created_at) VALUES (?1, ?2, ?3)",
+                params![account, key, now],
+            )
+            .unwrap();
+    }
+}
+
+fn add_identity_in(store: &SqliteStore, key: u8, group: u8, now: i64) {
     let conn = store.connection();
     conn.execute(
-        "INSERT INTO identities (identity_key, key_version, provider, created_at)
-         VALUES (?1, 'v', 'p', ?2)",
-        params![vec![key; 32], now - 7 * DAY],
+        "INSERT OR IGNORE INTO identity_groups (id, created_at) VALUES (?1, ?2)",
+        params![group, now - 7 * DAY],
     )
     .unwrap();
-    if let Some(account) = account {
-        conn.execute(
-            "INSERT INTO identity_accounts (account, identity_key, created_at) VALUES (?1, ?2, ?3)",
-            params![account, vec![key; 32], now],
-        )
-        .unwrap();
-    }
+    conn.execute(
+        "INSERT INTO identities (identity_key, key_version, provider, created_at, identity_group)
+         VALUES (?1, 'v', 'p', ?2, ?3)",
+        params![vec![key; 32], now - 7 * DAY, group],
+    )
+    .unwrap();
 }
 
 fn add_session(store: &SqliteStore, token: u8, key: u8, account: Option<u32>, expiry: i64) {
@@ -534,8 +546,8 @@ fn deleting_the_last_account_retires_the_identity_and_ends_its_sessions() {
     store
         .connection()
         .execute(
-            "INSERT INTO identity_accounts (account, identity_key, created_at) VALUES (2, ?1, 0)",
-            [vec![1u8; 32]],
+            "INSERT INTO group_accounts (account, identity_group, created_at) VALUES (2, 1, 0)",
+            [],
         )
         .unwrap();
     add_session(&store, 1, 1, None, now + DAY);
@@ -574,7 +586,43 @@ fn purging_a_live_account_now_retires_its_identity_and_ends_its_sessions() {
     );
     let open = format!("SELECT COUNT(*) FROM sessions WHERE expires_at > {now}");
     assert_eq!(count(&store, &open), 0, "the session ended with the purge");
-    assert_eq!(count(&store, "SELECT COUNT(*) FROM identity_accounts"), 0);
+    assert_eq!(count(&store, "SELECT COUNT(*) FROM group_accounts"), 0);
+}
+
+#[test]
+fn a_linked_identity_lives_with_its_group_and_a_lone_one_goes_with_its_group() {
+    let store = memory();
+    let now = 1_700_000_000_000;
+    add_account(&store, 1, "one");
+    add_identity(&store, 1, Some(1), now);
+    add_identity_in(&store, 2, 1, now);
+    add_identity(&store, 3, None, now);
+    add_session(&store, 1, 2, None, now - 40 * DAY);
+    add_session(&store, 2, 2, None, now + DAY);
+    store
+        .connection()
+        .execute(
+            "INSERT INTO holds (account, placed_at, expires_at) VALUES (1, ?1, ?2)",
+            params![now, now + DAY],
+        )
+        .unwrap();
+    let counts = purge_expired(&store, policy(), now).unwrap();
+    assert_eq!(counts.identities, 1, "only the identity that owns nothing");
+    assert_eq!(
+        counts.sessions, 0,
+        "a hold on the group's account keeps the linked session"
+    );
+    assert_eq!(count(&store, "SELECT COUNT(*) FROM identity_groups"), 1);
+    disable_account(&store, 1).unwrap();
+    let live = "SELECT COUNT(*) FROM identities WHERE deleted_at IS NULL";
+    assert_eq!(
+        count(&store, live),
+        0,
+        "every identity of the group is retired"
+    );
+    restore_account(&store, 1, policy(), now).unwrap();
+    assert_eq!(count(&store, live), 2);
+    consistent(&store, "the group purge");
 }
 
 #[test]

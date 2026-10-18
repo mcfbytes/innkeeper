@@ -31,13 +31,22 @@ const EXPIRED: &str = r#"<!doctype html><meta charset="utf-8"><title>Sign-in exp
 <p>This sign-in has expired or was already used. Close this window and try again.</p>
 "#;
 
-/// The token or an error code, delivered the way the page asked for it.
-pub(super) fn finish(page: &PageReturn, outcome: Result<&str, &str>) -> Reply {
+/// How a login ends: a session token, a link proof for the session that asked, or an error code.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Outcome<'a> {
+    Session(&'a str),
+    Link(&'a str),
+    Error(&'a str),
+}
+
+/// The outcome, delivered the way the page asked for it.
+pub(super) fn finish(page: &PageReturn, outcome: Outcome<'_>) -> Reply {
     match page.mode {
         Mode::Redirect => {
             let mut fragment = match outcome {
-                Ok(token) => format!("inn-session={token}"),
-                Err(code) => format!("inn-error={code}"),
+                Outcome::Session(token) => format!("inn-session={token}"),
+                Outcome::Link(proof) => format!("inn-link={proof}"),
+                Outcome::Error(code) => format!("inn-error={code}"),
             };
             if let Some(nonce) = &page.page_nonce {
                 fragment.push_str(&format!("&inn-nonce={nonce}"));
@@ -48,8 +57,9 @@ pub(super) fn finish(page: &PageReturn, outcome: Result<&str, &str>) -> Reply {
         }
         Mode::Popup => {
             let mut message = match outcome {
-                Ok(token) => json!({"type": "inn-auth", "session": token}),
-                Err(code) => json!({"type": "inn-auth", "error": code}),
+                Outcome::Session(token) => json!({"type": "inn-auth", "session": token}),
+                Outcome::Link(proof) => json!({"type": "inn-auth", "link": proof}),
+                Outcome::Error(code) => json!({"type": "inn-auth", "error": code}),
             };
             if let (Some(nonce), Some(fields)) = (&page.page_nonce, message.as_object_mut()) {
                 fields.insert("nonce".to_owned(), json!(nonce));
@@ -143,7 +153,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_popup_posts_to_the_page_origin_only() {
-        let reply = finish(&page(Mode::Popup), Ok("TOKEN"));
+        let reply = finish(&page(Mode::Popup), Outcome::Session("TOKEN"));
         let policy = reply.headers()["content-security-policy"]
             .to_str()
             .unwrap()
@@ -159,7 +169,7 @@ mod tests {
             "{text}"
         );
         assert!(!text.contains("'*'"));
-        let denied = body(finish(&page(Mode::Popup), Err("access_denied"))).await;
+        let denied = body(finish(&page(Mode::Popup), Outcome::Error("access_denied"))).await;
         assert!(
             denied.contains(r#"{"error":"access_denied","type":"inn-auth"}"#),
             "{denied}"
@@ -168,13 +178,13 @@ mod tests {
 
     #[test]
     fn a_redirect_carries_the_result_in_the_fragment() {
-        let reply = finish(&page(Mode::Redirect), Ok("TOKEN"));
+        let reply = finish(&page(Mode::Redirect), Outcome::Session("TOKEN"));
         assert_eq!(reply.status(), StatusCode::FOUND);
         assert_eq!(
             reply.headers()[LOCATION],
             "https://play.example.org/inn.html?auth=x#inn-session=TOKEN"
         );
-        let denied = finish(&page(Mode::Redirect), Err("access_denied"));
+        let denied = finish(&page(Mode::Redirect), Outcome::Error("access_denied"));
         assert_eq!(
             denied.headers()[LOCATION],
             "https://play.example.org/inn.html?auth=x#inn-error=access_denied"
@@ -186,18 +196,32 @@ mod tests {
     async fn the_page_nonce_comes_back_with_the_result_in_both_modes() {
         let mut redirect = page(Mode::Redirect);
         redirect.page_nonce = Some("abcdefghijklmnop".into());
-        let reply = finish(&redirect, Ok("TOKEN"));
+        let reply = finish(&redirect, Outcome::Session("TOKEN"));
         assert_eq!(
             reply.headers()[LOCATION],
             "https://play.example.org/inn.html?auth=x#inn-session=TOKEN&inn-nonce=abcdefghijklmnop"
         );
         let mut popup = page(Mode::Popup);
         popup.page_nonce = Some("abcdefghijklmnop".into());
-        let text = body(finish(&popup, Err("access_denied"))).await;
+        let text = body(finish(&popup, Outcome::Error("access_denied"))).await;
         assert!(
             text.contains(
                 r#"{"error":"access_denied","nonce":"abcdefghijklmnop","type":"inn-auth"}"#
             ),
+            "{text}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_link_proof_comes_back_under_its_own_name() {
+        let reply = finish(&page(Mode::Redirect), Outcome::Link("PROOF"));
+        assert_eq!(
+            reply.headers()[LOCATION],
+            "https://play.example.org/inn.html?auth=x#inn-link=PROOF"
+        );
+        let text = body(finish(&page(Mode::Popup), Outcome::Link("PROOF"))).await;
+        assert!(
+            text.contains(r#"{"link":"PROOF","type":"inn-auth"}"#),
             "{text}"
         );
     }

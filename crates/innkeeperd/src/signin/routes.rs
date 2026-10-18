@@ -17,7 +17,9 @@ use serde_json::{json, Value};
 use tracing::{info, warn};
 
 use super::keys::{self, IdentityKey};
+use super::pages::Outcome;
 use super::rp::{Audience, PendingRp};
+use super::state::LinkSeal;
 use super::store::{self, Attested, Created};
 use super::{Mode, PageReturn, SignIn};
 use crate::dates;
@@ -46,9 +48,22 @@ impl SignIn {
             (&Method::GET, "/auth/callback") => return self.callback(&query).await,
             _ => {}
         }
-        let identity = self.bearer(&request);
+        let session = self.bearer(&request);
+        let identity = session.map(|session| session.identity);
         let reply = match (method, path.as_str()) {
             (Method::OPTIONS, _) => http::empty(StatusCode::NO_CONTENT),
+            (Method::POST, "/auth/identities/ticket") => match session {
+                Some(session) => self.link_ticket(&session),
+                None => unauthorized(),
+            },
+            (Method::POST, "/auth/identities") => match session {
+                Some(session) => self.redeem_link(&session, http::read_json(request).await),
+                None => unauthorized(),
+            },
+            (Method::POST, "/auth/identities/unlink") => match session {
+                Some(session) => self.unlink(&session, http::read_json(request).await),
+                None => unauthorized(),
+            },
             (Method::GET, other) if saves_target(other).is_some() => {
                 match (identity, saves_target(other)) {
                     (Some(key), Some(account)) => self.saves(&key, account, &query),
@@ -99,12 +114,16 @@ impl SignIn {
         reply
     }
 
-    fn bearer(&self, request: &Request<Incoming>) -> Option<IdentityKey> {
+    fn bearer(&self, request: &Request<Incoming>) -> Option<Session> {
         let header = request.headers().get(AUTHORIZATION)?.to_str().ok()?;
         let token = header.strip_prefix("Bearer ")?.trim();
         let hash = keys::token_hash(token);
-        match store::session_identity(&self.store, &hash, dates::now_ms()) {
-            Ok(identity) => identity,
+        match store::session_row(&self.store, &hash, dates::now_ms()) {
+            Ok(found) => found.map(|(identity, created_at)| Session {
+                identity,
+                token_hash: hash,
+                created_at,
+            }),
             Err(error) => {
                 warn!(%error, "the sign-in store failed");
                 crate::metrics::counters().store_error();
@@ -152,6 +171,13 @@ impl SignIn {
         };
         let attest = query.get("attest").and_then(|text| parse_attest(text));
         let page_nonce = match query.get("nonce").map(String::as_str) {
+            None | Some("") if self.required => {
+                return http::error(
+                    StatusCode::BAD_REQUEST,
+                    "bad_nonce",
+                    "This server needs the page's nonce on every login.",
+                )
+            }
             None | Some("") => None,
             Some(text) if page_nonce_ok(text) => Some(text.to_owned()),
             Some(_) => {
@@ -169,16 +195,25 @@ impl SignIn {
             attest,
             page_nonce,
         };
-        let expires_at = dates::now_ms().saturating_add(super::LOGIN_TTL);
+        let now = dates::now_ms();
+        let link = match query.get("link") {
+            None => None,
+            Some(ticket) => match self.open_ticket(ticket, now) {
+                Some(link) => Some(link),
+                None => return super::pages::finish(&page, Outcome::Error("link_expired")),
+            },
+        };
+        let expires_at = now.saturating_add(super::LOGIN_TTL);
         let seal = |pending: &PendingRp| {
-            let state = pending.to_state(expires_at, Some(page.to_state()));
+            let mut state = pending.to_state(expires_at, Some(page.to_state()));
+            state.link.clone_from(&link);
             self.states().seal(&state)
         };
         match self.rp.begin(provider, Audience::Player, seal).await {
             Ok(authorize) => super::pages::redirect(authorize.as_str()),
             Err(error) => {
                 warn!(provider, %error, "sign-in could not start");
-                super::pages::finish(&page, Err("server_error"))
+                super::pages::finish(&page, Outcome::Error("server_error"))
             }
         }
     }
@@ -186,47 +221,54 @@ impl SignIn {
     async fn callback(&self, query: &HashMap<String, String>) -> Reply {
         let state = query.get("state").map(String::as_str).unwrap_or("");
         let opened = self.states().open(state, Audience::Player, dates::now_ms());
-        let Some((rp, page)) = opened.and_then(|state| {
-            let page = PageReturn::from_state(state.page.as_ref()?)?;
-            Some((PendingRp::from_state(&state), page))
+        let Some(login) = opened.and_then(|state| {
+            Some(Login {
+                page: PageReturn::from_state(state.page.as_ref()?)?,
+                rp: PendingRp::from_state(&state),
+                link: state.link,
+            })
         }) else {
             return super::pages::expired();
         };
-        let login = Login { rp, page };
         if let Some(code) = query.get("error") {
             let code = if code == "access_denied" {
                 "access_denied"
             } else {
                 "provider_error"
             };
-            return super::pages::finish(&login.page, Err(code));
+            return super::pages::finish(&login.page, Outcome::Error(code));
         }
         let Some(code) = query.get("code").cloned() else {
-            return super::pages::finish(&login.page, Err("provider_error"));
+            return super::pages::finish(&login.page, Outcome::Error("provider_error"));
         };
         let verified = match self.rp.finish(login.rp, code).await {
             Ok(verified) => verified,
             Err(error) => {
                 warn!(%error, "sign-in did not finish");
-                return super::pages::finish(&login.page, Err("provider_error"));
+                return super::pages::finish(&login.page, Outcome::Error("provider_error"));
             }
         };
+        if let Some(link) = &login.link {
+            return self.finish_link(link, &verified, &login.page);
+        }
         match self.open_session(&verified, login.page.attest) {
-            Ok(token) => super::pages::finish(&login.page, Ok(&token)),
+            Ok(token) => super::pages::finish(&login.page, Outcome::Session(&token)),
             Err(error) => {
                 warn!(%error, "the sign-in store failed");
                 crate::metrics::counters().store_error();
-                super::pages::finish(&login.page, Err("server_error"))
+                super::pages::finish(&login.page, Outcome::Error("server_error"))
             }
         }
     }
 
-    fn open_session(
+    /// The provider's identity as a row (made on first sign-in), with the page's age and terms
+    /// answer when the login carried one.
+    pub(super) fn signed_in(
         &self,
         verified: &super::rp::Verified,
         attest: Option<(u32, u32)>,
-    ) -> Result<zeroize::Zeroizing<String>, innkeeper_world::StoreError> {
-        let now = dates::now_ms();
+        now: i64,
+    ) -> Result<store::SignedIn, innkeeper_world::StoreError> {
         let signed = store::sign_in(
             &self.store,
             &self.keys,
@@ -247,6 +289,16 @@ impl SignIn {
                 },
             )?;
         }
+        Ok(signed)
+    }
+
+    fn open_session(
+        &self,
+        verified: &super::rp::Verified,
+        attest: Option<(u32, u32)>,
+    ) -> Result<zeroize::Zeroizing<String>, innkeeper_world::StoreError> {
+        let now = dates::now_ms();
+        let signed = self.signed_in(verified, attest, now)?;
         let token = keys::new_token();
         let expiry = now.saturating_add(self.session_lifetime);
         store::create_session(
@@ -288,6 +340,7 @@ impl SignIn {
             }
             Ok(json!({
                 "identity": identity,
+                "identities": self.methods_json(&key)?,
                 "accounts": accounts,
                 "canCreate": self.can_create(&key)?,
                 "attested": attested,
@@ -301,7 +354,7 @@ impl SignIn {
 
     fn can_create(&self, key: &IdentityKey) -> Result<bool, innkeeper_world::StoreError> {
         if !self.enrolment.web_creates()
-            || !self.invited(key)
+            || !self.invited(key)?
             || store::owns_suspended(&self.store, key)?
         {
             return Ok(false);
@@ -373,9 +426,13 @@ impl SignIn {
                 "New accounts are not being taken.",
             );
         }
-        if !self.invited(key) {
-            info!(handle = %keys::handle(key), "account refused: not on the invite list");
-            return not_invited(key);
+        match self.invited(key) {
+            Ok(true) => {}
+            Ok(false) => {
+                info!(handle = %keys::handle(key), "account refused: not on the invite list");
+                return not_invited(key);
+            }
+            Err(error) => return server_error(&error),
         }
         if let Some(refusal) = self
             .attestation_gate(key)
@@ -575,6 +632,16 @@ impl SignIn {
 struct Login {
     rp: PendingRp,
     page: PageReturn,
+    link: Option<LinkSeal>,
+}
+
+/// The live session behind a bearer token.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Session {
+    pub(super) identity: IdentityKey,
+    pub(super) token_hash: [u8; 32],
+    /// When its sign-in happened: changing sign-in methods needs a recent one.
+    pub(super) created_at: i64,
 }
 
 /// The page's login nonce: 16 to 64 base64url characters, so it is echoed back unchanged.
@@ -660,7 +727,7 @@ fn query_map(query: Option<&str>) -> HashMap<String, String> {
     map
 }
 
-fn unauthorized() -> Reply {
+pub(super) fn unauthorized() -> Reply {
     http::error(
         StatusCode::UNAUTHORIZED,
         "unauthorized",
@@ -685,7 +752,7 @@ fn not_found() -> Reply {
     http::error(StatusCode::NOT_FOUND, "not_found", "No such endpoint.")
 }
 
-fn server_error(error: &innkeeper_world::StoreError) -> Reply {
+pub(super) fn server_error(error: &innkeeper_world::StoreError) -> Reply {
     warn!(%error, "the sign-in store failed");
     crate::metrics::counters().store_error();
     http::error(

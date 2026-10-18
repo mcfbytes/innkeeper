@@ -12,7 +12,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use innkeeper_world::StoreError;
 use rsa::RsaPrivateKey;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::params;
 use serde_json::{json, Value};
 use thiserror::Error;
 use tracing::warn;
@@ -455,34 +455,44 @@ pub(crate) fn export_rows(
     Ok(lines)
 }
 
-/// The sealed provider subject of the identity that owns the account, with `"record":
-/// "identity"` and a null `id`; `audit open` matches its data key by the wrapped key.
+/// The sealed provider subject of each identity in the group that owns the account, with
+/// `"record": "identity"` and a null `id`; `audit open` matches its data key by the wrapped key.
 fn identity_rows(conn: &rusqlite::Connection, account: u32) -> Result<Vec<Value>, AuditError> {
-    let found: Option<(Vec<u8>, String, i64)> = conn
-        .query_row(
+    let mut statement = conn
+        .prepare(
             "SELECT identities.subject_sealed, identities.provider, identities.created_at
-             FROM identity_accounts JOIN identities USING (identity_key)
-             WHERE identity_accounts.account = ?1 AND identities.subject_sealed IS NOT NULL",
-            [account],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+             FROM group_accounts JOIN identities USING (identity_group)
+             WHERE group_accounts.account = ?1 AND identities.subject_sealed IS NOT NULL
+             ORDER BY identities.created_at",
         )
-        .optional()
         .map_err(StoreError::backend)?;
-    let Some((sealed, provider, created_at)) = found else {
-        return Ok(Vec::new());
-    };
-    let view = seal::view(&sealed)?;
-    Ok(vec![json!({
-        "id": Value::Null,
-        "record": "identity",
-        "provider": provider,
-        "started_at": created_at,
-        "ended_at": Value::Null,
-        "account_id": account,
-        "kid": view.kid,
-        "wrapped_key_b64": BASE64.encode(view.wrapped_key),
-        "sealed_b64": BASE64.encode(sealed),
-    })])
+    let found = statement
+        .query_map([account], |row| {
+            Ok((
+                row.get::<_, Vec<u8>>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })
+        .map_err(StoreError::backend)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(StoreError::backend)?;
+    let mut rows = Vec::with_capacity(found.len());
+    for (sealed, provider, created_at) in found {
+        let view = seal::view(&sealed)?;
+        rows.push(json!({
+            "id": Value::Null,
+            "record": "identity",
+            "provider": provider,
+            "started_at": created_at,
+            "ended_at": Value::Null,
+            "account_id": account,
+            "kid": view.kid,
+            "wrapped_key_b64": BASE64.encode(view.wrapped_key),
+            "sealed_b64": BASE64.encode(sealed),
+        }));
+    }
+    Ok(rows)
 }
 
 enum KeySource {

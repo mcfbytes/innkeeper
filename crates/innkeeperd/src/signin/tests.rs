@@ -824,3 +824,6 @@ async fn a_bound_login_needs_the_current_terms_and_a_suspension_closes_the_side_
     let (status, _) = fx.call(post, &path, &token, None).await;
     assert_eq!(status, 200);
 }
+
+#[path = "link_tests.rs"]
+mod link_tests;

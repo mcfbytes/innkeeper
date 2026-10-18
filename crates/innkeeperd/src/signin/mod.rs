@@ -2,7 +2,9 @@
 //! contract)", and the tables in docs/server/privacy.md.
 
 pub(crate) mod config;
+pub(crate) mod groups;
 pub(crate) mod keys;
+mod link;
 mod pages;
 mod routes;
 pub(crate) mod rp;
@@ -30,6 +32,8 @@ use state::{LoginStates, PageState};
 
 /// A login that has not come back from its provider within this is refused at its callback.
 pub(crate) const LOGIN_TTL: i64 = 10 * dates::MINUTE;
+/// Adding or removing a sign-in method needs a session signed in at most this long ago.
+pub(crate) const RECENT_SIGN_IN: i64 = 10 * dates::MINUTE;
 
 /// Who may create accounts (docs/server/innkeeperd.md section 8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
@@ -110,7 +114,8 @@ pub(crate) struct SignInSetup {
     /// ... and at least this terms version.
     pub(crate) terms_version: u32,
     pub(crate) recipient: Option<Recipient>,
-    /// Every line must carry a session (public mode); the page then offers no unsigned way in.
+    /// Every line must carry a session (public mode); the page then offers no unsigned way in, and
+    /// every login must carry the page's nonce.
     pub(crate) required: bool,
 }
 
@@ -219,9 +224,14 @@ impl SignIn {
             .map(crate::admin::allowlist::KeyFile::dir)
     }
 
-    /// True unless enrolment is by invitation and `key` is on neither invite list.
-    fn invited(&self, key: &IdentityKey) -> bool {
-        self.enrolment != EnrolmentMode::Invite || self.invites.lists(key)
+    /// True unless enrolment is by invitation and no sign-in of `key`'s group is on either invite
+    /// list: a method linked to an invited person needs no invitation of its own.
+    fn invited(&self, key: &IdentityKey) -> Result<bool, StoreError> {
+        if self.enrolment != EnrolmentMode::Invite || self.invites.lists(key) {
+            return Ok(true);
+        }
+        let group = groups::group_keys(&self.store, key)?;
+        Ok(group.iter().any(|member| self.invites.lists(member)))
     }
 
     pub(crate) fn has_providers(&self) -> bool {

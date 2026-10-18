@@ -1,5 +1,6 @@
 //! The OAuth `state` value carries the whole pending login, sealed under a per-process key, so an
-//! unauthenticated `/auth/login` stores nothing (docs/server/innkeeperd.md section 8.6).
+//! unauthenticated `/auth/login` stores nothing (docs/server/innkeeperd.md section 8.6). The link
+//! ticket and proof of section 8.7 are sealed the same way.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
@@ -11,6 +12,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+use super::keys::IdentityKey;
 use super::rp::Audience;
 
 /// Bytes of the AES-GCM nonce at the head of a sealed state; also the state's replay-set id.
@@ -32,6 +34,28 @@ pub(crate) struct LoginState {
     pub(crate) expires_at: i64,
     /// Where the player's page wants the result; `None` for the operator portal.
     pub(crate) page: Option<PageState>,
+    /// Set when the login proves a sign-in to link to the session that asked for it.
+    #[serde(default)]
+    pub(crate) link: Option<LinkSeal>,
+}
+
+/// A link in progress, tied to the session that started it: its token hash and identity. In a
+/// proof, `proven` is the identity the second login signed in as.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct LinkSeal {
+    pub(crate) token_hash: [u8; 32],
+    pub(crate) identity: IdentityKey,
+    pub(crate) proven: Option<IdentityKey>,
+    pub(crate) expires_at: i64,
+}
+
+/// What a sealed value is for; each purpose opens only as itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Purpose {
+    /// A session's leave to start a link login (`POST /auth/identities/ticket`).
+    Ticket,
+    /// A link login's result, which only the session that asked may redeem.
+    Proof,
 }
 
 /// The checked page return of a player login, and the nonce the page chose to recognise its result.
@@ -67,12 +91,29 @@ impl LoginStates {
 
     /// base64url of nonce and ciphertext; the audience is bound in as associated data.
     pub(crate) fn seal(&self, state: &LoginState) -> Option<String> {
-        let plain = Zeroizing::new(serde_json::to_vec(state).ok()?);
+        self.seal_value(state, &associated(state.audience))
+    }
+
+    /// A link ticket or proof, sealed for its purpose alone.
+    pub(crate) fn seal_link(&self, purpose: Purpose, link: &LinkSeal) -> Option<String> {
+        self.seal_value(link, &link_associated(purpose))
+    }
+
+    /// The ticket or proof behind `text`, once, before it expires.
+    pub(crate) fn open_link(&self, text: &str, purpose: Purpose, now: i64) -> Option<LinkSeal> {
+        let (id, link): (_, LinkSeal) = self.open_value(text, &link_associated(purpose))?;
+        if link.expires_at <= now || (purpose == Purpose::Proof) != link.proven.is_some() {
+            return None;
+        }
+        self.first_use(id, link.expires_at, now).then_some(link)
+    }
+
+    fn seal_value(&self, value: &impl Serialize, aad: &[u8]) -> Option<String> {
+        let plain = Zeroizing::new(serde_json::to_vec(value).ok()?);
         let nonce = Aes256Gcm::generate_nonce(OsRng);
-        let aad = associated(state.audience);
         let payload = Payload {
             msg: plain.as_slice(),
-            aad: &aad,
+            aad,
         };
         let sealed = self.cipher.encrypt(&nonce, payload).ok()?;
         let mut bytes = nonce.to_vec();
@@ -83,23 +124,28 @@ impl LoginStates {
     /// The login behind a callback's `state`, once: a forged, expired, foreign-audience or repeated
     /// state is `None`.
     pub(crate) fn open(&self, text: &str, audience: Audience, now: i64) -> Option<LoginState> {
+        let (id, state): (_, LoginState) = self.open_value(text, &associated(audience))?;
+        if state.audience != audience || state.expires_at <= now {
+            return None;
+        }
+        self.first_use(id, state.expires_at, now).then_some(state)
+    }
+
+    /// The replay-set id and the value, when `text` was sealed here with `aad`.
+    fn open_value<T: serde::de::DeserializeOwned>(
+        &self,
+        text: &str,
+        aad: &[u8],
+    ) -> Option<([u8; NONCE_LEN], T)> {
         if text.len() > MAX_STATE_TEXT {
             return None;
         }
         let bytes = BASE64URL.decode(text).ok()?;
         let (head, sealed) = bytes.split_at_checked(NONCE_LEN)?;
         let id: [u8; NONCE_LEN] = head.try_into().ok()?;
-        let aad = associated(audience);
-        let payload = Payload {
-            msg: sealed,
-            aad: &aad,
-        };
+        let payload = Payload { msg: sealed, aad };
         let plain = Zeroizing::new(self.cipher.decrypt(Nonce::from_slice(head), payload).ok()?);
-        let state: LoginState = serde_json::from_slice(&plain).ok()?;
-        if state.audience != audience || state.expires_at <= now {
-            return None;
-        }
-        self.first_use(id, state.expires_at, now).then_some(state)
+        Some((id, serde_json::from_slice(&plain).ok()?))
     }
 
     /// True the first time `id` comes back. Entries leave once their state has expired anyway.
@@ -133,6 +179,14 @@ fn associated(audience: Audience) -> Vec<u8> {
     [b"inn-login-state-v1\0".as_slice(), tag].concat()
 }
 
+fn link_associated(purpose: Purpose) -> Vec<u8> {
+    let tag: &[u8] = match purpose {
+        Purpose::Ticket => b"ticket",
+        Purpose::Proof => b"proof",
+    };
+    [b"inn-link-v1\0".as_slice(), tag].concat()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,7 +205,53 @@ mod tests {
                 attest: Some((18, 1)),
                 page_nonce: Some("abcDEF123_-abcDEF123_".into()),
             }),
+            link: None,
         }
+    }
+
+    fn link(proven: Option<IdentityKey>, expires_at: i64) -> LinkSeal {
+        LinkSeal {
+            token_hash: [7; 32],
+            identity: [1; 32],
+            proven,
+            expires_at,
+        }
+    }
+
+    #[test]
+    fn a_ticket_and_a_proof_open_once_each_and_only_as_themselves() {
+        let states = LoginStates::new();
+        let ticket = states
+            .seal_link(Purpose::Ticket, &link(None, 1_000))
+            .unwrap();
+        assert_eq!(states.open_link(&ticket, Purpose::Proof, 10), None);
+        assert_eq!(states.open(&ticket, Audience::Player, 10), None);
+        assert_eq!(
+            states.open_link(&ticket, Purpose::Ticket, 10),
+            Some(link(None, 1_000))
+        );
+        assert_eq!(
+            states.open_link(&ticket, Purpose::Ticket, 10),
+            None,
+            "replayed"
+        );
+        let proof = link(Some([2; 32]), 1_000);
+        let sealed = states.seal_link(Purpose::Proof, &proof).unwrap();
+        assert_eq!(
+            states.open_link(&sealed, Purpose::Proof, 1_000),
+            None,
+            "expired"
+        );
+        let sealed = states.seal_link(Purpose::Proof, &proof).unwrap();
+        assert_eq!(states.open_link(&sealed, Purpose::Proof, 10), Some(proof));
+        let unproven = states
+            .seal_link(Purpose::Proof, &link(None, 1_000))
+            .unwrap();
+        assert_eq!(states.open_link(&unproven, Purpose::Proof, 10), None);
+        assert_eq!(
+            LoginStates::new().open_link(&ticket, Purpose::Ticket, 10),
+            None
+        );
     }
 
     #[test]

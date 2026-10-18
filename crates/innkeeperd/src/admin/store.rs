@@ -378,6 +378,7 @@ fn escape_like(text: &str) -> String {
 pub(crate) struct LinkedIdentity {
     pub(crate) key: IdentityKey,
     pub(crate) provider: String,
+    pub(crate) linked_at: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -452,21 +453,27 @@ pub(crate) fn account_detail(
     let identities = {
         let mut statement = conn
             .prepare(
-                "SELECT identities.identity_key, identities.provider FROM identity_accounts
-                 JOIN identities USING (identity_key) WHERE identity_accounts.account = ?1",
+                "SELECT identities.identity_key, identities.provider,
+                        ifnull(identities.linked_at, identities.created_at)
+                 FROM group_accounts JOIN identities USING (identity_group)
+                 WHERE group_accounts.account = ?1 ORDER BY 3",
             )
             .map_err(backend)?;
         let rows = statement
             .query_map([id], |row| {
                 let key: Vec<u8> = row.get(0)?;
-                Ok((key, row.get::<_, String>(1)?))
+                Ok((key, row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
             })
             .map_err(backend)?;
         let mut out = Vec::new();
         for row in rows {
-            let (key, provider) = row.map_err(backend)?;
+            let (key, provider, linked_at) = row.map_err(backend)?;
             if let Ok(key) = IdentityKey::try_from(key.as_slice()) {
-                out.push(LinkedIdentity { key, provider });
+                out.push(LinkedIdentity {
+                    key,
+                    provider,
+                    linked_at,
+                });
             }
         }
         out
@@ -475,7 +482,8 @@ pub(crate) fn account_detail(
         let mut statement = conn
             .prepare(
                 "SELECT created_at, expires_at, account FROM sessions
-                 WHERE identity_key IN (SELECT identity_key FROM identity_accounts WHERE account = ?1)
+                 WHERE identity_key IN (SELECT identity_key FROM identities WHERE identity_group =
+                     (SELECT identity_group FROM group_accounts WHERE account = ?1))
                  ORDER BY created_at DESC LIMIT 20",
             )
             .map_err(backend)?;
@@ -539,7 +547,8 @@ pub(crate) fn set_flags(
     Ok(changed > 0)
 }
 
-/// Ends every web sign-in token of the identities that own the account. Returns how many were live.
+/// Ends every web sign-in token of the identities whose group owns the account. Returns how many
+/// were live.
 pub(crate) fn revoke_web_sessions(
     store: &SqliteStore,
     id: u32,
@@ -550,7 +559,8 @@ pub(crate) fn revoke_web_sessions(
         .execute(
             "UPDATE sessions SET expires_at = ?2
              WHERE expires_at > ?2
-             AND identity_key IN (SELECT identity_key FROM identity_accounts WHERE account = ?1)",
+             AND identity_key IN (SELECT identity_key FROM identities WHERE identity_group =
+                 (SELECT identity_group FROM group_accounts WHERE account = ?1))",
             params![id, now],
         )
         .map_err(backend)

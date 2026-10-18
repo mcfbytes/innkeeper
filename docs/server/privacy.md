@@ -10,7 +10,7 @@ The SQLite file is `DIR/innkeeper.db` (`--data-dir DIR`). A row that a player or
 stays in the file until the retention job in section 6 hard-purges it. A hard purge leaves no bytes
 behind: `secure_delete` zeroes the row where it lay, and the purge then hands the freed pages back
 ([store.md](store.md) section 3.1). The schema is the baseline of
-[store.md](store.md) section 3 (`crates/innkeeperd/src/sqlite_store.rs`, version 5): every table is
+[store.md](store.md) section 3 (`crates/innkeeperd/src/sqlite_store.rs`, version 6): every table is
 STRICT, every column that names another row is a foreign key, and every time is a `*_at` column of
 Unix milliseconds UTC.
 
@@ -27,8 +27,9 @@ Unix milliseconds UTC.
 | `saves` | `account`, `path`, `version`, `hash`, `data`, `modified_at`, `current`, `deleted_at` | Browser game files ([saves.md](saves.md)) | With the account. The channel still keeps three versions per path and drops older versions at once |
 | `audit_sessions` | `id`, `started_at`, `ended_at`, `account`, `identity_key`, `sealed` | Lawful-request record of a connection (section 5) | From creation, for `--audit-retention-days` (default 90) |
 | `holds` | `account`, `placed_at`, `expires_at` | A preservation request covering that account's content and sealed rows | Until `release`, or until the date passes |
-| `identities` | `identity_key` (HMAC-SHA256 of issuer, a zero byte and subject), `key_version`, `subject_sealed`, `provider` (the auth file's id), `adult_attested_at`, `attested_age`, `terms_version`, `created_at`, `deleted_at` | Sign-in ([innkeeperd.md](innkeeperd.md) section 8): finds the identity again without keeping who it is; the age and terms answer is checked before an account or password is issued | Stamped when its last account is deleted; hard-purged once it owns no account and has no session row |
-| `identity_accounts` | `account`, `identity_key`, `created_at` | Which accounts an identity owns, and the per-day account limit | With the account |
+| `identities` | `identity_key` (HMAC-SHA256 of issuer, a zero byte and subject), `key_version`, `subject_sealed`, `provider` (the auth file's id), `adult_attested_at`, `attested_age`, `terms_version`, `created_at`, `deleted_at`, `identity_group`, `linked_at` | Sign-in ([innkeeperd.md](innkeeperd.md) section 8): finds the identity again without keeping who it is; the age and terms answer is checked before an account or password is issued | Stamped when its group's last account is deleted; hard-purged once its group owns no account and it has no session row |
+| `identity_groups` | `id`, `created_at` | The sign-in methods one player linked (section 8.7 of innkeeperd.md): a number and a date, nothing else | Hard-purged once it has no identity and no account |
+| `group_accounts` | `account`, `identity_group`, `created_at` | Which accounts a group owns, and the per-day account limit | With the account |
 | `sessions` | `token_hash` (SHA-256 of the token), `identity_key`, `account` (the account the line logged on to), `created_at`, `expires_at` | A WebSocket is bound to the identity | Logout and account deletion set `expires_at` to now; hard-purged 30 days after `expires_at` (section 6) |
 | `operators`, `staff`, `admin_sessions`, `admin_audit` | the portal's own tables (section 8) | Who may use the portal and what they did | Section 6 |
 
@@ -88,6 +89,19 @@ verifier, nonce and page return travel inside the `state` value, encrypted under
 only in the process's memory, and expire after ten minutes. The only thing remembered is which
 states have already come back, until each expires ([innkeeperd.md](innkeeperd.md) section 8.2).
 
+**Linked sign-in methods.** A player may link several providers (say Microsoft and GitHub) so that
+each reaches the same accounts ([innkeeperd.md](innkeeperd.md) section 8.7). Linking is always
+deliberate: the player signs in with both in one sitting, and the server never matches two sign-ins
+by an email address or anything else the providers say. **No email is requested, read or stored, and
+none is hashed**: an email claim a provider does not verify could let one person take over another's
+accounts, and it is personal data the service does not need. What linking stores is only the
+identity rows themselves (each with its own HMAC, provider id and sealed subject, as above), the
+group number they share and the date each one joined (`linked_at`). The page lists a player's
+methods by provider name and that date; it never sees a subject. Removing a method moves its
+identity into a group of its own with no accounts and ends its sessions; it then ages out like any
+identity that owns nothing (section 6). A linked identity's subject is sealed like any other, so
+`audit export` carries one `identity` record for each identity of the account's group.
+
 ## 2. Public mode (`innkeeperd --public`)
 
 Opt-in. The default log and capture format stay exactly as they are.
@@ -143,10 +157,11 @@ items are included and each carries `"deleted_at"` (null while the row is live):
   `deleted_at`;
 - `money` as a number, and `money_deleted_at` beside it;
 - save file list, sizes, hashes, versions and `deleted_at`; `--with-saves` adds `data_base64`;
-- `identity`, when the account was made through sign-in: the handle, `identity_key_hex`, provider id,
-  key version, the age and terms answer, `created_at`, `deleted_at`, every account the identity
-  owns, and its sessions (`account_id`, `created_at`, `expiry`, never the token hash). The subject
-  is named as sealed, not exported: `audit export` carries it for the escrow key (section 5).
+- `identities`, one entry for each sign-in linked to the account's owner (an empty list for an
+  account made at a Login): the handle, `identity_key_hex`, provider id, key version, the age and
+  terms answer, `created_at`, `linked_at`, `deleted_at`, every account the group owns, and the
+  identity's sessions (`account_id`, `created_at`, `expiry`, never the token hash). The subject is
+  named as sealed, not exported: `audit export` carries it for the escrow key (section 5).
 
 A purged account exports as its tombstone: `id`, `created_at`, `deleted_at` and `purged_at`, and
 whatever rows still wait out their own windows.
@@ -323,8 +338,9 @@ Every number is a field of `RetentionPolicy` (`innkeeper-world`) and a flag. Def
 | Admin audit log (`admin_audit`) | at each portal action | 365 days | `--retain-admin-audit-days` | who did what to whom, with a reason and no content; a row naming an account under a legal hold is kept while the hold lasts |
 | Admin sessions | at expiry or sign-out | 1 day after expiry | none | operator sign-in rows, hashed tokens only |
 | Sealed connection records | on creation | 90 days | `--audit-retention-days` | section 5 |
-| Sign-in sessions | at expiry, logout, or deletion of the identity's last account | 30 days after `expires_at` | `--retain-session-days` | a short trail for abuse on a line; held when the session's account, or any account of its identity, is held |
-| Sign-in identities | when they own no account (the last one hard-purged) and have no session row | at the next purge, an hour after creation at the earliest | none | the identity exists only to own accounts; the hour covers a sign-in that has not created one yet |
+| Sign-in sessions | at expiry, logout, removal of its sign-in method, or deletion of its group's last account | 30 days after `expires_at` | `--retain-session-days` | a short trail for abuse on a line; held when the session's account, or any account of its identity's group, is held |
+| Sign-in identities | when their group owns no account (the last one hard-purged, or the method was removed) and they have no session row | at the next purge, an hour after creation at the earliest | none | the identity exists only to own accounts; the hour covers a sign-in that has not created one yet |
+| Identity groups | when no identity and no account is left in them | at the next purge | none | a group is only the number its identities share |
 | Anything under a legal hold | never while held | when the hold ends, if the clock above has already run out | `hold` / `release` | preservation requests. The clock is counted from the delete or from creation and is not restarted when the hold ends |
 
 Players see a deleted letter or post as gone: every read skips `deleted_at`. The only user-facing
@@ -353,7 +369,8 @@ itself is never removed (section 1), so its number is never reused. The password
 for the restore window, which is the same 30 days; a tombstone cannot be restored.
 
 The purge job runs at startup and hourly. It logs one line of counts (audit, letters, posts,
-complaints, accounts, mailboxes, money, saves, sessions, identities, admin rows, operators) and no contents.
+complaints, accounts, mailboxes, money, saves, sessions, identities, admin rows, operators) and no
+contents; an empty identity group goes with the identities and is not counted.
 A letter is kept when the mailbox owner or the sending account (`from_account`) is held. A post is kept
 when its author account is held, and a complaint also when its `about_account` is held. Holds are by
 account number only: an account that shares a persona with a held one is not held.
@@ -423,7 +440,8 @@ no periodic refresh: rotation is a restart.
 **Rotation.** Each identity row records the HMAC key version that produced it. Startup reads every
 enabled version of `identity-hmac-key`, newest first. At sign-in the server tries the current
 version first, then the older ones, and on a match with an old version rewrites the row, its
-account links, its sessions and its sealed connection records under the current version while the
+sessions and its sealed connection records under the current version (its accounts belong to its
+group, which keeps its number) while the
 raw subject is in hand. Old versions are disabled after a window; an identity that has not signed in
 by then is not found again and starts afresh. A new audit RSA key version means new records carry
 the new `kid`; old versions stay enabled until the records that name them age out.

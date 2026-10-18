@@ -254,7 +254,7 @@ fn export_account(
     let posts = authored_posts_json(store, id)?;
     let (money, money_deleted_at) = money_of(store, id)?;
     let saves = saves_json(store, id, with_saves)?;
-    let identity = crate::signin::store::export_identity(store, id)?;
+    let identities = crate::signin::store::export_identities(store, id)?;
     Ok(json!({
         "encoded_password": "omitted: the encoded password is not exported",
         "account": account,
@@ -265,7 +265,7 @@ fn export_account(
         "money": money,
         "money_deleted_at": money_deleted_at,
         "saves": saves,
-        "identity": identity,
+        "identities": identities,
     }))
 }
 

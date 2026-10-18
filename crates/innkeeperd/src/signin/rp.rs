@@ -155,6 +155,7 @@ impl PendingRp {
             nonce: self.nonce.as_ref().map(|nonce| nonce.secret().clone()),
             expires_at,
             page,
+            link: None,
         }
     }
 

@@ -148,18 +148,31 @@ pub fn location(response: &reqwest::Response) -> String {
 /// The redirect-mode login: our server, the mock's consent page (Allow), the callback, the page.
 pub async fn sign_in(base: &str, subject: &str) -> String {
     let (_, page) = redirect_login(base, subject, "").await;
-    let token = page
-        .strip_prefix(&format!("{RETURN}#inn-session="))
-        .unwrap_or_else(|| panic!("{page}"));
-    token.to_owned()
+    fragment_value(&page, "inn-session").unwrap_or_else(|| panic!("{page}"))
+}
+
+/// The page nonce a login carries unless `extra` names its own: a public server needs one.
+pub const NONCE: &str = "testNonce_0123456789-ab";
+
+/// One value of the page address's fragment, after `RETURN#`.
+pub fn fragment_value(page: &str, name: &str) -> Option<String> {
+    let fragment = page.strip_prefix(&format!("{RETURN}#"))?;
+    fragment
+        .split('&')
+        .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+        .map(str::to_owned)
 }
 
 /// One redirect-mode login with `extra` appended to its query: the callback URL the browser was
 /// sent to, and the page address (with its fragment) the callback answered with.
 pub async fn redirect_login(base: &str, subject: &str, extra: &str) -> (String, String) {
     let client = http();
+    let nonce = match extra.contains("nonce=") {
+        true => String::new(),
+        false => format!("&nonce={NONCE}"),
+    };
     let login = format!(
-        "{base}/auth/login?provider=dev&mode=redirect&attest=18%2Bv1&return={}{extra}",
+        "{base}/auth/login?provider=dev&mode=redirect&attest=18%2Bv1&return={}{nonce}{extra}",
         url::form_urlencoded::byte_serialize(RETURN.as_bytes()).collect::<String>()
     );
     let first = client.get(&login).send().await.unwrap();

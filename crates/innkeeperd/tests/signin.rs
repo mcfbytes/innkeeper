@@ -190,11 +190,18 @@ async fn unfinished_logins_cost_nothing_and_each_state_comes_back_once_with_the_
     .unwrap();
     let server = tokio::task::block_in_place(|| start(&dir, port, &[]));
 
-    // More unfinished logins than the old in-memory table held: none is refused, none is kept.
-    let login = format!(
+    // A public server refuses a login without the page's nonce.
+    let bare = format!(
         "{base}/auth/login?provider=dev&return={}",
         url::form_urlencoded::byte_serialize(RETURN.as_bytes()).collect::<String>()
     );
+    let refused = http().get(&bare).send().await.unwrap();
+    assert_eq!(refused.status(), 400, "no nonce");
+    let body: Value = refused.json().await.unwrap();
+    assert_eq!(body["error"], "bad_nonce");
+
+    // More unfinished logins than the old in-memory table held: none is refused, none is kept.
+    let login = format!("{bare}&nonce={NONCE}");
     let mut workers = Vec::new();
     for _ in 0..8 {
         let login = login.clone();
@@ -219,7 +226,7 @@ async fn unfinished_logins_cost_nothing_and_each_state_comes_back_once_with_the_
     let replayed = http().get(&callback).send().await.unwrap();
     assert_eq!(replayed.status(), 400, "a state is good for one callback");
     let bad = http()
-        .get(format!("{login}&nonce=short"))
+        .get(format!("{bare}&nonce=short"))
         .send()
         .await
         .unwrap();

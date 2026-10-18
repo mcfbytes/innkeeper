@@ -96,9 +96,14 @@ stored and who wins are the save channel's ([saves.md](saves.md)).
 
 The schema version is SQLite's `user_version`. **Version 5 is the baseline** (`BASELINE` in
 `sqlite_store.rs`): `SqliteStore::open` on an empty file creates every table, index and trigger
-below in one transaction and writes 5. After it comes `MIGRATIONS`, an ordered list, empty so far:
-entry `n` takes a database from version `5 + n` to the next, each in one transaction with its
-version bump. `SCHEMA_VERSION` is 5 plus the list's length.
+below in one transaction and writes 5. After it comes `MIGRATIONS`, an ordered list: entry `n` takes
+a database from version `5 + n` to the next, each in one transaction with its version bump.
+`SCHEMA_VERSION` is 5 plus the list's length, so 6 today; a new file runs the baseline and then
+every migration.
+
+| Version | Migration | What it does |
+|---|---|---|
+| 6 | `IDENTITY_GROUPS` | Accounts belong to an identity group instead of one identity, so the sign-ins a player linked share them ([innkeeperd.md](innkeeperd.md) section 8.7). Creates `identity_groups`; adds `identities.identity_group` and `identities.linked_at`; gives every existing identity a group of its own (numbered by the identity's rowid, `linked_at` = `created_at`); creates `group_accounts` and copies each `identity_accounts` row into it under the owner's group with its `created_at`; drops `identity_accounts`. Nothing else changes: an existing player has one sign-in method and the same accounts (`version_5_moves_each_identity_into_a_group_of_its_own_with_its_accounts`). |
 
 Versions 1 to 4 were a chain of in-place `ALTER TABLE` upgrades over what was all test data. They
 are not converted. A file with tables and a version below 5 (or no version) is refused, untouched,
@@ -145,8 +150,9 @@ A cascade is used only where the child has no meaning alone.
 | `money` | `account` | `amount`, `deleted_at` | `account` → `accounts` (CASCADE) |
 | `saves` | (`account`, `path`, `version`) | `hash`, `data`, `modified_at`, `current` (one current version per path, by a partial unique index), `deleted_at` | `account` → `accounts` (CASCADE) |
 | `holds` | `account` | `placed_at`, `expires_at` | `account` → `accounts` |
-| `identities` | `identity_key` | `key_version`, `subject_sealed`, `provider`, `adult_attested_at`, `attested_age`, `terms_version`, `created_at`, `deleted_at`. CHECK: the three attestation columns are set together | none |
-| `identity_accounts` | `account` | `identity_key`, `created_at` | `account` → `accounts` (CASCADE); `identity_key` → `identities` (CASCADE; ON UPDATE CASCADE for a key rotation) |
+| `identity_groups` | `id` | `created_at`. One row per person as the server knows them: the sign-ins linked together. A purge removes a group with no identity and no account | none |
+| `identities` | `identity_key` | `key_version`, `subject_sealed`, `provider`, `adult_attested_at`, `attested_age`, `terms_version`, `created_at`, `deleted_at`, `identity_group`, `linked_at` (when it joined its group). CHECK: the three attestation columns are set together. `identity_group` is set on every row the server writes (an `ALTER TABLE` column cannot be NOT NULL) | `identity_group` → `identity_groups` |
+| `group_accounts` | `account` | `identity_group`, `created_at` (the per-day account limit counts these per group) | `account` → `accounts` (CASCADE); `identity_group` → `identity_groups` |
 | `sessions` | `token_hash` | `identity_key`, `account`, `created_at`, `expires_at` | `identity_key` → `identities` (CASCADE; ON UPDATE CASCADE); `account` → `accounts` |
 | `audit_sessions` | `id` (AUTOINCREMENT) | `started_at`, `ended_at`, `account`, `identity_key`, `sealed` | `account` → `accounts`; `identity_key` → `identities` (SET NULL: the sealed record outlives the identity and forgets it; ON UPDATE CASCADE) |
 | `operators` | `identity_key` | `first_seen_at` | none |
@@ -193,7 +199,8 @@ issued, including after the highest account is purged
 (`the_highest_number_is_not_issued_again_after_it_is_purged`).
 
 What the purge removes with the account, in the same transaction: its `money`, its `saves` and its
-`identity_accounts` link (then the identity, once it owns no account and has no session). Its
+`group_accounts` link (then each identity of the group, once the group owns no account and the
+identity has no session, and the group once it has neither). Its
 mailbox goes as soon as no letter is left in it, in that purge or a later one: a deleted letter
 keeps the 90-day mail window, which is longer than the 30-day account window. Nothing cascades from
 the account row, because it is never deleted. The CASCADEs from `accounts` state which children have

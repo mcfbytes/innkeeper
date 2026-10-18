@@ -342,12 +342,14 @@ provider and subject, the same one the operator portal's refusal page shows (9.2
 secret, and only its holder sees it. The tester sends it to the operator, who appends it to the
 `--invite-list` file (`echo KEY >> FILE`; no restart) or to the vault secret `invite-identities`
 (then restarts). Existing accounts keep working when a key is removed; only new accounts need the
-list. Accounts per day, attestation and every other rule still apply.
+list. Accounts per day, attestation and every other rule still apply. An invitation covers the
+person, not one provider: a sign-in method linked to an invited identity (8.7) opens accounts too,
+though its own key is on no list.
 - `--session-hours 12`: how long a session token lives. Logout ends it at once.
 - `--minimum-age 18` and `--terms-version 1`: the least age and terms version an identity must have
   attested before the server opens an account or issues a password (8.6).
-- `--accounts-per-day 3`: accounts one identity may open in any 24 hours. `canCreate` is false and
-  `POST /auth/accounts` is 429 `rate_limited` beyond that.
+- `--accounts-per-day 3`: accounts one identity group (the sign-ins one player linked, 8.7) may open
+  in any 24 hours. `canCreate` is false and `POST /auth/accounts` is 429 `rate_limited` beyond that.
 - `--key-vault https://NAME.vault.azure.net`: read the identity HMAC key, the client secrets and the
   audit key from the server vault (8.3). It cannot be combined with `--audit-public-key`.
 - `--insecure-dev-keys`: no vault. The identity key is `dev-identity.key` in `--data-dir` and the
@@ -544,7 +546,7 @@ What the server decided where the `docs/web.md` contract is open or silent:
   to.
 - An `attest` on the login URL that does not parse is ignored. `POST /auth/attest` with one is 400
   `bad_attest`.
-- `canCreate` is false when enrolment forbids it or the identity reached `--accounts-per-day`; the
+- `canCreate` is false when enrolment forbids it or the identity's group reached `--accounts-per-day`; the
   429 body is `rate_limited`.
 - 401 bodies are `unauthorized`; a credential request for an account the identity does not own is
   404 `no_such_account`.
@@ -553,8 +555,10 @@ What the server decided where the `docs/web.md` contract is open or silent:
   keeps. It travels sealed in the `state` and comes back with the result, in either outcome: the
   redirect fragment ends `&inn-nonce=<nonce>` and the popup message carries `"nonce"`. A page that
   finds no nonce, or not its own, drops the result, so a `#inn-session=` or a callback link an
-  attacker made for their own login cannot sign the victim's page in as the attacker. Without the
-  parameter the result carries no nonce, as before.
+  attacker made for their own login cannot sign the victim's page in as the attacker. **With
+  `--public` the nonce is mandatory**: a login without one is 400 `bad_nonce` ("This server needs
+  the page's nonce on every login."), since the page always sends it. Without `--public` the
+  parameter stays optional and a result without it carries no nonce, as before.
 - There is no limit on logins in flight: nothing is stored for them (8.2).
 - **Attestation is enforced.** `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are
   403 `attest_required` unless the identity's stored answer (from `attest=` on the login URL or
@@ -567,11 +571,12 @@ What the server decided where the `docs/web.md` contract is open or silent:
   identity's stored answer no longer covers `--minimum-age` and `--terms-version` (a newer terms
   version, or an answer withdrawn), the Login gets a Nak, "Accept the current terms on the sign-in
   page first, then dial again.", which the client shows before it hangs up.
-- **A suspension closes the side doors.** While any account the identity owns (deleted or not) is
-  suspended, `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are 403 `suspended`
-  ("An account of this sign-in is suspended. Write to Member Services.") for every account of that
-  identity, and `canCreate` is false, so a suspended player cannot open a fresh account or take a
-  new password instead. The suspended account's own Login is refused as before (9.4).
+- **A suspension closes the side doors.** While any account the identity's group owns (deleted or
+  not) is suspended, `POST /auth/accounts` and `POST /auth/accounts/<id>/credential` are 403
+  `suspended` ("An account of this sign-in is suspended. Write to Member Services.") for every
+  account of that group, whichever linked method asks, and `canCreate` is false, so a suspended
+  player cannot open a fresh account or take a new password instead. A method cannot be removed
+  from such a group either (8.7). The suspended account's own Login is refused as before (9.4).
 - `GET /auth/accounts/<id>/saves` (and `?path=P` for one file) hands a signed-in page the account's
   current save files before it dials, so a fresh browser does not overwrite them; 401 without a
   live token, 404 `no_such_account` when the identity does not own the account. The shape is in
@@ -584,8 +589,60 @@ What the server decided where the `docs/web.md` contract is open or silent:
 - The upgrade is accepted on any path; only `?session=` matters.
 - Without `--public`, an unknown or expired token on the upgrade is refused (401) rather than
   ignored, so a stale tab does not silently log on unbound.
-- Deleting an identity's last account (`account delete`) revokes its sessions; once nothing refers
-  to it, the purge job removes the identity.
+- Deleting a group's last account (`account delete`) revokes the sessions of all its identities;
+  once nothing refers to one, the purge job removes it.
+
+### 8.7 Linked sign-in methods
+
+A player may sign in with several providers and reach the same accounts. Accounts belong to an
+**identity group**, not to one identity: `identities.identity_group` names the group and
+`group_accounts` says which accounts it owns (the schema is [store.md](store.md) section 3, version
+6). Every identity starts in a group of its own, and an account made by any method of a group is
+every method's. Linking is explicit and never by email or any other provider claim: the same person
+proves both sign-ins in one sitting.
+
+1. `POST /auth/identities/ticket` (bearer token) answers 200 `{"ticket": "<sealed>", "expiresIn":
+   600}`: leave for one link login. It is sealed like a login `state` (8.6) and records the asking
+   session's token hash and identity; nothing is stored.
+2. The page opens the usual login with `&link=<ticket>` (and its `nonce`). The ticket opens once,
+   while that session is live; otherwise the login goes straight back to the page with
+   `link_expired`. Its contents travel on in the sealed `state`.
+3. The callback signs the provider identity in (making its row on first use) but opens no session
+   for it. It answers with a **proof** instead of a token: `#inn-link=<proof>` in redirect mode,
+   `{"type": "inn-auth", "link": "<proof>"}` in a popup, with the page nonce as usual. The proof is
+   sealed, lives ten minutes and names the asking session.
+4. `POST /auth/identities` `{"proof": "..."}` with that same session's token links the two
+   identities and answers 200 `{"identities": [...]}`. A proof opens once and only for the session
+   whose ticket started it, so a stolen ticket or proof cannot attach someone else's provider: 400
+   `bad_proof` otherwise.
+
+The **group without accounts joins the other**, all its identities together (the session's group is
+kept when neither has any). So the order does not matter: a player signed in with an old provider
+can add a new one, and a player who signed in with a new provider and has no account yet can link
+it to the accounts of an old one. **Two groups that both own accounts are never merged**: the
+callback answers `identity_in_use`, and so does the redeem (409) if the race was lost. A group
+holds at most 8 identities (409 `too_many_identities`). Signing in again with a method already in
+the group answers `already_linked`.
+
+`POST /auth/identities/unlink` `{"id": "<16 hex digits>"}` removes a method: the identity moves to a
+new group of its own, with no accounts, and its sessions end; it then ages out like any identity
+that owns nothing ([privacy.md](privacy.md) section 6). It refuses the group's only method (409
+`last_identity`), the method of the asking session (409 `current_identity`: sign in with another to
+remove it), any method while an account of the group is suspended (403 `suspended`) and an id not in
+the group (404 `no_such_identity`).
+
+**A recent sign-in.** The ticket and the unlink need a session created within the last ten minutes
+(`RECENT_SIGN_IN`), otherwise 403 `reauth_required`; the page then has the player sign in again. A
+stale or stolen token can then neither add its holder's provider (which would outlive the token) nor
+strip the owner's.
+
+`GET /auth/session` lists the group's methods as `identities`: `[{"id": "<16 hex digits of the
+identity key>", "provider": "github", "name": "GitHub", "linkedOn": "2026-10-17", "current":
+true}]`, provider and link date only, never the subject. `identity` stays the signed-in method.
+Enrolment, suspension and the daily account limit follow the group (8.1, 8.6). The operator
+portal's account page lists every identity of the owning group with its handle, provider, full key
+and link date (9.4); its own allowlist stays per identity key (9.2). The log names a link or an
+unlink by the handle only.
 
 ## 9. Admin portal
 
@@ -620,7 +677,8 @@ lets it in. The vault list is read at startup only: to remove a vault entry for 
 secret and restart, or `admin revoke` it meanwhile. The decision is made again on **every
 request**; a revoked operator's session row is deleted and the next click lands on the login page.
 After an HMAC key rotation the candidate keys of older versions are also tried; re-add the new key
-when convenient.
+when convenient. **The allowlist is per identity key**, not per identity group (8.7): a staff
+member's other linked sign-in methods do not open the portal unless their keys are listed too.
 
 A signed-in identity that is not listed sees a polite 403 page in the narrator's voice with its own
 key, a Copy button and the three ways to add it. Only the handle is logged. This is how you get
@@ -653,7 +711,9 @@ Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
 - **Accounts:** search by number or persona; an account the client has not named yet shows
   "(not named yet)"; detail page; suspend and unsuspend (a suspended
   account's Login is refused with a Nak and its lines are kicked); stamps, staff level and land
-  rights; CasinoBucks; password reset (the new password is shown once); revoke web sessions;
+  rights; CasinoBucks; password reset (the new password is shown once); the linked identities of
+  the owning group (handle, provider, full key and link date, 8.7); revoke web sessions (of every
+  linked identity);
   soft delete and restore (the account tools of [privacy.md](privacy.md) section 3). A purged account
   is shown as its tombstone, marked "purged", with no restore.
 - **Complaints and Member Services:** the operator board (location 0x63, sections 2 and 3). Each links
