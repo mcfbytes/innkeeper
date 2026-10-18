@@ -76,9 +76,14 @@ pub(crate) const REJOIN_REPLACES_KIND_ASSUMED: ObjectKind = ObjectKind::GameObje
 /// 5.1). GOLF, Red Baron and PaintBall name their own SID when they want their copy, and get it.
 pub(crate) const GROUP_SEND_SKIPS_SENDER_ASSUMED: bool = true;
 /// A 40/4 persona name gets no reply: the stock client sends it at logon and in the Clubhouse and
-/// carries on without one (section 3.3). The name lives for the session; the store is not written.
+/// carries on without one (section 3.3). The name renames the session; the store keeps it as the
+/// account's persona except under `RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`.
 #[allow(dead_code)]
 pub(crate) const PERSONA_SET_UNANSWERED_ASSUMED: bool = true;
+/// The RPG titles send 40/4 with the character name, after their land joinNet (yserbius.md section
+/// 7: player, 41/2, land, 10/3, party, 40/4). A 40/4 while the session's place is an RPG title's
+/// land renames the session only; the account's stored persona is the one chosen in the LSCI menus.
+pub(crate) const RPG_CHARACTER_NAME_NOT_STORED_ASSUMED: bool = true;
 /// CasinoBucks an account with no stored balance receives (messages.md 3.3.1). The operator
 /// chose 500, not a guess at the original host. Players earn more in the CasinoLand blood bank.
 pub(crate) const MONEY_STARTING_BALANCE: Money = Money(500);

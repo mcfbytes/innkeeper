@@ -1,6 +1,8 @@
 use tracing::{info, warn};
 
-use crate::assumptions::UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED;
+use crate::assumptions::{
+    RPG_CHARACTER_NAME_NOT_STORED_ASSUMED, UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED,
+};
 use crate::objects::OnlinePlayer;
 use crate::{
     bbs, conference, game_info, hint_board, logon, mail, mall, money, object_list, presence,
@@ -234,8 +236,10 @@ impl PlayerSession {
     }
 
     /// The player takes the name for the session, and the store keeps it as the account's persona
-    /// when it is one a board post can carry (`storable_persona`). A store that refuses is logged
-    /// and the session still plays under the name.
+    /// when it is one a board post can carry (`storable_persona`). A session whose latest land
+    /// join was an RPG title's land (`rpg::is_title`) only renames: the name is a game character
+    /// (`RPG_CHARACTER_NAME_NOT_STORED_ASSUMED`). A store that refuses is logged and the session
+    /// still plays under the name.
     fn set_persona(&mut self, world: &World, name: &str) {
         match &mut self.state {
             PlayerState::LoggedIn(player) => {
@@ -245,7 +249,10 @@ impl PlayerSession {
                     "persona renamed"
                 );
                 name.clone_into(&mut player.account.persona);
-                if storable_persona(name) {
+                let in_rpg = player
+                    .place
+                    .is_some_and(|place| rpg::is_title(place.land_type));
+                if !(RPG_CHARACTER_NAME_NOT_STORED_ASSUMED && in_rpg) && storable_persona(name) {
                     if let Err(error) = world.store.set_persona(player.account.id, name) {
                         warn!(account = player.account.id.0, %error, "persona not stored");
                     }
