@@ -7,7 +7,9 @@ are the one addition that is written in every mode, and only when an audit recip
 ## 1. What is stored
 
 The SQLite file is `DIR/innkeeper.db` (`--data-dir DIR`). A row that a player or the operator deletes
-stays in the file until the retention job in section 6 hard-purges it. The schema is the baseline of
+stays in the file until the retention job in section 6 hard-purges it. A hard purge leaves no bytes
+behind: `secure_delete` zeroes the row where it lay, and the purge then hands the freed pages back
+([store.md](store.md) section 3.1). The schema is the baseline of
 [store.md](store.md) section 3 (`crates/innkeeperd/src/sqlite_store.rs`, version 5): every table is
 STRICT, every column that names another row is a foreign key, and every time is a `*_at` column of
 Unix milliseconds UTC.
@@ -169,8 +171,11 @@ the highest one included.
 - **Reverse proxy:** no access logs. Nginx `access_log off;` on the WebSocket and TCP upgrade
   location; Caddy `log` off for that site. The proxy otherwise records client IPs that `--public`
   just hashed.
-- **Backups:** the live database is the only long store. Copy it to Azure Blob Storage, encrypted at
-  rest, with access by identity only (no Private Endpoints):
+- **Backups:** the live database is the only long store. Take the copy with `VACUUM INTO`
+  (`sqlite3 -readonly DB "VACUUM INTO '/path/copy.db'"`, SQLite 3.27 or later), which writes a
+  consistent snapshot of the live rows only, rather than `.backup`, which copies every page as it
+  is. Copy it to Azure Blob Storage, encrypted at rest, with access by identity only (no Private
+  Endpoints):
   - anonymous blob access and shared-key access are off, so Entra ID is the only way in;
   - the VM's managed identity has a role on the backup container that can read and write but not
     delete;
@@ -337,7 +342,9 @@ when its author account is held, and a complaint also when its `about_account` i
 account number only: an account that shares a persona with a held one is not held.
 
 Backups rotate within 30 days (section 4) so a hard-purged row leaves backups within 30 days of
-its purge.
+its purge. A backup taken after the purge never holds it: the purge zeroes the row's bytes in the
+live file at once (`secure_delete`), and `VACUUM INTO` copies live rows only. Tested by
+`a_purged_letter_leaves_no_bytes_in_the_file_or_its_backup`.
 
 ## 7. Key handling
 
