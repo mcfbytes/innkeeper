@@ -282,3 +282,77 @@ fn a_hang_up_removes_the_connection_from_every_recipient_set() {
     let _ = store.disconnect(A);
     assert!(store.recipients(group).is_empty() && store.recipients(a_player).is_empty());
 }
+
+fn ask(target: Sid, offsets: Vec<u16>) -> crate::PropertyRequest {
+    crate::PropertyRequest {
+        target,
+        from: target,
+        offsets,
+    }
+}
+
+fn set_text(store: &mut ObjectStore, target: Sid, offset: u16, len: usize) {
+    let value = vec![0x41; len];
+    let set = crate::SetStr {
+        target,
+        from: target,
+        offset,
+        value,
+    };
+    store.mirror_text(&set);
+}
+
+#[test]
+fn a_repeated_offset_is_answered_once_and_a_reply_never_outgrows_a_message() {
+    let mut store = ObjectStore::new();
+    let player = granted(&store.join(A, request(1, ObjectKind::Object, 0xFFFF)));
+    set_text(&mut store, player, 2, 1000);
+    let replies = store.properties(A, &ask(player, vec![2; 32_000]));
+    let [Delivery {
+        message: HostMessage::Properties(values),
+        ..
+    }] = replies.as_slice()
+    else {
+        panic!("one SetMsg");
+    };
+    assert_eq!(values.properties.len(), 1);
+    assert!(replies[0].message.encode().len() < 1100);
+}
+
+#[test]
+fn an_object_mirrors_at_most_its_share_of_bytes() {
+    let mut store = ObjectStore::new();
+    let player = granted(&store.join(A, request(1, ObjectKind::Object, 0xFFFF)));
+    let share = crate::assumptions::MIRRORED_BYTES_PER_OBJECT_MAX_ASSUMED;
+    set_text(&mut store, player, 0, share / 2);
+    set_text(&mut store, player, 1, share);
+    set_text(&mut store, player, 0, share / 2 - 1);
+    let replies = store.properties(A, &ask(player, vec![0, 1]));
+    let HostMessage::Properties(values) = &replies[0].message else {
+        panic!("a SetMsg");
+    };
+    let offsets: Vec<u16> = values.properties.iter().map(|p| p.offset).collect();
+    assert_eq!(offsets, vec![0], "the oversized value was relayed only");
+}
+
+#[test]
+fn a_member_table_too_wide_for_a_message_is_not_built() {
+    let mut store = ObjectStore::new();
+    let room = granted(&store.join(A, request(1, ObjectKind::LandGroup, 1)));
+    let player = granted(&store.join(A, request(2, ObjectKind::Object, 0xFFFF)));
+    let join = GroupJoin {
+        group: room,
+        member: player,
+        version: None,
+    };
+    store.join_group(A, join);
+    assert!(store
+        .member_properties(A, &ask(room, (0..20_000).collect()))
+        .is_empty());
+    assert_eq!(
+        store
+            .member_properties(A, &ask(room, vec![0; 20_000]))
+            .len(),
+        1
+    );
+}

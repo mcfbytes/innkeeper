@@ -173,6 +173,9 @@ pub(crate) const OBJ_NEW_LIST_MAX_ASSUMED: u16 = 256;
 /// The most objects one connection may hold. A PaintBall leader holds one per item tile, 113 on the
 /// largest stock map, beside some ten others (objects.md section 6); 64 lines at this cap fill half the SIDs.
 pub(crate) const HELD_OBJECTS_MAX_ASSUMED: usize = 512;
+/// Reply bytes of mirrored properties one object keeps: a name, a game, a room and a looks array are
+/// a few dozen (objects.md section 9). A later value past it is still relayed, only not mirrored.
+pub(crate) const MIRRORED_BYTES_PER_OBJECT_MAX_ASSUMED: usize = 4096;
 /// `ObjFreeList` tells other connections the way leaveNet does: `ObjFree` (command 9), not command 52.
 /// PaintBall's `handleMsg` has no command-52 arm (`SL/script.780`). A peer that disposed on 52 would
 /// settle it the other way.

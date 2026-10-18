@@ -116,6 +116,7 @@ switchboard, and a delivery for a connection that is gone is dropped.
 | `REPLICAS_INCLUDE_GROUP_FELLOWS_ASSUMED` | true | `WaitingRoomGroup::addMember` builds a replica of each newcomer and reads its properties, so a later change must reach it | `messages.md` 3.2 |
 | `UNSET_INT_PROPERTY_ASSUMED` | 0 | a `GrpGetProp` row needs a value in every column; text columns get empty text | `messages.md` 3.2 |
 | `PROPERTIES_UNREAD_WORD_ASSUMED` | 0 | the word at byte 4 of `SetMsg`, which the client skips | `messages.md` 3.2 |
+| `MIRRORED_BYTES_PER_OBJECT_MAX_ASSUMED` | 4096 | what one object's mirror keeps. The waiting room publishes a name, a game, a room and a looks array, a few dozen bytes; 64 lines of 512 objects at the cap are 128 MiB, and one identity's two lines 4 MiB | `messages.md` 3.2, section 9; INFERRED bound |
 | `HELD_OBJECTS_MAX_ASSUMED` | 512 | the most objects one connection holds. LSCI holds 3 in the lobby and 5 or 6 in a game or conference, the RPGs 4, GOLF and Red Baron 1 beside the LSCI ones; a PaintBall leader adds one per item tile of its map, 113 on the largest stock map (MAZE, `SL/script.780 placeMen`). 512 leaves room for a larger map and one full `ObjNewList` (256), and 64 lines at the cap fill half of the 65,280 SIDs | `int14h-census/yserbius.md`, `golf.md`, `redbaron.md`, the `SL/*.PBM` maps; INFERRED bound |
 
 Also INFERRED but not constants, because no alternative is plausible: the shared key is
@@ -171,10 +172,15 @@ connection; the sender has applied it already. An update for a SID nobody holds 
 
 | Client sends | Reply, to the requester only |
 |---|---|
-| getProp (32) for a live object | `SetMsg` (33) addressed to the object, one record per requested property the mirror has, in request order |
+| getProp (32) for a live object | `SetMsg` (33) addressed to the object, one record per distinct requested property the mirror has, in order of first request, cut where the next record would pass 65,535 bytes |
 | getProp for a SID nobody holds | none |
-| `GrpGetProp` (31) for a group | `GrpGetProp` with one column per requested offset and one row per member in joining order; a column is text when any member has text there, and a missing cell is 0 or empty text |
+| `GrpGetProp` (31) for a group | `GrpGetProp` with one column per distinct requested offset and one row per member in joining order; a column is text when any member has text there, and a missing cell is 0 or empty text. A table that could not fit 65,535 bytes even with every cell a word is not built, and nothing is sent |
 | `GrpGetProp` for something that is not a group | none |
+
+Each object mirrors at most `MIRRORED_BYTES_PER_OBJECT_MAX_ASSUMED` (4 KiB) of values, counted as they
+would be sent; a `SetInt` or `SetStr` that would pass it is still relayed to the replicas but not kept.
+These bounds came with the multicast cap: before them one 64 KiB getProp that named a 60 KB text property
+32,000 times built a 1.8 GiB reply, and an object could mirror 64 KiB at each of 65,536 offsets.
 
 So a player who arrives late reads what the others published before it came: the waiting room asks each
 newcomer's name, game and room with getProp, and `GrpGetProp` fetches every member at once.
