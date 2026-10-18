@@ -19,7 +19,7 @@ immediate `0x55` / `0x54`). A normal player reads the text with `subStr(18, -1)`
 Until a moderator writes, this host answers 84 and 85 with one message:
 
 ```
-\x01Choose a room\x02Adventure games\x02General trivia\x02Games & screens
+\x01Choose a room\x02Adventure games\x02General trivia\x02Games and screens\x02
 ```
 
 Conference class 67 stays empty until someone with user flag `0x0004` posts. A moderator 27/0 on 84 or 85
@@ -41,21 +41,23 @@ The host answers whichCmd 17 with the four routing words filled in (`server` 4, 
 `host` the stock host, `remote` 0) and `toSID` the PMS object's SID. Silence for 30 s is
 "Timed out waiting for NTN game initialization." (`WaitForNTNInitMsg::init`, `ldi 30`). CONFIRMED.
 
-The client then sends the version line `TRIVIA%V01.200\r\n` as sub 24. The logon the host sends is type 0,
-type 1, type 0 (`vocab.729` `proc_237`): the second type 0 opens the handle dialog only after type 1 has
-set `local3`. A handle is 1..6 graphic characters plus CR LF, uppercased. Names starting TSN or INN are
-refused, as the client already refuses them for non-staff. A taken name in the same room is refused the
-same way: another type 0. Type 39 carries the accepted handle (`subStr` of the whole payload) and type 2
-with help byte 0 unlocks question types (`local4` becomes 2). CONFIRMED the flag stores; the host does
-not implement a staff exception.
+The client then sends the version line `TRIVIA%V01.200\r\n` as sub 24. The logon the host sends is type 0
+then type 1 (`vocab.729` `proc_237`). Type 0 with `local3 == 0` drops `WaitForNTNInitMsg`. Type 1 opens
+the handle dialog because `local5` starts at 1 (`vocab.729` item 1 VARIABLES `[5]=0x0001`; Feb-94 the
+same). A later type 0, once `local3 == 1`, is the reject dialog (`"because: %s"`). This host sends that
+type 0 only when a handle is refused. A handle is 1..6 graphic characters plus CR LF, uppercased. Names
+starting TSN or INN are refused, as the client already refuses them for non-staff. A taken name in the
+same room is refused the same way. Type 39 carries the accepted handle (`subStr` of the whole payload)
+and type 2 with help byte 0 unlocks question types (`local4` becomes 2). CONFIRMED the flag stores and
+the local initialiser; the host does not implement a staff exception.
 
 Sub 26 (EXIT) and a hang-up drop the seat. The next JOIN on that connection is a new session number.
 
 ## 3. The show
 
-One Countdown game per room, idle while empty. The first handle in an idle room starts a game on the
-next clock tick. A game is 15 questions. Per question the host sends, to every seated player who has a
-handle:
+One Countdown game per room, idle while empty. The first handle in an idle room waits two seconds so
+type 39 and type 2 can land, then starts a game. A game is 15 questions. Per question the host sends,
+to every seated player who has a handle:
 
 | Type | Payload | Client |
 |---|---|---|

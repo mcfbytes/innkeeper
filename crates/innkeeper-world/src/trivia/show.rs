@@ -26,11 +26,17 @@ const BETWEEN_GAMES_MS: u64 = 60_000;
 const BETWEEN_GAMES_MINUTES: u8 = 1;
 /// Questions in one Countdown game.
 const QUESTIONS_PER_GAME: u8 = 15;
+/// Pause after type 39/2 so the handle dialog can close before type 4.
+const AFTER_HANDLE_MS: u64 = 2_000;
 
 #[derive(Debug, Default)]
 pub(super) enum Phase {
     #[default]
     Idle,
+    /// First handle is in; wait so type 39 and type 2 land before the question.
+    Starting {
+        until_ms: u64,
+    },
     Asking(Asked),
     Pause {
         next: u8,
@@ -99,7 +105,10 @@ impl Shows {
     fn advance(&mut self, index: usize, now: u64) -> Vec<Delivery> {
         let phase = self.rooms.get(index).map(|room| &room.phase);
         match phase {
-            Some(Phase::Idle) => self.begin(index, 1, now, true),
+            Some(Phase::Idle) => self.queue_start(index, now),
+            Some(Phase::Starting { until_ms }) if now >= *until_ms => {
+                self.begin(index, 1, now, true)
+            }
             Some(Phase::Asking(asked)) if now >= asked.ends_ms => self.finish(index, now),
             Some(Phase::Pause { next, until_ms }) if now >= *until_ms => {
                 let next = *next;
@@ -110,6 +119,22 @@ impl Shows {
             }
             _ => Vec::new(),
         }
+    }
+
+    fn queue_start(&mut self, index: usize, now: u64) -> Vec<Delivery> {
+        let ready = self
+            .rooms
+            .get(index)
+            .is_some_and(|room| room.seats.iter().any(|seat| seat.handle.is_some()));
+        if !ready {
+            return Vec::new();
+        }
+        if let Some(room) = self.rooms.get_mut(index) {
+            room.phase = Phase::Starting {
+                until_ms: now.saturating_add(AFTER_HANDLE_MS),
+            };
+        }
+        Vec::new()
     }
 
     fn begin(&mut self, index: usize, number: u8, now: u64, new_game: bool) -> Vec<Delivery> {
@@ -518,16 +543,18 @@ mod tests {
             },
             1,
         );
-        assert_eq!(shows.join(A, Some(1), 7, header(0x10)).len(), 4);
+        assert_eq!(shows.join(A, Some(1), 7, header(0x10)).len(), 3);
         assert_eq!(shows.text(A, b"GUY\r\n", T0).len(), 2);
-        assert_eq!(shows.join(B, Some(1), 7, header(0x11)).len(), 4);
+        assert_eq!(shows.join(B, Some(1), 7, header(0x11)).len(), 3);
         assert_eq!(shows.text(B, b"MAX\r\n", T0).len(), 2);
-        let start = shows.tick(T0);
+        assert!(shows.tick(T0).is_empty());
+        let start_at = T0 + AFTER_HANDLE_MS;
+        let start = shows.tick(start_at);
         let right = choice_for(&start, b"Ken Williams");
         let wrong = if right == 1 { 2 } else { 1 };
-        shows.take_answer(A, format!("{right}\r\n").as_bytes(), T0);
-        shows.take_answer(B, format!("{wrong}\r\n").as_bytes(), T0 + 1_000);
-        let end = shows.tick(T0 + u64::from(QUESTION_SECONDS) * 1000);
+        shows.take_answer(A, format!("{right}\r\n").as_bytes(), start_at);
+        shows.take_answer(B, format!("{wrong}\r\n").as_bytes(), start_at + 1_000);
+        let end = shows.tick(start_at + u64::from(QUESTION_SECONDS) * 1000);
         let a = score_of(&end, A);
         let b = score_of(&end, B);
         assert_eq!(

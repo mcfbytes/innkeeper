@@ -91,7 +91,7 @@ const TOPIC_SECTIONS: [u16; 3] = [67, 84, 85];
 const TRIVIA_TOPIC_SECTIONS: [u16; 2] = [84, 85];
 /// Info line, then one topic per `\x02`. The client splits on bytes 1 and 2 (`proc_309`).
 const DEFAULT_TRIVIA_TOPICS: &[u8] =
-    b"\x01Choose a room\x02Adventure games\x02General trivia\x02Games & screens";
+    b"\x01Choose a room\x02Adventure games\x02General trivia\x02Games and screens\x02";
 /// The client keeps one byte per indexed message in a 120-byte buffer.
 const INDEX_LIMIT: usize = 120;
 

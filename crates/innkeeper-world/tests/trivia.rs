@@ -15,7 +15,8 @@ use innkeeper_world::{
 };
 
 const LOGIN_PASSWORD: [u8; 10] = [0x1d, 0x7a, 0x01, 0x66, 0x16, 0x66, 0x18, 0x73, 0x03, 0x00];
-const TOPICS: &[u8] = b"\x01Choose a room\x02Adventure games\x02General trivia\x02Games & screens";
+const TOPICS: &[u8] =
+    b"\x01Choose a room\x02Adventure games\x02General trivia\x02Games and screens\x02";
 
 fn spaced(bytes: &[u8]) -> String {
     bytes
@@ -123,12 +124,10 @@ fn logon_burst(number: u16, sid: u16) -> String {
         A < whichCmd 17 | {joined}
         A < type 0 | {version}
         A < type 1 | {logon}
-        A < type 0 again | {version2}
         ",
         joined = joined(number, sid),
         version = game(number, sid, NtnMessage::Version),
         logon = game(number, sid, NtnMessage::Logon),
-        version2 = game(number, sid, NtnMessage::Version),
     )
 }
 

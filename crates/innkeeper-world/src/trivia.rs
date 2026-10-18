@@ -194,11 +194,12 @@ impl Shows {
             number,
             "trivia player joined"
         );
+        // Type 1 opens the handle dialog: vocab.729 local5 starts at 1. A later
+        // type 0 is the reject path (`local3 == 1`) and is sent only on refusal.
         vec![
             joined(header),
             game(header, NtnMessage::Version),
             game(header, NtnMessage::Logon),
-            game(header, NtnMessage::Version),
         ]
     }
 
@@ -411,7 +412,7 @@ mod tests {
 
     fn join(shows: &mut Shows, connection: ConnectionId, room: u8) {
         let replies = shows.join(connection, Some(room), 7, header(0x10));
-        assert_eq!(replies.len(), 4);
+        assert_eq!(replies.len(), 3);
     }
 
     fn handle(shows: &mut Shows, connection: ConnectionId, text: &[u8]) -> Vec<HostMessage> {
