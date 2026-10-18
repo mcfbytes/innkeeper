@@ -95,7 +95,8 @@ Order inside the jail:
    `sandbox: landlock abi=N fs=restricted|open net=bind-restricted|unrestricted, seccomp=kill|log|unsupported, no_new_privs`.
 
 On an operating system other than Linux, `--sandbox` logs
-`sandbox: --sandbox is unsupported on this operating system` and continues.
+`sandbox: --sandbox is unsupported on this operating system` and continues; `--public` stops
+there instead (section 4).
 
 The effective uid is the second field of the `Uid:` line in `/proc/self/status`. `libc`'s
 `geteuid` is unsafe, and this crate forbids unsafe. An unreadable status file is treated as root.
@@ -132,9 +133,17 @@ closed port still failed with `ECONNREFUSED`, while a bind of a port that was no
 with `EACCES`. If a later kernel starts denying the implicit bind inside `connect`, the fix is a
 port-0 rule, and it has to be retested before it is added.
 
-A kernel with no Landlock logs one warning and continues, in public mode as well:
-`sandbox: this kernel has no Landlock; filesystem and TCP bind stay unrestricted`. The summary
-then says `abi=unsupported fs=open net=unrestricted`. That is a warning, not a startup error.
+**In public mode a kernel with no Landlock stops startup**, with `this kernel has no Landlock, so
+--public cannot confine its files and ports; use a Linux 5.13 or later kernel with landlock in its
+lsm= list, or pass --no-sandbox to run unconfined on purpose`. A public server never runs
+unconfined by accident; `--no-sandbox` is the deliberate opt-out. The same holds on an operating
+system other than Linux. Without `--public` (`--sandbox`, `--sandbox-log`) the old behaviour stays:
+one warning, `sandbox: this kernel has no Landlock; filesystem and TCP bind stay unrestricted`, a
+summary of `abi=unsupported fs=open net=unrestricted`, and the server carries on. A kernel with
+Landlock but an ABI older than 4 is still accepted in public mode, with `net=unrestricted` in the
+summary: the files are confined and the ports are not. Ubuntu's generic and Azure kernels build
+Landlock in and list it in `CONFIG_LSM`; the 6.x kernels of a current Ubuntu LTS give ABI 6 or 7
+(the WSL2 6.18 kernel here reports `abi=7`), so the hosted VM should log `abi=6` or later.
 
 `localhost` is resolved once before the jail so glibc's files resolver is already mapped. A later
 `dlopen` of a DNS module would need a new executable mapping, which section 5 refuses, so outbound

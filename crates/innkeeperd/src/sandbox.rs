@@ -29,6 +29,25 @@ pub(crate) struct ConfineRequest<'a> {
     pub(crate) ports: &'a [u16],
     /// Directories to keep readable (and nothing more): the portal's allowlist file lives in one.
     pub(crate) read_dirs: &'a [std::path::PathBuf],
+    /// Public mode: a kernel without Landlock stops startup instead of running unconfined.
+    pub(crate) require_landlock: bool,
+}
+
+/// What a public server says when it cannot confine its files and ports.
+const NO_LANDLOCK: &str = "this kernel has no Landlock, so --public cannot confine its files and                            ports; use a Linux 5.13 or later kernel with landlock in its lsm= list,                            or pass --no-sandbox to run unconfined on purpose";
+
+/// A ruleset the kernel did not enforce is a warning, or an error when Landlock is required.
+pub(crate) fn landlock_outcome(enforced: bool, required: bool) -> Result<(), SandboxError> {
+    match (enforced, required) {
+        (false, true) => Err(SandboxError::Landlock(NO_LANDLOCK.to_owned())),
+        (false, false) => {
+            tracing::warn!(
+                "sandbox: this kernel has no Landlock; filesystem and TCP bind stay unrestricted"
+            );
+            Ok(())
+        }
+        (true, _) => Ok(()),
+    }
 }
 
 pub(crate) fn refuse_root(euid: u32, allow_root: bool) -> Result<(), SandboxError> {
@@ -83,9 +102,8 @@ pub(crate) fn confine(request: &ConfineRequest<'_>) -> Result<(), SandboxError> 
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = request;
         tracing::warn!("sandbox: --sandbox is unsupported on this operating system");
-        Ok(())
+        landlock_outcome(false, request.require_landlock)
     }
 }
 
@@ -131,7 +149,7 @@ mod linux {
         super::refuse_root(request.euid, request.allow_root)?;
         prctl::set_no_new_privileges(true).map_err(SandboxError::NoNewPrivs)?;
         warn_if_capture_is_outside(request.data_dir, request.capture_dir);
-        let (abi, fs, net) = apply_landlock(request.data_dir, request.ports, request.read_dirs)?;
+        let (abi, fs, net) = apply_landlock(request)?;
         let seccomp = apply_seccomp(request.log_only)?;
         tracing::info!("{}", summary_line(&abi, fs, net, seccomp));
         Ok(())
@@ -178,11 +196,9 @@ mod linux {
     }
 
     fn apply_landlock(
-        data_dir: Option<&Path>,
-        ports: &[u16],
-        read_dirs: &[PathBuf],
+        request: &ConfineRequest<'_>,
     ) -> Result<(String, &'static str, &'static str), SandboxError> {
-        let built = build_ruleset(data_dir, ports, read_dirs)?;
+        let built = build_ruleset(request.data_dir, request.ports, request.read_dirs)?;
         if !built.missing.is_empty() {
             tracing::warn!(
                 paths = %built.missing.join(", "),
@@ -196,6 +212,10 @@ mod linux {
             .map_err(land_err)?
             .restrict_self()
             .map_err(land_err)?;
+        super::landlock_outcome(
+            status.ruleset != RulesetStatus::NotEnforced,
+            request.require_landlock,
+        )?;
         Ok(describe(&status))
     }
 
@@ -323,7 +343,7 @@ mod linux {
 
     fn describe(status: &RestrictionStatus) -> (String, &'static str, &'static str) {
         let enforced = status.ruleset != RulesetStatus::NotEnforced;
-        let described = match status.landlock {
+        match status.landlock {
             LandlockStatus::Available { effective_abi, .. } if enforced => {
                 let net = if effective_abi >= ABI::V4 {
                     "bind-restricted"
@@ -333,13 +353,7 @@ mod linux {
                 (effective_abi.to_string(), "restricted", net)
             }
             _ => ("unsupported".to_string(), "open", "unrestricted"),
-        };
-        if !enforced {
-            tracing::warn!(
-                "sandbox: this kernel has no Landlock; filesystem and TCP bind stay unrestricted"
-            );
         }
-        described
     }
 
     fn land_err(error: impl std::fmt::Display) -> SandboxError {
@@ -385,6 +399,17 @@ mod tests {
         assert!(refused.to_string().contains("refusing to run as root"));
         assert!(refuse_root(0, true).is_ok());
         assert!(refuse_root(1000, false).is_ok());
+    }
+
+    #[test]
+    fn a_kernel_without_landlock_stops_a_public_server_and_warns_otherwise() {
+        let refused = landlock_outcome(false, true).unwrap_err().to_string();
+        assert!(
+            refused.contains("no Landlock") && refused.contains("--no-sandbox"),
+            "{refused}"
+        );
+        assert!(landlock_outcome(false, false).is_ok());
+        assert!(landlock_outcome(true, true).is_ok());
     }
 
     #[test]
