@@ -199,6 +199,7 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     settings.require_session = config.public;
     settings.signup_open = enrolment.login_enrols();
     settings.forwarding = config.forwarding();
+    settings.seal_required = config.public;
     let settings = Arc::new(settings);
     let admin = match (admin_listener, opened.store.as_ref()) {
         (Some(listener), Some(store)) => {

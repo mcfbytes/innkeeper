@@ -43,6 +43,8 @@ pub(crate) struct ConnectionSettings {
     pub(crate) signup_open: bool,
     /// Public mode: the client is the proxy's `X-Forwarded-For` entry, not the loopback peer.
     pub(crate) forwarding: crate::forwarded::Forwarding,
+    /// Public mode: a line whose sealed record cannot be written is ended, not served unrecorded.
+    pub(crate) seal_required: bool,
     next_connection: AtomicU64,
 }
 
@@ -60,6 +62,7 @@ impl ConnectionSettings {
             require_session: false,
             signup_open: true,
             forwarding: crate::forwarded::Forwarding::Direct,
+            seal_required: false,
             next_connection: AtomicU64::new(1),
             world,
         }
@@ -137,6 +140,11 @@ where
         host.announce_logon(signal);
     }
     let mut ticket = crate::audit::begin(settings.audit.as_ref(), peer, transport);
+    if ticket.is_none() && settings.audit.is_some() && settings.seal_required {
+        return Err(std::io::Error::other(
+            "refused: the sealed record was not written",
+        ));
+    }
     if let (Some(ticket), Some(binding)) = (ticket.as_mut(), binding.as_ref()) {
         ticket.note_identity(&binding.identity);
     }

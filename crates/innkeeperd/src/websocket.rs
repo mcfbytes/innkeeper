@@ -399,8 +399,17 @@ mod tests {
 
     /// A server behind the proxy, sealing every line; the store is where its rows land.
     async fn serve_behind_proxy() -> (SocketAddr, Arc<crate::sqlite_store::SqliteStore>) {
+        serve_public(|_| {}).await
+    }
+
+    /// As `serve_behind_proxy`, with public mode's sealing rule and a chance to break the store.
+    async fn serve_public(
+        prepare: impl FnOnce(&crate::sqlite_store::SqliteStore),
+    ) -> (SocketAddr, Arc<crate::sqlite_store::SqliteStore>) {
         let store = Arc::new(crate::sqlite_store::SqliteStore::open_in_memory().unwrap());
+        prepare(&store);
         let mut settings = ConnectionSettings::new(SessionConfig::default(), World::stock(), None);
+        settings.seal_required = true;
         settings.audit = Some(crate::audit::tests::seal_for(Arc::clone(&store)));
         settings.forwarding = crate::forwarded::Forwarding::Proxy {
             peer_when_absent: false,
@@ -456,6 +465,32 @@ mod tests {
             .query_row("SELECT count(*) FROM audit_sessions", [], |row| row.get(0))
             .unwrap();
         assert_eq!(rows, 0);
+    }
+
+    #[tokio::test]
+    async fn in_public_mode_a_line_whose_record_cannot_be_sealed_is_ended() {
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+        let (address, _store) = serve_public(|store| {
+            store
+                .connection()
+                .execute_batch("DROP TABLE audit_sessions")
+                .unwrap();
+        })
+        .await;
+        let mut request = format!("ws://{address}/").into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert("x-forwarded-for", HeaderValue::from_static("203.0.113.5"));
+        let stream = TcpStream::connect(address).await.unwrap();
+        let (mut socket, _) = client_async(request, stream).await.unwrap();
+        send(&mut socket, b"@D\r\r").await;
+        let next = tokio::time::timeout(Duration::from_secs(5), socket.next())
+            .await
+            .expect("the server ended the line");
+        assert!(
+            matches!(next, None | Some(Ok(Message::Close(_)) | Err(_))),
+            "{next:?}"
+        );
     }
 
     #[tokio::test]

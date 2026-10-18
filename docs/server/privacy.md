@@ -232,7 +232,10 @@ and `websocket` for a WebSocket line. The row
 is written when the connection opens (`account_id` and `ended_at` null). It is sealed again when
 Login is accepted and when the connection ends. A line that carried a session token gets the
 identity's HMAC in `identity_key`, in the clear like `account`, so a request about one identity
-finds its connections. A failure to seal is a warning without the IP, and the connection continues.
+finds its connections. A failure to seal is a warning without the IP. In public mode the line then ends at once, before
+the session starts, so no player is served without a record; elsewhere the connection continues.
+A later reseal (at Login or at the end) that fails is a warning and the line goes on, since the
+row with the address already exists.
 
 **Who can read them.** Only the holder of the operator private key, and that key is not on the
 server (section 7). Decryption is only for specific accounts named in valid legal process, or for a
