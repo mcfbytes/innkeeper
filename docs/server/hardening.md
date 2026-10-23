@@ -278,7 +278,10 @@ secret `admin-identities`, or `--admin-allowlist FILE`) and a Caddy `/admin/*` r
 
 A public host runs on a 1 GiB virtual machine, so every line has a bounded share of memory and time.
 The limits live in `crates/innkeeperd/src/limits.rs` (`Limits`); the flags set them, and nothing in the
-original client depends on their exact values. The client evidence behind each choice is in the last column.
+original client depends on their exact values. Each of the five line flags also reads an environment variable,
+the flag's name in capitals after `INNKEEPERD_` (`INNKEEPERD_MAX_LINES`, `INNKEEPERD_IDLE_TIMEOUT`, ...), so a
+deployment can set them in a systemd drop-in without changing the unit's command line; a flag on the command
+line wins over the variable. The client evidence behind each choice is in the last column.
 
 | Limit | Default | Flag | What happens past it | Why this value |
 |---|---|---|---|---|

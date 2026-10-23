@@ -19,7 +19,7 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "signal", "sync"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 humantime = "2"
 rusqlite = { version = "0.40", features = ["bundled"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
