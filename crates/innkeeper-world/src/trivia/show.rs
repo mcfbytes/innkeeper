@@ -189,6 +189,21 @@ impl Shows {
         let mut out = Vec::new();
         for seat in room.seats.iter().filter(|seat| seat.handle.is_some()) {
             let header = seat.header();
+            // Type 10 and type 24 set the client's help flag (`local115`), and while it is set type 23
+            // disables the answer buttons instead of enabling them (`vocab.729` +0x16ca). Only type 2
+            // with help 0 clears it, so every question opens with one. It also clears the last
+            // question and disposes the buttons, which type 5 rebuilds.
+            out.push(to(
+                seat.connection,
+                header,
+                NtnMessage::ScoreTemplate {
+                    mode: 0,
+                    cnf: 0,
+                    help: 0,
+                    game_id: 0,
+                    scope: 0,
+                },
+            ));
             out.push(to(
                 seat.connection,
                 header,
@@ -599,5 +614,49 @@ mod tests {
             .filter(|message| matches!(message, NtnMessage::AnswerCorrect { .. }))
             .collect();
         assert_eq!(eights.len(), 2);
+    }
+
+    /// Type 10 leaves the client's help flag set, so the next question must clear it with type 2
+    /// help 0 before type 23, or the answer buttons stay disabled.
+    #[test]
+    fn every_question_opens_with_a_help_zero_template_after_the_last_score() {
+        let item = fit(&raw()).unwrap();
+        let mut shows = Shows::new();
+        shows.set_pools(
+            TriviaPools {
+                adventure: vec![item],
+                ..TriviaPools::default()
+            },
+            1,
+        );
+        shows.join(A, Some(1), 7, header(0x10));
+        shows.text(A, b"GUY\r\n", T0, crate::LogPolicy::Public);
+        assert!(shows.tick(T0).is_empty());
+        let start_at = T0 + AFTER_HANDLE_MS;
+        let ends_at = start_at + u64::from(QUESTION_SECONDS) * 1000;
+        let next_at = ends_at + BETWEEN_QUESTIONS_MS;
+        for (at, expect_question) in [(start_at, true), (ends_at, false), (next_at, true)] {
+            let out = shows.tick(at);
+            if !expect_question {
+                assert!(out
+                    .iter()
+                    .filter_map(ntn)
+                    .any(|m| matches!(m, NtnMessage::Score(_))));
+                continue;
+            }
+            let types: Vec<_> = out
+                .iter()
+                .filter_map(ntn)
+                .map(|message| match message {
+                    NtnMessage::ScoreTemplate { help: 0, .. } => 2,
+                    NtnMessage::TickdownSetup { .. } => 3,
+                    NtnMessage::Question { .. } => 4,
+                    NtnMessage::Answers { .. } => 5,
+                    NtnMessage::StartTickdown { .. } => 23,
+                    _ => 0,
+                })
+                .collect();
+            assert_eq!(types, [2, 3, 4, 5, 23]);
+        }
     }
 }
