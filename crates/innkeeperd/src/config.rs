@@ -171,19 +171,29 @@ pub(crate) struct Config {
     #[arg(long, default_value_t = 2400)]
     pub(crate) connect_rate: u32,
     /// KiB that may wait for one client before its line is ended (docs/server/hardening.md section 10).
-    #[arg(long, default_value_t = LINE_QUEUE_BYTES_DEFAULT / 1024, value_name = "KIB")]
+    #[arg(long, env = "INNKEEPERD_LINE_QUEUE_KIB", default_value_t = LINE_QUEUE_BYTES_DEFAULT / 1024, value_name = "KIB")]
     pub(crate) line_queue_kib: usize,
     /// How long one write to a client may stall before its line is ended.
-    #[arg(long, default_value = "60s", value_name = "DURATION")]
+    #[arg(
+        long,
+        env = "INNKEEPERD_WRITE_TIMEOUT",
+        default_value = "60s",
+        value_name = "DURATION"
+    )]
     pub(crate) write_timeout: humantime::Duration,
     /// Lines served at once, over every listener; a line past it is refused.
-    #[arg(long, default_value_t = MAX_LINES_DEFAULT, value_name = "N")]
+    #[arg(long, env = "INNKEEPERD_MAX_LINES", default_value_t = MAX_LINES_DEFAULT, value_name = "N")]
     pub(crate) max_lines: usize,
     /// Lines one signed-in identity may hold at once.
-    #[arg(long, default_value_t = LINES_PER_IDENTITY_DEFAULT, value_name = "N")]
+    #[arg(long, env = "INNKEEPERD_LINES_PER_IDENTITY", default_value_t = LINES_PER_IDENTITY_DEFAULT, value_name = "N")]
     pub(crate) lines_per_identity: usize,
     /// A line that sends nothing for this long is ended; 0s keeps silent lines.
-    #[arg(long, default_value = "30m", value_name = "DURATION")]
+    #[arg(
+        long,
+        env = "INNKEEPERD_IDLE_TIMEOUT",
+        default_value = "30m",
+        value_name = "DURATION"
+    )]
     pub(crate) idle_timeout: humantime::Duration,
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
@@ -669,6 +679,31 @@ mod tests {
             config.int14h_bind(),
             Some("127.0.0.1:2315".parse().unwrap())
         );
+    }
+
+    /// The deployment sets these through a systemd drop-in (`Environment=`), so the unit's command line
+    /// never has to change for a tuning value.
+    #[test]
+    fn the_line_limits_also_come_from_the_environment() {
+        use clap::CommandFactory;
+        let command = Config::command();
+        let env_of = |id: &str| {
+            command
+                .get_arguments()
+                .find(|arg| arg.get_id() == id)
+                .and_then(|arg| arg.get_env())
+                .and_then(|env| env.to_str())
+                .map(str::to_owned)
+        };
+        for (id, env) in [
+            ("max_lines", "INNKEEPERD_MAX_LINES"),
+            ("lines_per_identity", "INNKEEPERD_LINES_PER_IDENTITY"),
+            ("line_queue_kib", "INNKEEPERD_LINE_QUEUE_KIB"),
+            ("write_timeout", "INNKEEPERD_WRITE_TIMEOUT"),
+            ("idle_timeout", "INNKEEPERD_IDLE_TIMEOUT"),
+        ] {
+            assert_eq!(env_of(id).as_deref(), Some(env), "{id}");
+        }
     }
 
     #[test]
