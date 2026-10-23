@@ -71,12 +71,17 @@ to every seated player who has a handle:
 
 | Type | Payload | Client |
 |---|---|---|
+| 2 | `b mode, b cnf, b help, w gameID, b scope`, all 0 | clears the last question and its buttons; help 0 clears `local115` |
 | 3 | `b kind, w secs, w points, b clues` | stores `secs * 60` ticks (`proc_237` +0x025c) |
 | 4 | `b number, b total`, four 24-byte rows | `proc_339` |
 | 5 | `b count`, then `count` 24-byte rows | `proc_340`, buttons 1..count |
 | 23 | `b iteration` | starts the on-screen clock from the type 3 values |
 
-`secs` is 20, `points` 1000, the rest 0. Answers are shuffled per deal. A player who joins mid-question
+`secs` is 20, `points` 1000, the rest 0. Answers are shuffled per deal. The type 2 is needed every time:
+type 10 and type 24 set the help flag `local115` to 1, and while it is set type 23 disables the answer
+buttons (`proc_360`) instead of enabling them (`proc_359`) (`vocab.729` `proc_237` +0x16ca). Only type 2
+stores the help byte, so without it a player can answer the first question of a game and no other.
+CONFIRMED in the bytecode; the stuck buttons were seen live before this fix. A player who joins mid-question
 waits for the next one.
 
 The client answers once per question, as sub 24, framing `b 0, b 3, w number, b 2` then `"%d\r\n"` of
