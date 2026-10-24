@@ -278,7 +278,7 @@ secret `admin-identities`, or `--admin-allowlist FILE`) and a Caddy `/admin/*` r
 
 A public host runs on a 1 GiB virtual machine, so every line has a bounded share of memory and time.
 The limits live in `crates/innkeeperd/src/limits.rs` (`Limits`); the flags set them, and nothing in the
-original client depends on their exact values. Each of the five line flags also reads an environment variable,
+original client depends on their exact values. Each of the five line flags, and `--stop-grace`, also reads an environment variable,
 the flag's name in capitals after `INNKEEPERD_` (`INNKEEPERD_MAX_LINES`, `INNKEEPERD_IDLE_TIMEOUT`, ...), so a
 deployment can set them in a systemd drop-in without changing the unit's command line; a flag on the command
 line wins over the variable. The client evidence behind each choice is in the last column.
@@ -287,6 +287,7 @@ line wins over the variable. The client evidence behind each choice is in the la
 |---|---|---|---|---|
 | lines at once, over every listener | 64 | `--max-lines` | a raw TCP or INT 14h connection is closed at once; a WebSocket upgrade is answered 503 `server_full` | a line may hold its 2 MiB share below, a 2 MiB save message and its buffers, about 6 MiB at worst, so 64 lines stay within some 400 MiB of a 1 GiB machine |
 | lines of one signed-in identity | 2 | `--lines-per-identity` | the upgrade is answered 429 `too_many_lines` | the browser opens one line per game; the second covers a reload that reconnects before the old line's close has arrived. A line without a session (no `--public`) counts only against the total |
+| warning before a stop | 5 minutes | `--stop-grace` | after a first SIGTERM the logged-in players get notices, then the server stops; with nobody online, a second SIGTERM or a SIGINT it stops at once ([innkeeperd.md](innkeeperd.md) section 11) | long enough to finish a turn or a trivia question and log off; the unit's `TimeoutStopSec` must be longer |
 | time with no byte from the client | 30 minutes | `--idle-timeout` (`0s` turns it off) | the line is ended | the link has no keepalive ([link-layer.md](../protocol/link-layer.md) section 6.6). LSCI polls land occupancy (47/1) every 60 s, 20 s on the map, while the host answers it (`ProcessLandInfo::changeState`), and the longest client gap in 40 captures is 60.4 s; but a DOS game (GOLF, Red Baron, the RPGs) sends nothing while its player waits, and an ACK of another player's traffic is the only sign of life. Half an hour drops abandoned and half-open lines without cutting off a reader |
 | bytes waiting for one client | 2 MiB | `--line-queue-kib` | the line is ended with a warning, its objects released as on a hang-up | the switchboard inbox and the link's unacknowledged frames are counted, each against the limit; the link sends one frame of at most 254 bytes per ACK, so 2 MiB is some ten minutes of a 2400 bps line, far more than any burst a client must take (a land directory, a full mailbox listing, a busy waiting room) |
 | one write to the client's socket | 60 s | `--write-timeout` | the line is ended | a peer that has not read for a minute has gone; the WebSocket relay, the legacy line and the INT 14h transport all write through `Limits::write_within` |

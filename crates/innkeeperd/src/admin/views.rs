@@ -224,6 +224,27 @@ impl Admin {
                 &rows,
             )
         };
+        let announce_form = Form {
+            action: "/admin/announce",
+            csrf: &req.ctx.csrf,
+            hidden: &[],
+            confirm: Some(html::Confirm {
+                question: "Send this notice to everyone logged in?",
+                detail: "Every logged-in player sees it now, in the hub or in a game. It is kept in the audit log.",
+                yes: "Send",
+            }),
+            inline: false,
+        };
+        let announce = format!(
+            "{}<div><label for=\"notice\">Notice (printable ASCII, up to {max} characters)</label>\
+             <input type=\"text\" id=\"notice\" name=\"text\" maxlength=\"{max}\" required></div>{}{}</form>\
+             <p class=\"muted\">A stop of the server (a deploy, a reboot) warns the players by itself: \
+             five minutes ahead, then one minute and ten seconds before.</p>",
+            announce_form.open(),
+            announce_form.confirm_box(),
+            html::button("Send to everyone", "danger"),
+            max = crate::announce::MAX_NOTICE,
+        );
         let seen = crate::metrics::counters().totals();
         let status = format!(
             "<ul><li>{}</li><li>{}</li></ul><p class=\"muted\">The first answers for the players' door through the proxy; the second is this office.</p>\
@@ -238,7 +259,7 @@ impl Admin {
             seen.store_errors,
         );
         let body = format!(
-            "<div class=\"grid\">{}{}</div>{}",
+            "<div class=\"grid\">{}{}</div>{}{}",
             window("The desk today", &format!("{tiles}{waiting}")),
             window("Status", &status),
             window_with(
@@ -246,6 +267,7 @@ impl Admin {
                 "<a href=\"/admin/\">Refresh</a>",
                 &who
             ),
+            window("Announce", &announce),
         );
         self.render(req, Nav::Dashboard, "The back office", flash, &body)
     }

@@ -720,6 +720,7 @@ impl Admin {
         match segments.as_slice() {
             ["logout"] => self.logout(req, token),
             ["kick"] => self.kick(req).await,
+            ["announce"] => self.announce(req).await,
             ["accounts", id, action] => self.account_action(req, id, action),
             ["complaints", id, "handled"] => self.complaint_handled(req, id),
             ["posts", board, id, "remove"] => self.post_remove(req, board, id),

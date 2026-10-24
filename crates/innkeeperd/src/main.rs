@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 mod admin;
+mod announce;
 mod audit;
 mod capture;
 mod config;
