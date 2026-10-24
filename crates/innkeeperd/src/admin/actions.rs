@@ -108,6 +108,38 @@ impl Admin {
         self.dashboard_with(req, Some(&flash))
     }
 
+    /// Sends a notice (command 48) to every logged-in player.
+    pub(crate) async fn announce(&self, req: &Req) -> Reply {
+        if !req.confirmed() {
+            return self.dashboard_with(req, Some(&needs_confirmation()));
+        }
+        let Some(text) = crate::announce::clean(req.param("text")) else {
+            let flash = Flash::bad(
+                "There was nothing to announce: the notice was empty once cleaned.",
+                "The town crier clears his throat and says nothing.",
+            );
+            return self.dashboard_with(req, Some(&flash));
+        };
+        let told = crate::announce::announce(&self.settings, &text);
+        if let Err(error) = self.log_change(
+            req,
+            "notice.send",
+            &format!("{told} players"),
+            Some(&text),
+            None,
+        ) {
+            return self.failed(req, &error);
+        }
+        let flash = Flash::good(
+            format!(
+                "The notice went to {told} logged-in player{}.",
+                if told == 1 { "" } else { "s" }
+            ),
+            "The town crier rings his bell.",
+        );
+        self.dashboard_with(req, Some(&flash))
+    }
+
     pub(crate) fn account_action(&self, req: &Req, id_text: &str, action: &str) -> Reply {
         let Ok(id) = id_text.parse::<u32>() else {
             return self.not_found(req);

@@ -51,6 +51,8 @@ pub(crate) enum ServerError {
     SignIn(#[from] crate::signin::startup::StartupError),
     #[error("cannot use a listening socket: {0}")]
     Adopt(io::Error),
+    #[error("cannot listen for stop signals: {0}")]
+    Signals(io::Error),
     #[error("{0}")]
     Admin(String),
     #[error("--app-insights-connection-string: {0}")]
@@ -74,6 +76,8 @@ pub(crate) struct Prepared {
     capture_dir: Option<PathBuf>,
     /// The Application Insights pusher's settings (`--app-insights-connection-string`).
     metrics: Option<crate::metrics::insights::Settings>,
+    /// How long a first SIGTERM warns the players before the server stops (`--stop-grace`).
+    stop_grace: Duration,
 }
 
 impl Prepared {
@@ -223,6 +227,7 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
         data_dir: config.data_dir,
         capture_dir,
         metrics,
+        stop_grace: config.stop_grace.into(),
     })
 }
 
@@ -281,8 +286,11 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
         data_dir: _,
         capture_dir: _,
         metrics,
+        stop_grace,
     } = prepared;
     let _lock = lock;
+    // Before anything is served, so a stop is never the default action that ends the process at once.
+    let signals = crate::announce::StopSignals::register().map_err(ServerError::Signals)?;
     if let Some(push) = metrics {
         tokio::spawn(crate::metrics::insights::run(push, Arc::clone(&settings)));
     }
@@ -344,10 +352,7 @@ pub(crate) async fn run(prepared: Prepared) -> Result<(), ServerError> {
         () = legacy => {}
         () = transport => {}
         () = websocket => {}
-        _ = tokio::signal::ctrl_c() => {
-            crate::notify::stopping();
-            info!("shutting down");
-        }
+        () = crate::announce::stop_requested(signals, Arc::clone(&settings), stop_grace) => {}
     }
     Ok(())
 }

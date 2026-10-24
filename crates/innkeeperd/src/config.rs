@@ -187,6 +187,15 @@ pub(crate) struct Config {
     /// Lines one signed-in identity may hold at once.
     #[arg(long, env = "INNKEEPERD_LINES_PER_IDENTITY", default_value_t = LINES_PER_IDENTITY_DEFAULT, value_name = "N")]
     pub(crate) lines_per_identity: usize,
+    /// On the first SIGTERM, how long logged-in players are warned before the server stops; it stops
+    /// at once with nobody online, on a second SIGTERM or on SIGINT. 0s stops at once.
+    #[arg(
+        long,
+        env = "INNKEEPERD_STOP_GRACE",
+        default_value = "5m",
+        value_name = "DURATION"
+    )]
+    pub(crate) stop_grace: humantime::Duration,
     /// A line that sends nothing for this long is ended; 0s keeps silent lines.
     #[arg(
         long,
@@ -701,6 +710,7 @@ mod tests {
             ("line_queue_kib", "INNKEEPERD_LINE_QUEUE_KIB"),
             ("write_timeout", "INNKEEPERD_WRITE_TIMEOUT"),
             ("idle_timeout", "INNKEEPERD_IDLE_TIMEOUT"),
+            ("stop_grace", "INNKEEPERD_STOP_GRACE"),
         ] {
             assert_eq!(env_of(id).as_deref(), Some(env), "{id}");
         }

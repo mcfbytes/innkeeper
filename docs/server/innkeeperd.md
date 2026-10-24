@@ -707,7 +707,8 @@ front of Caddy, so a client-sent header is replaced and never believed.
 Menu: Ledger (dashboard, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
 Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
 
-- **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`.
+- **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`, and an
+  **Announce** form that sends a notice to every logged-in player (section 11).
 - **Accounts:** search by number or persona; an account the client has not named yet shows
   "(not named yet)"; detail page; suspend and unsuspend (a suspended
   account's Login is refused with a Nak and its lines are kicked); stamps, staff level and land
@@ -797,3 +798,32 @@ for the next push; gauge samples older than a push are dropped.
 
 Under `Type=notify` the daemon sends `READY=1`, `WATCHDOG=1` and `STOPPING=1` (docs/server/hardening.md
 section 5.1). Run by hand, without `NOTIFY_SOCKET`, it sends nothing.
+
+## 11. Notices and stopping
+
+A notice is command 48 (`Unsolicited`), operator text with no request behind it. The LSCI hub shows it
+(`RoomZeroHandler`), and so does every DOS game; Red Baron only once a game is running and Shop with
+"INN Notice:" ([coverage.md](coverage.md), row 48). The host sends it to logged-in lines only: a line
+still dialing has no handler for it yet. The text is cleaned to printable ASCII on one line and cut to
+120 characters (`announce::clean`); the client's own width is not known.
+
+**From the portal.** The dashboard's Announce form (a POST to `/admin/announce`, with the yes every
+portal change needs) sends one notice and writes `notice.send` to the audit log, with the text as the
+reason and the number told as the target.
+
+**On a stop.** innkeeperd catches SIGTERM and SIGINT itself (`announce::stop_requested`):
+
+| What arrives | What happens |
+|---|---|
+| SIGTERM, someone logged in | `STOPPING=1`; a notice "INN will restart for maintenance in 5 minutes..." at once, "in 1 minute" and "in 10 seconds" reminders, then the stop. It stops early when the last player has left (checked every 5 s). |
+| SIGTERM, nobody logged in, or `--stop-grace 0s` | stops at once |
+| a second SIGTERM, or SIGINT at any time | stops at once |
+
+Every stop with someone still online ends with "INN is restarting now. Please reconnect in a minute or
+two." and two seconds for it to reach the clients. `--stop-grace` (environment `INNKEEPERD_STOP_GRACE`,
+default `5m`) is the wait; a shorter grace leaves out the reminders it has no room for. systemd's
+`TimeoutStopSec` must be longer than the grace or the countdown is cut short by SIGKILL; the VM's unit
+gets both from the tuning drop-in (INN_Decomp-infra README "Server tuning"). So a deploy's restart and
+the nightly reboot both warn the players first. Tests: `admin::tests` (the form), `announce::tests`
+(the schedule and the cleaning) and `tests/stop.rs` (a real process, its SIGTERMs and a logged-in line).
+

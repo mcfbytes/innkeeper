@@ -787,6 +787,57 @@ async fn the_kick_button_ends_a_live_line_and_says_so() {
 }
 
 #[tokio::test]
+async fn an_announcement_reaches_every_logged_in_line_and_no_other() {
+    let fx = fixture(Door::Listed).await;
+    fx.account(100_001, "Elaine");
+    let mut online = Host::new(&fx.settings, ConnectionId(7));
+    assert!(accepted(
+        &online.answer(&login(100_001, "SWORDFISH")).outgoing
+    ));
+    let mut dialing = Host::new(&fx.settings, ConnectionId(8));
+    let plain = fx.post("/admin/announce", &[("text", "Back soon")]).await;
+    assert!(plain.body.contains("needs a yes"), "{}", plain.body);
+    let empty = fx
+        .post(
+            "/admin/announce",
+            &[("text", " \u{e9} "), ("confirm", "yes")],
+        )
+        .await;
+    assert!(empty.body.contains("nothing to announce"), "{}", empty.body);
+    let done = fx
+        .post(
+            "/admin/announce",
+            &[("text", "Back in five\r\nminutes"), ("confirm", "yes")],
+        )
+        .await;
+    assert_eq!(done.status, 200);
+    assert!(
+        done.body.contains("went to 1 logged-in player."),
+        "{}",
+        done.body
+    );
+    let told = tokio::time::timeout(Duration::from_secs(2), online.next_notice())
+        .await
+        .expect("the logged-in line was told");
+    assert_eq!(
+        told,
+        Some(HostMessage::Notice(innkeeper_world::Notice {
+            text: "Back in five minutes".into()
+        }))
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), dialing.next_notice())
+            .await
+            .is_err(),
+        "a line that has not logged in is not told"
+    );
+    assert_eq!(fx.audit_actions(), ["notice.send"]);
+    let entry = &store::recent_audit(&fx.store, 1, None).unwrap()[0];
+    assert_eq!(entry.reason.as_deref(), Some("Back in five minutes"));
+    assert_eq!(entry.target, "1 players");
+}
+
+#[tokio::test]
 async fn flags_money_and_password_are_refused_while_the_player_is_online() {
     let fx = fixture(Door::Listed).await;
     fx.account(100_001, "Elaine");
