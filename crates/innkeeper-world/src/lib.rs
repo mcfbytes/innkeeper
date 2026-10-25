@@ -84,3 +84,4 @@ pub use trivia::{
 pub use world::World;
 
 pub mod services;
+pub mod titles;

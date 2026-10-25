@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use tracing::info;
 
 use super::{ConnectionId, ObjectStore};
-use crate::{JoinNet, LockId, Sid};
+use crate::{titles, JoinNet, LockId, Sid};
 
 /// The land-type byte of the joinNet that made a game group: the game, as its client names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,9 +18,9 @@ impl GameType {
     /// Red Baron's land type: the 41/2 lookup, the player objects and the queue's group all carry it.
     pub const RED_BARON: GameType = GameType(101);
 
-    /// The name of a game type that was seen, if any.
+    /// The name of the title whose game groups carry this byte, if any.
     pub fn name(self) -> Option<&'static str> {
-        (self == GameType::RED_BARON).then_some("Red Baron")
+        titles::by_game_byte(self.0).map(|title| title.name)
     }
 }
 
@@ -117,7 +117,7 @@ impl GameBook {
         info!(
             group = group.0,
             game = session.game.0,
-            name = session.game.name(),
+            title = session.game.name(),
             leader = leader.0,
             invited = session.invitation.is_some(),
             "game group formed"
@@ -126,8 +126,13 @@ impl GameBook {
     }
 
     pub(super) fn close(&mut self, group: Sid) {
-        if self.sessions.remove(&group).is_some() {
-            info!(group = group.0, "game group closed");
+        if let Some(session) = self.sessions.remove(&group) {
+            info!(
+                group = group.0,
+                game = session.game.0,
+                title = session.game.name(),
+                "game group closed"
+            );
         }
     }
 

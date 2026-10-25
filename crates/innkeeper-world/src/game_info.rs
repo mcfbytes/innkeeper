@@ -2,14 +2,17 @@
 //! Column meanings and the client's read rules: docs/server/games.md.
 
 use crate::assumptions::GAME_INFO_STAMP_ASSUMED;
+use crate::titles::{Title, TITLES};
 use crate::{HostMessage, Stamp};
 
+/// The Arena's land type: the first column of every row.
+const ARENA_LAND: u8 = 5;
+
 /// One row of the file `script.144` reads. The name uses `_` for a space the slider shows later.
-#[derive(Clone, Copy)]
 struct ArenaGame {
     land: u8,
     position: i16,
-    name: &'static str,
+    name: String,
     minimum: i16,
     maximum: i16,
     queue: i16,
@@ -19,45 +22,12 @@ struct ArenaGame {
     add_players: i16,
 }
 
-/// Red Baron, 3-D Golf and Football, relative positions 0, 1 and 2 on land 5.
-const ARENA_GAMES: [ArenaGame; 3] = [
-    ArenaGame {
-        land: 5,
-        position: 0,
-        name: "Red_Baron",
-        minimum: 2,
-        maximum: 4,
-        queue: 0,
-        invite: 910,
-        score: 910,
-        chain: 101,
-        add_players: 0,
-    },
-    ArenaGame {
-        land: 5,
-        position: 1,
-        name: "3-D_Golf",
-        minimum: 1,
-        maximum: 4,
-        queue: 0,
-        invite: 911,
-        score: -911,
-        chain: 102,
-        add_players: 0,
-    },
-    ArenaGame {
-        land: 5,
-        position: 2,
-        name: "Football",
-        minimum: 2,
-        maximum: 2,
-        queue: 0,
-        invite: 912,
-        score: -912,
-        chain: 104,
-        add_players: 0,
-    },
-];
+/// The registry's Arena titles (Red Baron, 3-D Golf and Football), by relative position.
+fn arena_games() -> Vec<ArenaGame> {
+    let mut games: Vec<ArenaGame> = TITLES.iter().filter_map(ArenaGame::of).collect();
+    games.sort_by_key(|game| game.position);
+    games
+}
 
 const HEADER: [&str; 2] = [
     "; Games this host runs in the Arena.",
@@ -89,7 +59,7 @@ fn file_bytes() -> Vec<u8> {
     for line in HEADER {
         push_line(&mut out, line);
     }
-    for game in ARENA_GAMES {
+    for game in arena_games() {
         push_line(&mut out, &game.line());
     }
     let message = 6 + out.len();
@@ -109,7 +79,25 @@ fn push_line(out: &mut Vec<u8>, line: &str) {
 }
 
 impl ArenaGame {
-    fn line(self) -> String {
+    /// The row of a title with an Arena slot; the name, players and chain are the title's own.
+    fn of(title: &Title) -> Option<Self> {
+        let slot = title.arena?;
+        let players = title.players?;
+        Some(ArenaGame {
+            land: ARENA_LAND,
+            position: slot.position,
+            name: title.name.replace(' ', "_"),
+            minimum: players.minimum.into(),
+            maximum: players.maximum.into(),
+            queue: slot.queue,
+            invite: slot.invite,
+            score: slot.score,
+            chain: title.dos_land_type?.0.into(),
+            add_players: slot.add_players,
+        })
+    }
+
+    fn line(&self) -> String {
         assert!(!self.name.is_empty() && self.name.len() <= MAX_TOKEN);
         assert!(!self.name.contains([' ', '\t']));
         format!(
