@@ -310,4 +310,33 @@ what was seen, and what is still not exercised. Empty until the package reports.
 
 ### 11.12 Shoppers Advantage from the map (`srv-shopadv`)
 
+2026-10-25, the dosrt client (lifted LSCITV, TSNEXEC and SHOPADV running, shadow-verified) on the 2.3 hub
+map, one client (account 100001, persona guybrush) against this host, C: drive `work/srv-games-c`.
+Scenario: `private/lifted/scenarios/srv/shop1/play.txt`. Test: `crates/innkeeper-world/tests/game_shopadv.rs`
+(client bytes from this run's log, host bytes from this host).
+
+Path on the map: the Shoppers Advantage button opens "Choose A Store" (Shoppers Advantage, ImagiNation
+Mall); picking Shoppers Advantage is `gotoCUCmall`. Sequence seen, twice in one run:
+
+1. `54/27` (route 0) answered with `54/19` kind 0. LSCITV exits, TSNEXEC runs `C:\INN\SHOPADV\SHOPADV.EXE`.
+   Nothing was sent between the `54/19` and SHOPADV's first message.
+2. SHOPADV shows "Please wait a few seconds while a connection is established" and sends nothing until that
+   dialog closes. Under dosrt the headless mouse does not reach SHOPADV, so the script closes dialogs with Esc
+   (Enter and Space did not close it). JOIN `54/25` (route 0xCCCC) then gets `54/17` and the closed text as a
+   `54/16` kind 1; the closed text appears in the Shop window.
+3. A typed line (`54/24`, `hello\r\n`) gets the closed text again at once, so no "Send Time-Out".
+4. Visit 1 leaves with the Exit button's keyboard form, Alt-X: TEXT `/EXIT\n` (answered with the notice), then
+   EXIT `54/26`, answered with `54/19` kind 0x1A. The "Exiting" dialog closes with Esc, SHOPADV exits,
+   TSNEXEC runs LSCITV again and the map is back. Visit 2 types `/EXIT` (`\r\n` form): the host answers the
+   notice and `54/20` kind 0x1A with the closed text; the client still sends EXIT, which is acknowledged
+   as above, and the map returns.
+
+The server log of the run: 54/27, 54/25, 54/24 and 54/26 handled, 0 "not decoded". `mall.rs` needed no change.
+The transcript test replays both visits and checks that nothing is pending between the gate and the JOIN.
+
+Not exercised: a mouse click on Exit (the frontend's click did not reach SHOPADV, a dosrt matter), the
+35 s Send Time-Out, a host-initiated `54/16` kind 2, and any open (selling) edition. The closed text and the
+kind-0 gate answer stay `*_ASSUMED`: the stock client accepts them, which a real mall's reply might not
+contradict but does not prove.
+
 ### 11.13 The browser build (`srv-browser-e2e`)
