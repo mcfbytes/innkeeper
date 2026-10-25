@@ -5,11 +5,10 @@ use crate::assumptions::{
 };
 use crate::objects::OnlinePlayer;
 use crate::{
-    bbs, conference, game_info, hint_board, is_reserved_name, logon, mail, mall, money,
-    object_list, presence, red_baron, router, rpg, signup, town_hall, trivia, user_find, Account,
-    AccountId, AccountRequest, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage,
-    JoinNet, LogPolicy, Login, ObjectStore, Place, TriviaRequest, Unexplained, UnexplainedCommand,
-    World,
+    bbs, game_info, hint_board, is_reserved_name, logon, mail, mall, money, object_list, presence,
+    router, rpg, services, signup, town_hall, trivia, user_find, Account, AccountId,
+    AccountRequest, ClientMessage, ConnectionId, Delivery, HostInfoRequest, HostMessage, JoinNet,
+    LogPolicy, Login, ObjectStore, Place, TriviaRequest, Unexplained, UnexplainedCommand, World,
 };
 
 /// The host side of one logged-in client, from Login to hang-up.
@@ -160,14 +159,14 @@ impl PlayerSession {
                 self.when_logged_in(|_| objects.member_properties(connection, request))
             }
             ClientMessage::ServiceProperties(ref request) => self.when_logged_in(|_| {
-                let answers = red_baron::service_properties(request);
+                let answers = services::properties(request);
                 if answers.is_empty() {
                     info!(message = %self.log.debug(message), "no reply awaited: absorbed");
                 }
                 reply(answers)
             }),
             ClientMessage::PlayStatus(status) => {
-                info!(status = %self.log.debug(&status), "play status noted");
+                services::play_status(self.log, status);
                 Vec::new()
             }
             ClientMessage::Mall(ref request) => {
@@ -192,9 +191,7 @@ impl PlayerSession {
                 Vec::new()
             }
             ClientMessage::ObjExists(ref lookup) => self.when_logged_in(|_| {
-                let located = rpg::locate_service(lookup)
-                    .or_else(|| red_baron::locate_service(lookup))
-                    .or_else(|| conference::locate(objects, lookup));
+                let located = services::locate(objects, lookup);
                 if located.is_none() {
                     info!(message = %self.log.debug(message), "decoded, no handler yet: ignored");
                 }
