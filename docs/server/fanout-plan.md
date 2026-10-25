@@ -349,3 +349,42 @@ item id) and its gates: `cargo fmt --all --check`, `cargo clippy --workspace --a
 | Whether the persona set by 40/4 is kept: now yes, as the account's persona (`Store::set_persona`, [innkeeperd.md](innkeeperd.md) section 5) | done | `messages.md` 3.3 row 40 |
 | How a conference is named and what 41/0 returns for a free name | C8 (research first) | `messages.md` 3.3 row 41 |
 | What an unreachable host looks like to the legacy PAD and to the transport | C14 | `link-layer.md` 3.2, 5.1; `int14h-transport.md` 5 |
+
+## 5. Packages of the lift wave (2026-10-25)
+
+Server-side game support, planned with the INN-Decomp lift wave. Each package is a closed scope handed to one
+agent; the full scopes and verification commands are in the wave's package list, and each package reports
+its own results in [games.md](games.md) section 11 (one subsection per package, created empty by the plan).
+Live checks run the stock Feb-94 client under `dosrt` (INN-Decomp's public build, no lifted code) from the
+INN map, against `innkeeperd` built from the package's own worktree, through INN-Decomp's
+`tools/multi_client.sh` (one server, several clients, scenario directories under
+`private/lifted/scenarios/srv/`). The shared C: drive is `INN-Decomp/work/srv-games-c` (the installed client
+with `\INN\GOLF`, `\INN\BARON` and `\INN\SHOPADV`); runs copy it and never write it.
+
+| Id | Scope | Depends on |
+|---|---|---|
+| `srv-design` | game-title registry and service-object dispatch in `innkeeper-world`, the game hand-off lifecycle and the score-board contract (`game-services.md`); no behaviour change | none |
+| `srv-harness` | INN-Decomp: several `dosrt` clients against one server, script `signal`/`await`/`end` | none |
+| `srv-scores-research` | the LSCI top-score boards (27/1 read, 27/0 post) and the DOS games' result word | none |
+| `srv-shopadv` | Shoppers Advantage from the map and back, closed edition | none |
+| `srv-handoff` | land to DOS game to land: quiet window trigger, group lifetime, orphan cleanup (C14 for games) | `srv-design` |
+| `srv-golf` | 3-D Golf alone and with two to four players | `srv-harness` |
+| `srv-rb-return` | Red Baron with two pilots, the return to SierraLand and a second game | `srv-harness`, `srv-handoff` |
+| `srv-rb-full` | Red Baron with three and four pilots, a pilot dropping, game length setting | `srv-harness` |
+| `srv-minigolf` | MiniGolf holes played to the cup | `srv-harness` |
+| `srv-stratego` | Stratego past the coin toss | `srv-harness` |
+| `srv-paintball` | PaintBall with two players | `srv-harness` |
+| `srv-rocketquiz-sneakatac` | RocketQuiz and SneakATac with two players | `srv-harness` |
+| `srv-boogers-graffiti` | Boogers, and Graffiti strokes between two players | `srv-harness` |
+| `srv-clubhouse-boards` | the Clubhouse board games (Checkers, Chess, BackGammon, Go, FlipFlop) | `srv-harness` |
+| `srv-clubhouse-cards` | the Clubhouse card games (Hearts, Spades, Bridge, Euchre, Cribbage) | `srv-harness` |
+| `srv-casino-tables` | CasinoLand tables with two players and the bankroll | `srv-harness` |
+| `srv-browser-e2e` | the web build in headless Chromium playing a game with a native client | `srv-harness` |
+| `srv-scores` | top-score boards kept in the store and answered | `srv-scores-research`, `srv-design`, `srv-harness` |
+| `srv-scores-admin` | score rows in the admin portal, export, retention and privacy | `srv-scores` |
+
+Rules on top of section 0: a package adds its own test file (`crates/innkeeper-world/tests/game_<name>.rs`, on
+the `tests/common` harness) instead of editing `tests/games.rs`; `lib.rs` and `assumptions.rs` are append only;
+`player.rs` arms belong to `srv-design` (41/2, 17, 50), `srv-handoff` (Login and the return from a game) and
+`srv-scores` (none: it routes inside `bbs.rs`); a fix another package needs in `objects.rs` or `router.rs` is
+kept to the smallest change and named in its report.
