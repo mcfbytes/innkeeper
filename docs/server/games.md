@@ -279,3 +279,35 @@ The on-disk file matches that reply and then has one extra line, `04 0`, which t
 not contain. One 24-byte `setInt` after the waiting-room join was logged as not decoded
 ("message ended inside value"); the client still reached the room and hung up when the run
 ended. A second client was not started. The DOS games themselves were not launched.
+
+## 11. Per-game results of the lift wave
+
+One subsection per package of [fanout-plan.md](fanout-plan.md) section 5; each package fills only its own,
+with the date, the client build, the scenario directory under INN-Decomp's `private/lifted/scenarios/srv/`,
+what was seen, and what is still not exercised. Empty until the package reports.
+
+### 11.1 3-D Golf (`srv-golf`)
+
+### 11.2 Red Baron, two pilots and the return to the land (`srv-rb-return`)
+
+### 11.3 Red Baron, three and four pilots (`srv-rb-full`)
+
+### 11.4 MiniGolf to the cup (`srv-minigolf`)
+
+### 11.5 Stratego (`srv-stratego`)
+
+### 11.6 PaintBall (`srv-paintball`)
+
+### 11.7 RocketQuiz and SneakATac (`srv-rocketquiz-sneakatac`)
+
+### 11.8 Boogers and Graffiti (`srv-boogers-graffiti`)
+
+### 11.9 Clubhouse board games (`srv-clubhouse-boards`)
+
+### 11.10 Clubhouse card games (`srv-clubhouse-cards`)
+
+### 11.11 CasinoLand tables (`srv-casino-tables`)
+
+### 11.12 Shoppers Advantage from the map (`srv-shopadv`)
+
+### 11.13 The browser build (`srv-browser-e2e`)
