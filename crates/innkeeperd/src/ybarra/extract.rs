@@ -172,20 +172,18 @@ pub(crate) fn extract(exe: &[u8]) -> Result<Found, ExtractError> {
 /// The four `mov word [key+2n], imm` before the call; the stores nearest the call win when the
 /// key is set on more than one path.
 fn find_key(image: &[u8], call: usize, key_at: u16) -> Option<[u8; KEY_BYTES]> {
-    (call.saturating_sub(KEY_SPAN)..call)
-        .rev()
-        .find_map(|at| {
-            let mut key = Vec::with_capacity(KEY_BYTES);
-            for n in 0..4u16 {
-                let store = at + usize::from(n) * 6;
-                let target = key_at.wrapping_add(n * 2);
-                if !has(image, store, &[0xc7, 0x06]) || word(image, store + 2) != Some(target) {
-                    return None;
-                }
-                key.extend_from_slice(&word(image, store + 4)?.to_le_bytes());
+    (call.saturating_sub(KEY_SPAN)..call).rev().find_map(|at| {
+        let mut key = Vec::with_capacity(KEY_BYTES);
+        for n in 0..4u16 {
+            let store = at + usize::from(n) * 6;
+            let target = key_at.wrapping_add(n * 2);
+            if !has(image, store, &[0xc7, 0x06]) || word(image, store + 2) != Some(target) {
+                return None;
             }
-            key.try_into().ok()
-        })
+            key.extend_from_slice(&word(image, store + 4)?.to_le_bytes());
+        }
+        key.try_into().ok()
+    })
 }
 
 #[cfg(test)]
@@ -201,7 +199,9 @@ pub(crate) mod tests {
         let routine = 0x140;
         let mut code = vec![0x55, 0x8b, 0xec, 0x1e, 0x06, 0xb8, 0x00, 0x02, 0x8e, 0xd8];
         code.extend_from_slice(&[0x57, 0x56, 0x8b, 0x46, 0x08, 0x2e, 0xa3, 0x00, 0x03]);
-        code.extend_from_slice(&[0xbb, 0x7e, 0x00, 0x2e, 0x8b, 0x87, 0x00, 0x04, 0x2e, 0x89, 0x87, 0x80, 0x04]);
+        code.extend_from_slice(&[
+            0xbb, 0x7e, 0x00, 0x2e, 0x8b, 0x87, 0x00, 0x04, 0x2e, 0x89, 0x87, 0x80, 0x04,
+        ]);
         image[routine..routine + code.len()].copy_from_slice(&code);
         image[0x500..0x580].copy_from_slice(&cipher.mask_bytes());
         // Data segment 0x0200 (base 0x2000): the key at 0x10, the shuffle table at 0x100.
@@ -264,7 +264,10 @@ pub(crate) mod tests {
                 assert_eq!(found.game, game, "{folder}\\{file}");
                 ciphers.push(found.cipher);
             }
-            assert!(ciphers.windows(2).all(|pair| pair[0] == pair[1]), "{folder}");
+            assert!(
+                ciphers.windows(2).all(|pair| pair[0] == pair[1]),
+                "{folder}"
+            );
             // A save beside them (`saves/<file>`) reads as a named character and seals back.
             let file = game.chars_path().rsplit('\\').next().unwrap();
             let (Some(cipher), Ok(bytes)) =
@@ -274,7 +277,10 @@ pub(crate) mod tests {
             };
             let chars = crate::ybarra::CharFile::open(cipher, &bytes).unwrap();
             let name = &chars.slots[0][8..12];
-            assert!(name.iter().all(|b| b.is_ascii_graphic() || *b == b' '), "{file}: {name:?}");
+            assert!(
+                name.iter().all(|b| b.is_ascii_graphic() || *b == b' '),
+                "{file}: {name:?}"
+            );
             assert_eq!(chars.seal(cipher), bytes, "{file}");
         }
     }

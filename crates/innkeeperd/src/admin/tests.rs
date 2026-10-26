@@ -1262,14 +1262,24 @@ async fn the_help_and_audit_pages_render_and_the_menu_offers_day_and_dusk() {
 fn another_value(field: &crate::ybarra::schema::Field, bytes: &[u8]) -> String {
     use crate::ybarra::schema::{Kind, Value};
     match (field.kind, field.read(bytes, 0)) {
-        (Kind::Str, Value::Text(text)) => if text == "Bob" { "Al".into() } else { "Bob".into() },
+        (Kind::Str, Value::Text(text)) => {
+            if text == "Bob" {
+                "Al".into()
+            } else {
+                "Bob".into()
+            }
+        }
         (_, Value::Raw(mut raw)) => {
             raw[0] ^= 1;
             Value::Raw(raw).form_text()
         }
         (_, Value::Number(number)) => {
             let (low, high) = field.bounds();
-            if number == low { high.to_string() } else { low.to_string() }
+            if number == low {
+                high.to_string()
+            } else {
+                low.to_string()
+            }
         }
         (_, other) => panic!("{other:?}"),
     }
@@ -1297,25 +1307,49 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
     let page = fx.get("/admin/saves/100001/ybarra/yserbius").await.body;
     assert!(page.contains("import the game"), "{page}");
     let saves = fx.get("/admin/saves/100001").await.body;
-    assert!(saves.contains("/admin/saves/100001/ybarra/yserbius"), "{saves}");
+    assert!(
+        saves.contains("/admin/saves/100001/ybarra/yserbius"),
+        "{saves}"
+    );
 
     let refused = fx
-        .post("/admin/ybarra/import", &[("program", &URL_SAFE_NO_PAD.encode(b"MZ junk"))])
+        .post(
+            "/admin/ybarra/import",
+            &[("program", &URL_SAFE_NO_PAD.encode(b"MZ junk"))],
+        )
         .await;
-    assert!(refused.body.contains("Nothing was imported"), "{}", refused.body);
+    assert!(
+        refused.body.contains("Nothing was imported"),
+        "{}",
+        refused.body
+    );
     let program = URL_SAFE_NO_PAD.encode(fake_exe(Game::Yserbius, &cipher));
-    let imported = fx.post("/admin/ybarra/import", &[("program", &program)]).await;
+    let imported = fx
+        .post("/admin/ybarra/import", &[("program", &program)])
+        .await;
     assert_eq!(imported.status, 200);
-    assert!(imported.body.contains("saves can now be opened"), "{}", imported.body);
+    assert!(
+        imported.body.contains("saves can now be opened"),
+        "{}",
+        imported.body
+    );
     let tables = fx.get("/admin/ybarra").await.body;
     assert!(tables.contains("ready"), "{tables}");
 
     let list = fx.get("/admin/saves/100001/ybarra/yserbius").await;
     assert_eq!(list.status, 200);
-    assert!(list.body.contains("/admin/saves/100001/ybarra/yserbius/1"), "{}", list.body);
+    assert!(
+        list.body.contains("/admin/saves/100001/ybarra/yserbius/1"),
+        "{}",
+        list.body
+    );
     let form = fx.get("/admin/saves/100001/ybarra/yserbius/1").await;
     assert_eq!(form.status, 200);
-    assert!(form.body.contains("name=\"version\" value=\"1\""), "{}", form.body);
+    assert!(
+        form.body.contains("name=\"version\" value=\"1\""),
+        "{}",
+        form.body
+    );
 
     // Change whichever field holds the name's first byte.
     let fields = &schema(Game::Yserbius).record;
@@ -1327,27 +1361,48 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
     let value = another_value(&fields[index], &plain.slots[0]);
     let mut expected = plain.slots[0];
     fields[index].write(&mut expected, 0, &value).unwrap();
-    for mirror in fields.iter().filter(|f| f.mirror_of.as_ref() == Some(&fields[index].name)) {
+    for mirror in fields
+        .iter()
+        .filter(|f| f.mirror_of.as_ref() == Some(&fields[index].name))
+    {
         for (from, to) in fields[index].span().zip(mirror.span()) {
             expected[to] = expected[from];
         }
     }
 
     let stale = fx
-        .post("/admin/saves/100001/ybarra/yserbius/1", &[("version", "0"), (&name, &value)])
+        .post(
+            "/admin/saves/100001/ybarra/yserbius/1",
+            &[("version", "0"), (&name, &value)],
+        )
         .await;
     assert_eq!(stale.status, 409, "{}", stale.body);
-    assert!(stale.body.contains("changed since this form was opened"), "{}", stale.body);
+    assert!(
+        stale.body.contains("changed since this form was opened"),
+        "{}",
+        stale.body
+    );
 
     let mut host = Host::new(&fx.settings, ConnectionId(7));
-    assert!(accepted(&host.answer(&login(100_001, "SWORDFISH")).outgoing));
+    assert!(accepted(
+        &host.answer(&login(100_001, "SWORDFISH")).outgoing
+    ));
     let online = fx
-        .post("/admin/saves/100001/ybarra/yserbius/1", &[("version", "1"), (&name, &value)])
+        .post(
+            "/admin/saves/100001/ybarra/yserbius/1",
+            &[("version", "1"), (&name, &value)],
+        )
         .await;
     assert_eq!(online.status, 409);
     assert!(online.body.contains("is online now"), "{}", online.body);
     host.hang_up();
-    assert_eq!(fx.store.save_versions(AccountId(100_001), path).unwrap().len(), 1);
+    assert_eq!(
+        fx.store
+            .save_versions(AccountId(100_001), path)
+            .unwrap()
+            .len(),
+        1
+    );
 
     let saved = fx
         .post(
@@ -1357,7 +1412,11 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
         .await;
     assert_eq!(saved.status, 200, "{}", saved.body);
     assert!(saved.body.contains("Saved as v2"), "{}", saved.body);
-    let (meta, data) = fx.store.save_read(AccountId(100_001), path, None).unwrap().unwrap();
+    let (meta, data) = fx
+        .store
+        .save_read(AccountId(100_001), path, None)
+        .unwrap()
+        .unwrap();
     assert_eq!(meta.version, 2);
     let after = CharFile::open(&cipher, &data).unwrap();
     assert_eq!(after.slots[0], expected);
@@ -1366,13 +1425,26 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
 
     // A value outside its field is refused and nothing is stored.
     let bad = fx
-        .post("/admin/saves/100001/ybarra/yserbius/header", &[("version", "2"), ("f0_0", "zz")])
+        .post(
+            "/admin/saves/100001/ybarra/yserbius/header",
+            &[("version", "2"), ("f0_0", "zz")],
+        )
         .await;
     assert_eq!(bad.status, 422, "{}", bad.body);
-    assert_eq!(fx.store.save_versions(AccountId(100_001), path).unwrap().len(), 2);
+    assert_eq!(
+        fx.store
+            .save_versions(AccountId(100_001), path)
+            .unwrap()
+            .len(),
+        2
+    );
     assert_eq!(fx.audit_actions(), ["save.edit", "ybarra.import"]);
     let entry = &store::recent_audit(&fx.store, 1, None).unwrap()[0];
-    assert!(entry.target.contains("v2 character slot 1"), "{}", entry.target);
+    assert!(
+        entry.target.contains("v2 character slot 1"),
+        "{}",
+        entry.target
+    );
     assert_eq!(entry.reason.as_deref(), Some("ticket 12"));
 }
 
@@ -1380,8 +1452,10 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
 async fn sign_ins_without_an_account_are_listed_with_why_and_never_their_subject() {
     use crate::signin::store as signin_store;
     let fx = fixture(Door::Listed).await;
-    let ring = KeyRing::new(vec![HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap()])
-        .unwrap();
+    let ring = KeyRing::new(vec![
+        HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap()
+    ])
+    .unwrap();
     let now = crate::dates::now_ms();
     let sealed = || Some(b"SUBJECT-SEALED-BYTES".to_vec());
     let lone = signin_store::sign_in(&fx.store, &ring, "iss", "lone-subject", "dev", sealed, now)
@@ -1398,18 +1472,143 @@ async fn sign_ins_without_an_account_are_listed_with_why_and_never_their_subject
     assert!(page.body.contains(&hex(&lone)), "{}", page.body);
     assert!(!page.body.contains(&hex(&owner)), "{}", page.body);
     assert!(page.body.contains(&keys::handle(&lone)), "{}", page.body);
-    assert!(page.body.contains("has not answered the age and terms question"), "{}", page.body);
+    assert!(
+        page.body
+            .contains("has not answered the age and terms question"),
+        "{}",
+        page.body
+    );
     for secret in ["lone-subject", "SUBJECT-SEALED", "iss"] {
         assert!(!page.body.contains(secret), "{secret} leaked");
     }
     let dashboard = fx.get("/admin/").await.body;
-    assert!(dashboard.contains("<b>1</b><span>sign-ins without an account"), "{dashboard}");
+    assert!(
+        dashboard.contains("<b>1</b><span>sign-ins without an account"),
+        "{dashboard}"
+    );
 
-    let attested = signin_store::Attested { age: 21, terms: 1, at: now };
+    let attested = signin_store::Attested {
+        age: 21,
+        terms: 1,
+        at: now,
+    };
     signin_store::record_attestation(&fx.store, &lone, &attested).unwrap();
     let page = fx.get("/admin/signins").await.body;
     assert!(
         page.contains("21+, terms v1") && page.contains("Yes: nothing stops it"),
         "{page}"
     );
+}
+
+#[tokio::test]
+async fn the_automap_editor_sets_cells_forgets_maps_and_takes_raw_bytes() {
+    use crate::ybarra::automap::{block, FILE_BYTES, UNEXPLORED, VISITED};
+    use crate::ybarra::Game;
+
+    let fx = fixture(Door::Listed).await;
+    fx.account(100_001, "Elaine");
+    let path = Game::Twinion.automaps_path();
+    let mut file = vec![UNEXPLORED; FILE_BYTES];
+    let map3 = block(1, 2).unwrap();
+    file[map3.start + 40] = 12;
+    fx.store
+        .save_write(AccountId(100_001), path, &file, 1000, true)
+        .unwrap();
+    let url = "/admin/saves/100001/ybarra/twinion/2/map";
+
+    let page = fx.get(&format!("{url}?map=3")).await;
+    assert_eq!(page.status, 200, "{}", page.body);
+    assert!(page.body.contains("1 of 256"), "{}", page.body);
+    assert!(
+        page.body.contains("name=\"c40\" value=\"1\" checked"),
+        "{}",
+        page.body
+    );
+
+    // Tick cells 5 and 40 (40 was a kept marker): 5 becomes a visited floor, 40 keeps its value.
+    let cells = fx
+        .post(
+            url,
+            &[
+                ("version", "1"),
+                ("map", "3"),
+                ("action", "cells"),
+                ("c5", "1"),
+                ("c40", "1"),
+            ],
+        )
+        .await;
+    assert_eq!(cells.status, 200, "{}", cells.body);
+    assert!(cells.body.contains("Saved as v2"), "{}", cells.body);
+    let (_, stored) = fx
+        .store
+        .save_read(AccountId(100_001), path, None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (stored[map3.start + 5], stored[map3.start + 40]),
+        (VISITED, 12)
+    );
+    assert_eq!(stored.iter().filter(|b| **b != UNEXPLORED).count(), 2);
+
+    let stale = fx
+        .post(url, &[("version", "1"), ("map", "3"), ("action", "cells")])
+        .await;
+    assert_eq!(stale.status, 409);
+    let unconfirmed = fx
+        .post(url, &[("version", "2"), ("map", "3"), ("action", "forget")])
+        .await;
+    assert_eq!(unconfirmed.status, 422, "{}", unconfirmed.body);
+    let forgot = fx
+        .post(
+            url,
+            &[
+                ("version", "2"),
+                ("map", "3"),
+                ("action", "forget"),
+                ("confirm", "yes"),
+            ],
+        )
+        .await;
+    assert_eq!(forgot.status, 200, "{}", forgot.body);
+    let (_, stored) = fx
+        .store
+        .save_read(AccountId(100_001), path, None)
+        .unwrap()
+        .unwrap();
+    assert!(stored.iter().all(|b| *b == UNEXPLORED));
+
+    let raw = "00 ".repeat(800);
+    let saved = fx
+        .post(
+            url,
+            &[
+                ("version", "3"),
+                ("map", "1"),
+                ("action", "raw"),
+                ("bytes", &raw),
+            ],
+        )
+        .await;
+    assert_eq!(saved.status, 200, "{}", saved.body);
+    let (meta, stored) = fx
+        .store
+        .save_read(AccountId(100_001), path, None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(meta.version, 4);
+    assert!(stored[block(1, 0).unwrap()].iter().all(|b| *b == 0));
+    let short = fx
+        .post(
+            url,
+            &[
+                ("version", "4"),
+                ("map", "1"),
+                ("action", "raw"),
+                ("bytes", "00"),
+            ],
+        )
+        .await;
+    assert_eq!(short.status, 422);
+    assert_eq!(fx.audit_actions(), ["save.edit", "save.edit", "save.edit"]);
 }

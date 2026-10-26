@@ -1,294 +1,730 @@
 {
+ "game": "cawdor",
+ "chars_file": "INN\\CAWDOR\\CAWCHAR.DAT",
  "header": [
   {
-   "name": "unknown_0x000",
-   "group": "Raw",
+   "name": "selected_slot",
+   "group": "Header",
    "offset": 0,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "type": "u8",
+   "min": 0,
+   "max": 5,
+   "confidence": "confirmed",
+   "evidence": "TWGENN 1637:0374 writes the first 0x40 bytes of cawchar.dat with DS:04CE (gallery slot) as byte 0; 1637:0002 reads it back into DS:04CE; RUINS 4222:0000 reads record at 0x40+[0xCDE]*0x1F6 where [0xCDE] is this byte (RUINS and TWGENN agree: slot*0x1F6+0x40)"
   },
   {
-   "name": "unknown_0x010",
-   "group": "Raw",
-   "offset": 16,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "slot_in_use",
+   "group": "Header",
+   "offset": 1,
+   "type": "u8",
+   "count": 6,
+   "stride": 1,
+   "min": 0,
+   "max": 1,
+   "items": [
+    "slot 0",
+    "slot 1",
+    "slot 2",
+    "slot 3",
+    "slot 4",
+    "slot 5"
+   ],
+   "confidence": "confirmed",
+   "evidence": "TWGENN gallery card 1637:04E3 tests header[1+slot]==0 and prints \"Slot %d: Vacant\" instead of the character. Stock CAWCHAR.NEW has flags 1,1,1,1,0,0 although slots 4 and 5 hold data (Tosk, Norman), so those two are hidden pregens"
   },
   {
-   "name": "unknown_0x020",
-   "group": "Raw",
-   "offset": 32,
+   "name": "reserved_0x07",
+   "group": "Header",
+   "offset": 7,
    "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
-  },
-  {
-   "name": "unknown_0x030",
-   "group": "Raw",
-   "offset": 48,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "len": 57,
+   "confidence": "unknown",
+   "evidence": "all zero in every sample; the gallery rewrites the whole 0x40 bytes it read, so they round-trip"
   }
  ],
  "record": [
   {
-   "name": "unknown_0x000",
-   "group": "Raw",
+   "name": "unknown_0x00",
+   "group": "Record plain",
    "offset": 0,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "0x08 in every slot of every sample; never touched by the mapping functions (bytes 0..7 are outside the cipher range). Preserve",
+   "encrypted": false
   },
   {
-   "name": "unknown_0x010",
-   "group": "Raw",
-   "offset": 16,
+   "name": "unknown_0x01",
+   "group": "Record plain",
+   "offset": 1,
    "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "len": 5,
+   "confidence": "unknown",
+   "evidence": "zero in all samples; not touched by mapping functions",
+   "encrypted": false
   },
   {
-   "name": "unknown_0x020",
-   "group": "Raw",
+   "name": "ui_color",
+   "group": "Settings",
+   "offset": 6,
+   "type": "u16",
+   "min": 0,
+   "max": 255,
+   "confidence": "confirmed",
+   "evidence": "save copies DS:01E6 (TWGENN) / DS:09F6 (RUINS) into rec+6, load copies it back; that word is the palette index passed as colour to every window draw (the GAME COLOR option). Samples 0xE0 or 0x01 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "encrypted": false
+  },
+  {
+   "name": "name",
+   "group": "Identity",
+   "offset": 8,
+   "type": "str",
+   "len": 10,
+   "confidence": "confirmed",
+   "evidence": "gallery card 1637:04E3 prints rec+8; save writes rec+8 from DAT_9d68+2 after clearing 10 bytes; names: \"A Sample\", \"Hard Day's\", \"Illona\", \"Tosk\", \"Norman\". NOTE the game (RUINS load 4222:0053) takes the in-game name from rec+0xE7, not rec+8: keep both equal. Max 10 bytes with no NUL for a 10-char name (\"Hard Day's\" fills 0x08..0x11) so the NUL is lost; the 0x12 pad byte follows ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "summary": true
+  },
+  {
+   "name": "pad_0x12",
+   "group": "Record",
+   "offset": 18,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "one byte between Name[10] and Epithet[10]; uninitialised residue (0x3D, 0xB0, 0x00, 0x30, 0xE2, 0x67 in samples), never read or written by the mapping functions. Name and Epithet are 10-byte buffers (cleared with memset 10) then strcpy-ed"
+  },
+  {
+   "name": "epithet",
+   "group": "Identity",
+   "offset": 19,
+   "type": "str",
+   "len": 10,
+   "confidence": "confirmed",
+   "evidence": "save: strcpy(rec+0x13, DAT_9d68+0xd) after clearing 10 bytes; gallery prints rec+0x13 beside the name; samples \"Character\", \"Knight\", \"Ranger\", \"de Tracker\", \"Twobagger\". Help text RESOURCE.040: epithet up to 10 chars ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "summary": true
+  },
+  {
+   "name": "pad_0x1d",
+   "group": "Record",
+   "offset": 29,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "one byte after Epithet[10]; residue (0x02, 0xDA, 0xDC, 0x00, 0x00, 0x1A in samples), unused"
+  },
+  {
+   "name": "gender",
+   "group": "Identity",
+   "offset": 30,
+   "type": "u8",
+   "min": 0,
+   "max": 1,
+   "enum": {
+    "0": "Male",
+    "1": "Female"
+   },
+   "confidence": "confirmed",
+   "evidence": "save copies DAT_9d68+0x18 here; identity screen 20AF:0F11 shows the SEX label with the string table at DS:0212 (Male,Female); appearance screen 231E:0DBD tests this byte to choose FACIAL HAIR (0) vs FACIAL VEIL (1); gallery card 1637:04E3 indexes DS:0212 with rec+0x1E ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
+  },
+  {
+   "name": "race",
+   "group": "Identity",
+   "offset": 31,
+   "type": "u8",
+   "min": 0,
+   "max": 7,
+   "enum": {
+    "0": "Human",
+    "1": "Orc",
+    "2": "Elf",
+    "3": "Troll",
+    "4": "Dwarf",
+    "5": "Gnome",
+    "6": "Halfling",
+    "7": "Gremlin"
+   },
+   "confidence": "confirmed",
+   "evidence": "DAT_9d68+0x19; identity screen RACE label with the table at DS:021A (Human,Orc,Elf,Troll,Dwarf,Gnome,Halfling,Gremlin); help: \"eight species\"; gallery card prints rec+0x1F via that table ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "summary": true
+  },
+  {
+   "name": "alignment",
+   "group": "Identity",
    "offset": 32,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "type": "u8",
+   "min": 0,
+   "max": 1,
+   "enum": {
+    "0": "Harmony",
+    "1": "Chaos"
+   },
+   "confidence": "confirmed",
+   "evidence": "DAT_9d68+0x1A; ALIGNMENT label with table DS:023A (Harmony, Chaos); gallery card prints rec+0x20 via it; help text: \"one of the two alignments\" ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x030",
-   "group": "Raw",
+   "name": "guild",
+   "group": "Identity",
+   "offset": 33,
+   "type": "u8",
+   "min": 0,
+   "max": 5,
+   "enum": {
+    "0": "Barbarian",
+    "1": "Knight",
+    "2": "Ranger",
+    "3": "Thief",
+    "4": "Cleric",
+    "5": "Wizard"
+   },
+   "confidence": "confirmed",
+   "evidence": "DAT_9d68+0x1B; GUILD label with table DS:01FA (Barbarian,Knight,Ranger,Thief,Cleric,Wizard); gallery colours the card by byte rec+0x21 (DS:01F4+guild) ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053). Cross-check on pregens: Tosk (guild 2) has Archery/Furtiveness/Read Tracks/Detect; Norman (guild 4) has Medic/Staff",
+   "summary": true
+  },
+  {
+   "name": "level",
+   "group": "Identity",
+   "offset": 34,
+   "type": "u16",
+   "confidence": "confirmed",
+   "evidence": "the six bytes rec+0x1E..0x23 are copied as one block to DAT_9d68+0x18; the gallery card prints \"Level \" followed by the word at rec+0x22 (TWGENN 1637:04E3 itoa(*(u16*)(rec+0x22))). The three NEW pregens show 0 here, Tosk 31, Norman 35. RUINS refuses off-line characters above level 20 only through the marker bytes (see Marker), not by reading this field",
+   "summary": true
+  },
+  {
+   "name": "appearance",
+   "group": "Appearance",
+   "offset": 36,
+   "type": "u8",
+   "count": 6,
+   "stride": 1,
+   "items": [
+    "Face",
+    "Head cover",
+    "Costume",
+    "Nose",
+    "Eye color",
+    "Facial hair / veil (depends on Sex)"
+   ],
+   "confidence": "inferred",
+   "evidence": "block copy of 6 bytes rec+0x24 -> DAT_9d68+0x1E; portrait constructor 1C6E:000C is passed rec+0x1E (sex) then rec+0x24..0x29 in that order; the appearance screen has exactly these six selectors (FACE, HEAD COVER, COSTUME, NOSE, EYE COLOR, FACIAL HAIR/VEIL). Order of the six selectors inferred from the on-screen order"
+  },
+  {
+   "name": "initiative",
+   "group": "Attributes",
+   "offset": 42,
+   "type": "u16",
+   "min": 0,
+   "max": 50,
+   "confidence": "confirmed",
+   "evidence": "save: rec+0x2a = (int)(char)mem[0x0F]; attributes screen 1A85:07BF pairs the label INITIATIVE with mem+0x0F; load keeps only the low byte. Clamp routine (RUINS 20F2:00A5, TWGENN 18B3:00D6) forces mem+0x0F to 0..50 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
+  },
+  {
+   "name": "strength",
+   "group": "Attributes",
+   "offset": 44,
+   "type": "u16",
+   "min": 0,
+   "max": 99,
+   "confidence": "confirmed",
+   "evidence": "mem[0x00]; STRENGTH label pairs with mem+0; clamp 0..99. Help text: \"Strength represents your ability to hit an enemy\" ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
+  },
+  {
+   "name": "defense",
+   "group": "Attributes",
+   "offset": 46,
+   "type": "u16",
+   "min": 0,
+   "max": 99,
+   "confidence": "confirmed",
+   "evidence": "mem[0x03]; DEFENSE label pairs with mem+3. TWGENN clamps to 99; RUINS clamp 20F2:00A5 tests \"> 0x73 then set 99\", so 100..115 survive in RUINS and 116..255 become 99 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
+  },
+  {
+   "name": "dexterity",
+   "group": "Attributes",
    "offset": 48,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "type": "u16",
+   "min": 0,
+   "max": 3200,
+   "confidence": "confirmed",
+   "evidence": "mem+0x06 word; the DEXTERITY label prints mem+6 (not editable: raised automatically at level-up per help text); clamp 0..3200 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x040",
-   "group": "Raw",
-   "offset": 64,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "health_max",
+   "group": "Vitals",
+   "offset": 50,
+   "type": "u16",
+   "min": 0,
+   "max": 32000,
+   "confidence": "inferred",
+   "evidence": "mem+0x19 word, clamp 32000; new characters have it equal to current health (rec+0xE3): 30,30,27,50 in pregens; Tosk 0x2289 both. Attributes screen prints rec+0xE3 for HEALTH, so this is the maximum (inferred, only evidence is equality with current health and the 32000 clamp) ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x050",
-   "group": "Raw",
-   "offset": 80,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "agility",
+   "group": "Attributes",
+   "offset": 52,
+   "type": "u16",
+   "min": 0,
+   "max": 50,
+   "confidence": "confirmed",
+   "evidence": "mem[0x0C]; AGILITY label pairs with mem+0x0C; clamp 0..50 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x060",
-   "group": "Raw",
-   "offset": 96,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "mana_max",
+   "group": "Vitals",
+   "offset": 54,
+   "type": "u16",
+   "min": 0,
+   "max": 32000,
+   "confidence": "inferred",
+   "evidence": "mem+0x3A word, clamp 32000; equal to current mana rec+0xE5 in all new characters (8,8,10,12); the MANA label prints mem+0x38 (rec+0xE5) so this is the maximum (inferred) ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x070",
-   "group": "Raw",
-   "offset": 112,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "spell_ranks",
+   "group": "Spells",
+   "offset": 56,
+   "type": "u16",
+   "count": 24,
+   "stride": 2,
+   "min": 0,
+   "max": 12,
+   "items": [
+    "Backfire",
+    "Blast",
+    "Control",
+    "Curse",
+    "Death Darts",
+    "Dissipate",
+    "Fireball",
+    "Hail",
+    "Lightning",
+    "Petrify",
+    "Poison Cloud",
+    "Storm Wind",
+    "Aura",
+    "Light Shroud",
+    "Energy Field",
+    "Shield",
+    "Refresh",
+    "Teleport",
+    "Bless",
+    "Cure",
+    "Heal",
+    "Resist",
+    "Resuscitate",
+    "True Seeing"
+   ],
+   "confidence": "confirmed",
+   "evidence": "mem+0x3C[24] bytes widened to words; SPELLS screen (TWGENN 0CC1:07A0) compares against mem+0x3C+idx; ranks clamped to 12. Spell order = the name table at DS:040E in TWGENN (24 far pointers Backfire..True Seeing). Sample: the Wizard pregen has rank 1 in index 7 (Hail); Norman has most wizard spells at 12 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x080",
-   "group": "Raw",
-   "offset": 128,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "skill_ranks",
+   "group": "Skills",
+   "offset": 104,
+   "type": "u16",
+   "count": 24,
+   "stride": 2,
+   "min": 0,
+   "max": 12,
+   "items": [
+    "Athletics",
+    "Clubs/Axes",
+    "Berserker",
+    "Pursuit",
+    "Leadership",
+    "Fencing",
+    "Binding",
+    "Intimidate",
+    "Archery",
+    "Stamina",
+    "Furtiveness",
+    "Read Tracks",
+    "Bard",
+    "Detect",
+    "Lockpick",
+    "Pickpocket",
+    "Martial Arts",
+    "Deflect Magic",
+    "Medic",
+    "Reverie",
+    "Rune Reading",
+    "Staff",
+    "Channel",
+    "Deep Trance"
+   ],
+   "confidence": "confirmed",
+   "evidence": "mem+0x54[24]; SKILLS screen (TWGENN 0EB6:07A7) compares against mem+0x54+idx; clamp 12. Skill order = name table at DS:046E in TWGENN (Athletics..Deep Trance). Tosk (Ranger) has 12 in Athletics, Binding, Archery, Stamina, Furtiveness, Read Tracks, Detect ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x090",
-   "group": "Raw",
-   "offset": 144,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "attribute_points",
+   "group": "Points",
+   "offset": 152,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "mem+0x6C byte. New characters have 4 here and 0 in the next two (the three screens ATTRIBUTES/SKILLS/SPELLS each show POINTS REMAINING). Tosk 0/35/52, Norman 0/15/5 (not consumed). Which byte belongs to which screen: +0x6C attributes (as in Twinion), +0x6D spells, +0x6E skills (taken from the Twinion analysis) ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x0a0",
-   "group": "Raw",
-   "offset": 160,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "spell_points",
+   "group": "Points",
+   "offset": 153,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "mem+0x6D; see AttributePointsRemaining; assignment to SPELLS follows the Twinion analysis (skill counter proven to be +0x6E in DARKSTRT, so +0x6D is spells by elimination; Cawdor uses the same mapping)"
   },
   {
-   "name": "unknown_0x0b0",
-   "group": "Raw",
-   "offset": 176,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "skill_points",
+   "group": "Points",
+   "offset": 154,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "mem+0x6E; skill counter per the Twinion analysis (DARKSTRT skills overlay copies +0x6E to POINTS REMAINING); not separately traced in RUINS"
   },
   {
-   "name": "unknown_0x0c0",
-   "group": "Raw",
-   "offset": 192,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "gold",
+   "group": "Wealth",
+   "offset": 155,
+   "type": "u32",
+   "min": 0,
+   "max": 4294967295,
+   "confidence": "confirmed",
+   "evidence": "mem+0x6F dword; new-character init (TWGENN 14D2:02E0) stores 0x1E there (30 gold, same in all pregens) and 0 in mem+0x73; the party panel prints \"Gold\" then \"Exp\". Tosk 189613 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x0d0",
-   "group": "Raw",
-   "offset": 208,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "experience",
+   "group": "Wealth",
+   "offset": 159,
+   "type": "u32",
+   "min": 0,
+   "max": 4294967295,
+   "confidence": "confirmed",
+   "evidence": "mem+0x73 dword; new-character init writes 0; party panel \"Exp\"; RUINS message \" gold pieces and earned ... experience points!\" ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x0e0",
-   "group": "Raw",
-   "offset": 224,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "items",
+   "group": "Inventory",
+   "offset": 163,
+   "type": "u16",
+   "count": 32,
+   "stride": 2,
+   "min": 0,
+   "max": 65535,
+   "confidence": "confirmed",
+   "evidence": "mem+0x7B[32] words; 0 = empty slot. Item NAMES are not in the client: no name table exists in RUINS/TWGENN or the RESOURCE files (searched), so ids stay numeric. New-character default list (TWGENN 14D2:02E0): 0x46,0x57,0x6B,0xA3,0xB8,0xC4,0xCB (70,87,107,163,184,196,203). The pregens carry 0xC4,0xCB,0xB8,0xA3 in slots 0-3 and 0x57,0x6B,<weapon>,0x46 in slots 15-18 (<weapon> 25/37/1/57 per guild). The UI has two item lists, INVENTORY ITEMS and QUEST ITEMS (RUINS strings), the split between slots is not decoded ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x0f0",
-   "group": "Raw",
-   "offset": 240,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "health_current",
+   "group": "Vitals",
+   "offset": 227,
+   "type": "u16",
+   "min": 0,
+   "max": 32000,
+   "confidence": "confirmed",
+   "evidence": "save: rec+0xE3 = player object (DS:58CC / RUINS [8B86]) +0x21; the attributes screen prints that word for HEALTH; RUINS main loop clamps it to 32000. Load zeroes mem+0x16, mem+0x34 and obj+0x23/+0x25 (status effects) so poison/paralysis do not persist. The retained pregen file has 0 here for slot 0 (dead/empty) ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x100",
-   "group": "Raw",
-   "offset": 256,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "mana_current",
+   "group": "Vitals",
+   "offset": 229,
+   "type": "u16",
+   "min": 0,
+   "max": 32000,
+   "confidence": "confirmed",
+   "evidence": "mem+0x38 word; the MANA label prints it ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x110",
-   "group": "Raw",
-   "offset": 272,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "name_copy",
+   "group": "Identity",
+   "offset": 231,
+   "type": "str",
+   "len": 10,
+   "confidence": "confirmed",
+   "evidence": "save writes the name here too; load (RUINS 4222:0053 last lines, TWGENN 0846:0060) strcpy-s THIS copy to DAT_9d68+2 (the in-game name) and rec+0x13 to +0xd. Keep equal to Name ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "mirror_of": "name"
   },
   {
-   "name": "unknown_0x120",
-   "group": "Raw",
-   "offset": 288,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "pad_0xf1",
+   "group": "Record",
+   "offset": 241,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "byte after NameCopy[10]; residue (0x5C, 0xCC ... in samples), not touched by the mapping functions"
   },
   {
-   "name": "unknown_0x130",
-   "group": "Raw",
-   "offset": 304,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "map_code",
+   "group": "Position",
+   "offset": 242,
+   "type": "u16",
+   "confidence": "inferred",
+   "evidence": "mem+0x77 word = player obj+0x16 (RUINS 40CA:026D saves position: mem+0x77<-obj+0x16, mem+0x79<-obj+0x1A, mem+0x7A<-obj+0x1C). New character 0x0101; Tosk 0x0702; Norman 0x0503; values are of the form (area<<8|n) in the 34-entry map-id table at RUINS DS:0B3A (0x101,0x102,0x103,0x201,...). Teleport help text: \"saving your last position\" ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "enum": {
+    "257": "L1: Foyer of Cawdor",
+    "258": "L1: The Runed Room",
+    "259": "L2: The Skulkatorium",
+    "513": "L2: The Trophy Room",
+    "514": "L2: The Thaumaturgium",
+    "515": "L2: The Chivalrous Room",
+    "769": "L2: Sanctum Sanctorum",
+    "770": "L2: Uncivilization",
+    "1025": "L3: The Gallery",
+    "1026": "L3: The Pantry",
+    "1027": "L3: The Brewery",
+    "1281": "L3: The Lesser Hall",
+    "1282": "L4: The Ballroom",
+    "1283": "L4: The Music Room",
+    "1537": "L4: The Cloak Room",
+    "1538": "L4: The Library",
+    "1539": "L5: The Chambers",
+    "1793": "L5: The Kitchen",
+    "1794": "L5: The Cabinet",
+    "2049": "L5: The Conservatory",
+    "2050": "L6: The Great Hall",
+    "2305": "L7: Alchemia",
+    "2306": "L7: The Aerie",
+    "2561": "L6: Astrologia",
+    "2562": "L8: The Bestiary",
+    "2563": "The Crypt",
+    "2817": "L6: Nasty Little Maze",
+    "2818": "L6: The Parapets",
+    "2819": "L7: The Attic",
+    "2820": "L7: The Ruined Room",
+    "3073": "L1: The Stables",
+    "3074": "L12: The Gateway",
+    "3329": "Choronzar's Demesne",
+    "3330": "The Funhouse"
+   }
   },
   {
-   "name": "unknown_0x140",
-   "group": "Raw",
-   "offset": 320,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "position",
+   "group": "Position",
+   "offset": 244,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "mem+0x79 = obj+0x1A: low nibble x, high nibble y of the party cell (automap draw code ovl_210F_0704 uses obj[0x1A]&15 and obj[0x1A]>>4 as x,y on a 16x16 grid). New character 0xD8 = (8,13), which is where the explored cells start in the stock AUTOMAPS.DAT ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x150",
-   "group": "Raw",
-   "offset": 336,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "facing",
+   "group": "Position",
+   "offset": 245,
+   "type": "u8",
+   "min": 0,
+   "max": 3,
+   "confidence": "inferred",
+   "evidence": "mem+0x7A = obj+0x1C, used as a 0..3 index into the direction tables (obj[0x1C]*0x24 in ovl_210F_0704). New character 3 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x160",
-   "group": "Raw",
-   "offset": 352,
+   "name": "flags_a",
+   "group": "Progress flags",
+   "offset": 246,
    "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "len": 135,
+   "confidence": "unknown",
+   "evidence": "first part of the 224-byte block DS:97B7 (TWGENN)/DS:C9F1 (RUINS) copied verbatim (mem not in the 0xDB struct). Tosk and Norman have 0/1 bytes in 0xF7..0x12A (about 20 each), the other pregens none: looks like a set of per-character booleans (quest/rune progress); meaning not decoded ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "unknown_0x170",
-   "group": "Raw",
-   "offset": 368,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "mode_flag_a",
+   "group": "Validation",
+   "offset": 381,
+   "type": "u8",
+   "confidence": "confirmed",
+   "evidence": "RUINS 4222:0053 checks rec[0x17D] and rec[0x1AB]: both 4 -> sets flag DS:09FE (main then prints \"Your character is an off-line character above level 20 ... cannot be used in the on-line game\" and exits); both 3 -> accepted; anything else -> \"Your characters are invalid. You must create new ones!\" and exit. TWGENN new-character init 14D2:000A writes 3 into both (DS:97BE, DS:97EC)",
+   "min": 3,
+   "max": 4,
+   "enum": {
+    "3": "on-line character (pair 3,3)",
+    "4": "off-line character (pair 4,4)"
+   }
   },
   {
-   "name": "unknown_0x180",
-   "group": "Raw",
-   "offset": 384,
+   "name": "flags_b",
+   "group": "Progress flags",
+   "offset": 382,
    "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "len": 45,
+   "confidence": "unknown",
+   "evidence": "middle part of the 224-byte block, zero in all samples"
   },
   {
-   "name": "unknown_0x190",
-   "group": "Raw",
-   "offset": 400,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "name": "mode_flag_b",
+   "group": "Validation",
+   "offset": 427,
+   "type": "u8",
+   "confidence": "confirmed",
+   "evidence": "second validation byte, see Marker3a (must equal it)",
+   "min": 3,
+   "max": 4,
+   "enum": {
+    "3": "on-line character (pair 3,3)",
+    "4": "off-line character (pair 4,4)"
+   }
   },
   {
-   "name": "unknown_0x1a0",
-   "group": "Raw",
-   "offset": 416,
+   "name": "flags_c",
+   "group": "Progress flags",
+   "offset": 428,
    "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
+   "len": 42,
+   "confidence": "unknown",
+   "evidence": "tail of the 224-byte block (0x1AC..0x1D5); bytes from 0x1CC on are outside the cipher range (see ItemState note)"
   },
   {
-   "name": "unknown_0x1b0",
-   "group": "Raw",
-   "offset": 432,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
-  },
-  {
-   "name": "unknown_0x1c0",
-   "group": "Raw",
-   "offset": 448,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
-  },
-  {
-   "name": "unknown_0x1d0",
-   "group": "Raw",
-   "offset": 464,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
-  },
-  {
-   "name": "unknown_0x1e0",
-   "group": "Raw",
-   "offset": 480,
-   "type": "bytes",
-   "len": 16,
-   "confidence": "unknown"
-  },
-  {
-   "name": "unknown_0x1f0",
-   "group": "Raw",
-   "offset": 496,
-   "type": "bytes",
-   "len": 6,
-   "confidence": "unknown"
+   "name": "item_charges",
+   "group": "Inventory",
+   "offset": 470,
+   "type": "u8",
+   "count": 32,
+   "stride": 1,
+   "confidence": "inferred",
+   "evidence": "mem+0xBB[32] bytes, parallel to ItemIds (new characters initialise all to 0xFF and the pregens have 0xFF for empty slots; the starting items have 08,0A,0A,00). Probably charges/condition or an equipped/identified state; not strictly zero where the id is 0 in Tosk (slots 25,26). NOT ENCRYPTED: 0x1CC..0x1F5 are plain bytes ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
+   "encrypted": false
   }
+ ],
+ "automap": {
+  "maps": [
+   {
+    "name": "L1: Foyer of Cawdor",
+    "code": 257
+   },
+   {
+    "name": "L1: The Runed Room",
+    "code": 258
+   },
+   {
+    "name": "L2: The Skulkatorium",
+    "code": 259
+   },
+   {
+    "name": "L2: The Trophy Room",
+    "code": 513
+   },
+   {
+    "name": "L2: The Thaumaturgium",
+    "code": 514
+   },
+   {
+    "name": "L2: The Chivalrous Room",
+    "code": 515
+   },
+   {
+    "name": "L2: Sanctum Sanctorum",
+    "code": 769
+   },
+   {
+    "name": "L2: Uncivilization",
+    "code": 770
+   },
+   {
+    "name": "L3: The Gallery",
+    "code": 1025
+   },
+   {
+    "name": "L3: The Pantry",
+    "code": 1026
+   },
+   {
+    "name": "L3: The Brewery",
+    "code": 1027
+   },
+   {
+    "name": "L3: The Lesser Hall",
+    "code": 1281
+   },
+   {
+    "name": "L4: The Ballroom",
+    "code": 1282
+   },
+   {
+    "name": "L4: The Music Room",
+    "code": 1283
+   },
+   {
+    "name": "L4: The Cloak Room",
+    "code": 1537
+   },
+   {
+    "name": "L4: The Library",
+    "code": 1538
+   },
+   {
+    "name": "L5: The Chambers",
+    "code": 1539
+   },
+   {
+    "name": "L5: The Kitchen",
+    "code": 1793
+   },
+   {
+    "name": "L5: The Cabinet",
+    "code": 1794
+   },
+   {
+    "name": "L5: The Conservatory",
+    "code": 2049
+   },
+   {
+    "name": "L6: The Great Hall",
+    "code": 2050
+   },
+   {
+    "name": "L7: Alchemia",
+    "code": 2305
+   },
+   {
+    "name": "L7: The Aerie",
+    "code": 2306
+   },
+   {
+    "name": "L6: Astrologia",
+    "code": 2561
+   },
+   {
+    "name": "L8: The Bestiary",
+    "code": 2562
+   },
+   {
+    "name": "The Crypt",
+    "code": 2563
+   },
+   {
+    "name": "L6: Nasty Little Maze",
+    "code": 2817
+   },
+   {
+    "name": "L6: The Parapets",
+    "code": 2818
+   },
+   {
+    "name": "L7: The Attic",
+    "code": 2819
+   },
+   {
+    "name": "L7: The Ruined Room",
+    "code": 2820
+   },
+   {
+    "name": "L1: The Stables",
+    "code": 3073
+   },
+   {
+    "name": "L12: The Gateway",
+    "code": 3074
+   },
+   {
+    "name": "Choronzar's Demesne",
+    "code": 3329
+   },
+   {
+    "name": "The Funhouse",
+    "code": 3330
+   }
+  ],
+  "names_confidence": "inferred",
+  "evidence": "RUINS overlay 210F: ovl_210F_02D4 (flat 4969:02D4, load), ovl_210F_0390 (4969:0390, save), ovl_210F_0704 (49C0:0194, draw/update), ovl_210F_0D31 (49C0:07C1, map id -> index through the word table at DS:0B3A, error \"Illegal Map Number!\"); TWGENN 14D2:000A/02E0 for the reset. Stock AUTOMAPS.DAT has 17 non-0xFF bytes: cells (6..10,5) and column 8 rows 6..13 plus (9,11) = the walk north from the start cell (8,13) (matches LastPosition 0xD8), and three plane-B bytes at B[60],B[76],B[92]."
+ },
+ "invariants": [
+  "Write CAWCHAR.DAT with the cipher  (for bytes 8..0x1CB of each slot). There is no checksum anywhere (the cipher is a bijection over the 0x1C4 bytes; both programs decode any bytes).",
+  "RUINS rejects a slot unless rec[0x17D]==rec[0x1AB] and the value is 3 (4 = \"off-line character above level 20\", RUINS exits). TWGENN does not check it. A new character gets 3 in both.",
+  "Name appears three places: rec+0x08 (gallery list), rec+0xE7 (what the game loads as the in-game name). Keep both equal, NUL-padded to 10 bytes; epithet rec+0x13.",
+  "SelectedSlot header byte must index an occupied slot (header[1+slot]==1) else the gallery shows Vacant.",
+  "RUINS and TWGENN clamp, not reject: Strength 0..99, Defense (RUINS: >115 becomes 99), Agility and Initiative 0..50, Dexterity 0..3200, MaxHealth and MaxMana 0..32000, spell and skill ranks 0..12 (clamp routine RUINS 20F2:00A5 = TWGENN 18B3:00D6). Current health is also clamped to 32000 in the RUINS main loop. Exceeding these gets silently reduced the next time the clamp runs.",
+  "Load clears status: mem+0x16, mem+0x34, player obj+0x23/+0x25 are zeroed on every load.",
+  "CurrentHealth/CurrentMana are separate words from MaxHealth/MaxMana; keep current <= max.",
+  "AUTOMAPS.DAT has no header and no checksum; the 800-byte block of a map can be edited freely. 0xFF means unexplored.",
+  "CHARKEY.DAT is never read for validation: TWGENN (0498) and RUINS (11E2:000C -> 1200:0275) only APPEND the four key words as decimal text (fprintf \"%d%d%d%d\" = \"11033160152404102\") when running on-line; the read-back-and-compare routines (TWGENN 04F9, RUINS 1200:02D2) have no callers. The file is not consulted when loading CAWCHAR.DAT.",
+  "MAXSTAT.DAT/.ROT and RACEDEFS.DAT/.CAW are not opened by RUINS.EXE or TWGENN.EXE (no file name string in either exe or any RESOURCE file); they cannot affect an edited character in the client."
  ]
 }

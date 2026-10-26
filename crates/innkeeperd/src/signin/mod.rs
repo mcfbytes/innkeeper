@@ -251,7 +251,10 @@ impl SignIn {
 
     /// What would stop the identity opening an account now, checked in the order the account
     /// request checks it; `None` when nothing would.
-    pub(crate) fn create_block(&self, key: &IdentityKey) -> Result<Option<CreateBlock>, StoreError> {
+    pub(crate) fn create_block(
+        &self,
+        key: &IdentityKey,
+    ) -> Result<Option<CreateBlock>, StoreError> {
         if !self.enrolment.web_creates() {
             return Ok(Some(CreateBlock::Closed));
         }

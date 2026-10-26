@@ -2,6 +2,7 @@
 //! Ruins of Cawdor) as the operator portal's character editor reads and writes them: the
 //! character file's layout and cipher, the field maps and the automaps. docs/server/ybarra.md.
 
+pub(crate) mod automap;
 pub(crate) mod cipher;
 pub(crate) mod extract;
 pub(crate) mod schema;
@@ -152,7 +153,9 @@ mod tests {
     #[test]
     fn a_character_file_reads_back_to_the_same_bytes() {
         let cipher = sample();
-        let mut bytes: Vec<u8> = (0..CHARS_FILE_BYTES).map(|n| (n * 13 % 256) as u8).collect();
+        let mut bytes: Vec<u8> = (0..CHARS_FILE_BYTES)
+            .map(|n| (n * 13 % 256) as u8)
+            .collect();
         bytes[0] = 2;
         let file = CharFile::open(&cipher, &bytes).unwrap();
         assert_eq!(file.header[0], 2);

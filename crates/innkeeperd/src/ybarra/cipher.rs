@@ -72,7 +72,10 @@ impl Cipher {
 
     /// The masks as stored: 32 little-endian words.
     pub(crate) fn mask_bytes(&self) -> Vec<u8> {
-        self.masks.iter().flat_map(|word| word.to_le_bytes()).collect()
+        self.masks
+            .iter()
+            .flat_map(|word| word.to_le_bytes())
+            .collect()
     }
 
     /// Each covered byte's position with the table byte a shuffle pass starting at `start` pairs
@@ -135,9 +138,9 @@ impl Cipher {
             };
             let out = if sealing {
                 let plain = u32::from_le_bytes(word);
-                let sealed = masks
-                    .iter()
-                    .fold(0u32, |sealed, mask| (sealed << 1) | u32::from(plain & mask != 0));
+                let sealed = masks.iter().fold(0u32, |sealed, mask| {
+                    (sealed << 1) | u32::from(plain & mask != 0)
+                });
                 sealed.to_be_bytes()
             } else {
                 let sealed = u32::from_be_bytes(word);
@@ -176,7 +179,12 @@ pub(crate) mod tests {
         for bit in 0..MASKS {
             masks.extend_from_slice(&(1u32 << ((bit * 7 + 3) % 32)).to_le_bytes());
         }
-        Cipher::new(&shuffle, &masks, &[0x21, 0x07, 0x99, 0x10, 0x3c, 0x2a, 0x05, 0xf0]).unwrap()
+        Cipher::new(
+            &shuffle,
+            &masks,
+            &[0x21, 0x07, 0x99, 0x10, 0x3c, 0x2a, 0x05, 0xf0],
+        )
+        .unwrap()
     }
 
     #[test]

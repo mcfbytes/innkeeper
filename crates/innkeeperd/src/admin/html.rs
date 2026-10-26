@@ -202,7 +202,11 @@ fn menubar(ctx: &Ctx, nav: Nav) -> String {
         "{}{}{}{}",
         item("/admin/", "Dashboard", nav == Nav::Dashboard),
         item("/admin/accounts", "Accounts", nav == Nav::Accounts),
-        item("/admin/signins", "Sign-ins without an account", nav == Nav::SignIns),
+        item(
+            "/admin/signins",
+            "Sign-ins without an account",
+            nav == Nav::SignIns
+        ),
         item("/admin/audit", "Audit log", nav == Nav::Audit),
     );
     let desk = format!(

@@ -157,7 +157,11 @@ impl Field {
                 let value = i64::from_le_bytes(wide);
                 let unused = 64 - 8 * u32::try_from(field.len()).unwrap_or(8);
                 let signed = matches!(kind, Kind::I8 | Kind::I16 | Kind::I32);
-                Value::Number(if signed { (value << unused) >> unused } else { value })
+                Value::Number(if signed {
+                    (value << unused) >> unused
+                } else {
+                    value
+                })
             }
         }
     }
@@ -186,7 +190,10 @@ impl Field {
                 }
             }
             Kind::Bytes => {
-                let digits: Vec<u8> = text.bytes().filter(|ch| !ch.is_ascii_whitespace()).collect();
+                let digits: Vec<u8> = text
+                    .bytes()
+                    .filter(|ch| !ch.is_ascii_whitespace())
+                    .collect();
                 if digits.len() != width * 2 {
                     return Err(format!("exactly {width} bytes ({} hex digits)", width * 2));
                 }
@@ -241,12 +248,27 @@ impl Value {
     }
 }
 
+/// The automap file's maps, in the order of their blocks.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub(crate) struct Automap {
+    pub(crate) maps: Vec<MapName>,
+    #[serde(default)]
+    pub(crate) names_confidence: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct MapName {
+    pub(crate) name: String,
+    /// The map's number as the record's map field stores it.
+    pub(crate) code: u16,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Schema {
     pub(crate) header: Vec<Field>,
     pub(crate) record: Vec<Field>,
     #[serde(default)]
-    pub(crate) automap: Option<serde_json::Value>,
+    pub(crate) automap: Automap,
     #[serde(default)]
     pub(crate) invariants: Vec<String>,
 }
@@ -259,6 +281,7 @@ pub(crate) enum SchemaError {
     Overlap(String, String),
     Gap(usize),
     Mirror(String),
+    Maps(usize),
 }
 
 impl Schema {
@@ -289,7 +312,7 @@ impl Schema {
         Schema {
             header: runs(HEADER_BYTES),
             record: runs(SLOT_BYTES),
-            automap: None,
+            automap: Automap::default(),
             invariants: Vec::new(),
         }
     }
@@ -304,6 +327,10 @@ impl Schema {
     /// Every byte of the header and of a record belongs to exactly one field, every field stays
     /// inside its part, and a mirror names a field of the same shape.
     fn check(&self) -> Result<(), SchemaError> {
+        let maps = self.automap.maps.len();
+        if maps != 0 && maps != super::automap::MAPS {
+            return Err(SchemaError::Maps(maps));
+        }
         for (fields, size) in [(&self.header, HEADER_BYTES), (&self.record, SLOT_BYTES)] {
             let mut owner: Vec<Option<&str>> = vec![None; size];
             for field in fields {
@@ -312,7 +339,10 @@ impl Schema {
                         .get_mut(at)
                         .ok_or_else(|| SchemaError::OutOfRange(field.name.clone()))?;
                     if let Some(other) = slot {
-                        return Err(SchemaError::Overlap((*other).to_owned(), field.name.clone()));
+                        return Err(SchemaError::Overlap(
+                            (*other).to_owned(),
+                            field.name.clone(),
+                        ));
                     }
                     *slot = Some(&field.name);
                 }
@@ -349,7 +379,11 @@ pub(crate) fn schema(game: Game) -> &'static Schema {
     };
     cell.get_or_init(|| {
         Schema::parse(text).unwrap_or_else(|error| {
-            tracing::error!(game = game.id(), ?error, "a field map is broken; showing raw bytes");
+            tracing::error!(
+                game = game.id(),
+                ?error,
+                "a field map is broken; showing raw bytes"
+            );
             Schema::raw()
         })
     })
@@ -393,7 +427,8 @@ mod tests {
 
     #[test]
     fn arrays_strings_and_raw_bytes() {
-        let ranks = field(r#"{"name": "Ranks", "offset": 0, "type": "u8", "count": 3, "stride": 2}"#);
+        let ranks =
+            field(r#"{"name": "Ranks", "offset": 0, "type": "u8", "count": 3, "stride": 2}"#);
         let mut bytes = [0u8; 12];
         ranks.write(&mut bytes, 2, "7").unwrap();
         assert_eq!(bytes[4], 7);
@@ -417,18 +452,30 @@ mod tests {
     #[test]
     fn a_map_with_a_gap_or_an_overlap_is_refused() {
         let pad = |from: usize, to: usize| {
-            format!(r#"{{"name": "pad{from}", "offset": {from}, "type": "bytes", "len": {}}}"#, to - from)
+            format!(
+                r#"{{"name": "pad{from}", "offset": {from}, "type": "bytes", "len": {}}}"#,
+                to - from
+            )
         };
         let header = pad(0, HEADER_BYTES);
-        let whole = format!(r#"{{"header": [{header}], "record": [{}]}}"#, pad(0, SLOT_BYTES));
+        let whole = format!(
+            r#"{{"header": [{header}], "record": [{}]}}"#,
+            pad(0, SLOT_BYTES)
+        );
         assert!(Schema::parse(&whole).is_ok());
-        let gap = format!(r#"{{"header": [{header}], "record": [{}]}}"#, pad(1, SLOT_BYTES));
+        let gap = format!(
+            r#"{{"header": [{header}], "record": [{}]}}"#,
+            pad(1, SLOT_BYTES)
+        );
         assert_eq!(Schema::parse(&gap).unwrap_err(), SchemaError::Gap(0));
         let overlap = format!(
             r#"{{"header": [{header}], "record": [{}, {}]}}"#,
             pad(0, 10),
             pad(5, SLOT_BYTES)
         );
-        assert!(matches!(Schema::parse(&overlap), Err(SchemaError::Overlap(..))));
+        assert!(matches!(
+            Schema::parse(&overlap),
+            Err(SchemaError::Overlap(..))
+        ));
     }
 }

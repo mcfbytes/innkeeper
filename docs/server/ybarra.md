@@ -3,7 +3,7 @@
 The operator portal ([innkeeperd.md](innkeeperd.md) section 9) can change the characters and automaps
 that The Shadow of Yserbius, The Fates of Twinion and The Ruins of Cawdor keep in the synced save
 files ([saves.md](saves.md)). Code: `crates/innkeeperd/src/ybarra/` (file layout, cipher, field maps)
-and `crates/innkeeperd/src/admin/ybarra.rs` (the pages).
+and `crates/innkeeperd/src/admin/ybarra.rs`, `ybarra_maps.rs` (the pages).
 
 ## 1. The files
 
@@ -97,11 +97,34 @@ the new version, the part and the changed fields (never the values), with the op
 The player gets the change at the next sign-on: the page sees a newer host version of a file it had
 not changed, and downloads it ([saves.md](saves.md) section 5; also the HTTP prefetch, section 6).
 
-## 6. Tests
+## 6. Automaps
+
+An automap file is 168000 bytes. Slot `s`, map `m` (0 to 33) is the 800 bytes at
+`s * 27200 + m * 800` (the last 4800 bytes are unused). A block is 256 cells (`row * 16 + col`),
+two 256-byte wall planes and two 16-byte edge strips; `0xFF` is unexplored. CONFIRMED on real saves
+of all three games: a new character's blocks are all `0xFF`, and the games turn every kept cell
+other than 12, 13 and 14 into 0 when they save. The map names and their codes come from the field
+map's `automap` section (`maps`, with `names_confidence`).
+
+`/admin/saves/<account>/ybarra/<game>/<1-6>/map` lists the 34 maps with how many cells are explored,
+and `?map=N` adds a 16 by 16 grid of tickboxes (ticked = explored) and the block as hex. A POST names
+one action:
+
+- `forget_all`, `forget`: every map, or one, back to `0xFF`, cells and walls (each needs a yes);
+- `cells`: a newly ticked cell becomes 0 (visited floor), an unticked one `0xFF`; a cell that stays
+  ticked keeps its value, and the walls are left for the game to fill in;
+- `raw`: the block's 800 bytes, as hex.
+
+Each is refused, stored and audited as in section 5. The slot list marks a slot whose header byte
+says it is not in use as vacant.
+
+## 7. Tests
 
 `ybarra::cipher` (round trip, chaining, mask check), `ybarra::extract` (a program laid out like the
 games; with `INNKEEPER_YBARRA_DIR` set to a folder holding `YSERBIUS`, `TWINION` and `CAWDOR` program
 copies and a `saves` folder of character files, the real programs, each game's two programs giving the
 same cipher, and each save opening and sealing back to the same bytes), `ybarra::schema` (bounds,
-strings, raw bytes, coverage of every map), `admin::ybarra` (forms, mirrors, escaping) and
-`admin::tests::the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_online_edits`.
+strings, raw bytes, coverage of every map), `ybarra::automap` (block layout, cells), `admin::ybarra` (forms, mirrors, escaping),
+`admin::ybarra_maps` (the hex round trip),
+`admin::tests::the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_online_edits` and
+`admin::tests::the_automap_editor_sets_cells_forgets_maps_and_takes_raw_bytes`.

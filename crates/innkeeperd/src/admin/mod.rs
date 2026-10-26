@@ -14,6 +14,7 @@ mod signins;
 pub(crate) mod store;
 mod views;
 mod ybarra;
+mod ybarra_maps;
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -341,7 +342,11 @@ impl Admin {
                 warn!(handle = %req.who.handle, "portal POST refused: wrong Origin");
                 return self.forbidden(&req, "That request did not come from this office.");
             }
-            let limit = if path == IMPORT_PATH { MAX_IMPORT_FORM } else { MAX_FORM };
+            let limit = if path == IMPORT_PATH {
+                MAX_IMPORT_FORM
+            } else {
+                MAX_FORM
+            };
             let Some(form) = read_form(request, limit).await else {
                 return self.forbidden(&req, "That form was too large or unreadable.");
             };
@@ -713,6 +718,9 @@ impl Admin {
             ["saves", account] => self.saves_of(req, account),
             ["saves", account, "ybarra", game] => self.ybarra_game(req, account, game),
             ["saves", account, "ybarra", game, part] => self.ybarra_part(req, account, game, part),
+            ["saves", account, "ybarra", game, slot, "map"] => {
+                self.ybarra_maps(req, account, game, slot)
+            }
             ["ybarra"] => self.ybarra_tables(req),
             ["holds"] => self.holds(req),
             ["audit"] => self.audit(req),
@@ -739,6 +747,9 @@ impl Admin {
             ["holds", "release"] => self.hold_release(req),
             ["saves", account, "download"] => self.save_download(req, account),
             ["saves", account, "ybarra", game, part] => self.ybarra_save(req, account, game, part),
+            ["saves", account, "ybarra", game, slot, "map"] => {
+                self.ybarra_maps_save(req, account, game, slot)
+            }
             ["ybarra", "import"] => self.ybarra_import(req),
             _ => self.not_found(req),
         }

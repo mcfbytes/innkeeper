@@ -43,7 +43,13 @@ impl Admin {
                 "Every signed-in identity has an account.",
                 Some("The waiting room is empty. Someone even straightened the chairs."),
             );
-            return self.render(req, Nav::SignIns, "Sign-ins without an account", None, &format!("{intro}{body}"));
+            return self.render(
+                req,
+                Nav::SignIns,
+                "Sign-ins without an account",
+                None,
+                &format!("{intro}{body}"),
+            );
         }
         let mut lines = String::new();
         for (n, row) in rows.iter().enumerate() {
@@ -60,7 +66,9 @@ impl Admin {
                 esc(&keys::handle(&row.key)),
                 esc(&row.provider),
                 esc(&when(row.created_at / 1000)),
-                esc(&row.last_session.map_or_else(|| "none kept".to_owned(), |at| when(at / 1000))),
+                esc(&row
+                    .last_session
+                    .map_or_else(|| "none kept".to_owned(), |at| when(at / 1000))),
                 row.methods.to_string(),
                 esc(&attested),
                 esc(block_text(block)),
@@ -83,7 +91,11 @@ impl Admin {
         let body = format!(
             "{intro}{}",
             window(
-                &format!("{} sign-in method{}", rows.len(), if rows.len() == 1 { "" } else { "s" }),
+                &format!(
+                    "{} sign-in method{}",
+                    rows.len(),
+                    if rows.len() == 1 { "" } else { "s" }
+                ),
                 &format!(
                     "{}{more}{help}",
                     table(
@@ -102,6 +114,12 @@ impl Admin {
                 )
             )
         );
-        self.render(req, Nav::SignIns, "Sign-ins without an account", None, &body)
+        self.render(
+            req,
+            Nav::SignIns,
+            "Sign-ins without an account",
+            None,
+            &body,
+        )
     }
 }

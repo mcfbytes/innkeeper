@@ -140,8 +140,12 @@ textarea { width: 100%; min-height: 72px; }
 .editor .fields { display: grid; gap: 8px 14px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); align-items: end; }
 .editor .fields > .wide { grid-column: 1 / -1; }
 .editor fieldset fieldset { background: var(--surface); margin: 0; }
-.editor input[type=number] { width: 100%; }
+.editor input[type=number], .editor select { width: 100%; }
 .editor textarea.mono { min-height: 0; }
+
+table.automap { width: auto; border-collapse: collapse; margin: 0 0 10px; }
+table.automap td { padding: 0; border: 1px solid var(--faint); }
+table.automap input { margin: 3px; }
 
 /* ---- the confirmation box ---- */
 dialog { padding: 0; border: 3px solid var(--border); background: var(--surface); color: var(--text); width: min(520px, calc(100% - 32px));

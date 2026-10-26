@@ -648,479 +648,149 @@
   }
  ],
  "automap": {
-  "file": "INN\\YSERBIUS\\AUTOMAPS.DAT",
-  "file_size": 168000,
-  "slot_size": 27200,
-  "slot_of_character": "character slot k (0..5, the header byte 0 at play time) owns bytes k*27200 .. k*27200+27199: 34 map blocks of 800 bytes; block index = map table index of the character's map_code. Offset of a block = (slot*34 + index)*800. The last 4800 bytes of the file (offset 163200..167999) are never addressed by slot 5's 34 maps (the file is 6*28000 but the code strides 34*800 = 27200, not 28000).",
   "maps": [
    {
     "name": "L1: Dungeon Entrance",
-    "index": 0,
-    "offset": 0,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 257,
-    "rec_0xf2": 1,
-    "rec_0xf3": 1
+    "code": 257
    },
    {
     "name": "L1: The Mines",
-    "index": 1,
-    "offset": 800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 258,
-    "rec_0xf2": 2,
-    "rec_0xf3": 1
+    "code": 258
    },
    {
     "name": "L1: Vestibule",
-    "index": 2,
-    "offset": 1600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 259,
-    "rec_0xf2": 3,
-    "rec_0xf3": 1
+    "code": 259
    },
    {
     "name": "L1: Hall Of Doors",
-    "index": 3,
-    "offset": 2400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 260,
-    "rec_0xf2": 4,
-    "rec_0xf3": 1
+    "code": 260
    },
    {
     "name": "L1: Treasury",
-    "index": 4,
-    "offset": 3200,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 261,
-    "rec_0xf2": 5,
-    "rec_0xf3": 1
+    "code": 261
    },
    {
     "name": "L1: Soldier's Quarters",
-    "index": 5,
-    "offset": 4000,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 262,
-    "rec_0xf2": 6,
-    "rec_0xf3": 1
+    "code": 262
    },
    {
     "name": "L2: Basement",
-    "index": 6,
-    "offset": 4800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 513,
-    "rec_0xf2": 1,
-    "rec_0xf3": 2
+    "code": 513
    },
    {
     "name": "L2: Palace Corridor",
-    "index": 7,
-    "offset": 5600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 514,
-    "rec_0xf2": 2,
-    "rec_0xf3": 2
+    "code": 514
    },
    {
     "name": "L2: Secret Room",
-    "index": 8,
-    "offset": 6400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 515,
-    "rec_0xf2": 3,
-    "rec_0xf3": 2
+    "code": 515
    },
    {
     "name": "L2: Secret Room",
-    "index": 9,
-    "offset": 7200,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 516,
-    "rec_0xf2": 4,
-    "rec_0xf3": 2
+    "code": 516
    },
    {
     "name": "L2: Secret Room",
-    "index": 10,
-    "offset": 8000,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 517,
-    "rec_0xf2": 5,
-    "rec_0xf3": 2
+    "code": 517
    },
    {
     "name": "L2: Cleowyn's Palace",
-    "index": 11,
-    "offset": 8800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 518,
-    "rec_0xf2": 6,
-    "rec_0xf3": 2
+    "code": 518
    },
    {
     "name": "L3: Rune Room",
-    "index": 12,
-    "offset": 9600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 769,
-    "rec_0xf2": 1,
-    "rec_0xf3": 3
+    "code": 769
    },
    {
     "name": "L3: Prison",
-    "index": 13,
-    "offset": 10400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 770,
-    "rec_0xf2": 2,
-    "rec_0xf3": 3
+    "code": 770
    },
    {
     "name": "L3: Great Corridor",
-    "index": 14,
-    "offset": 11200,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 771,
-    "rec_0xf2": 3,
-    "rec_0xf3": 3
+    "code": 771
    },
    {
     "name": "L3: Mausoleum",
-    "index": 15,
-    "offset": 12000,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 772,
-    "rec_0xf2": 4,
-    "rec_0xf3": 3
+    "code": 772
    },
    {
     "name": "L4: King's Domicile",
-    "index": 16,
-    "offset": 12800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 1025,
-    "rec_0xf2": 1,
-    "rec_0xf3": 4
+    "code": 1025
    },
    {
     "name": "L5: Thieves' Den",
-    "index": 17,
-    "offset": 13600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 1281,
-    "rec_0xf2": 1,
-    "rec_0xf3": 5
+    "code": 1281
    },
    {
     "name": "L5: Lava Cellar",
-    "index": 18,
-    "offset": 14400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 1282,
-    "rec_0xf2": 2,
-    "rec_0xf3": 5
+    "code": 1282
    },
    {
     "name": "L5: Pit Bottom",
-    "index": 19,
-    "offset": 15200,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 1283,
-    "rec_0xf2": 3,
-    "rec_0xf3": 5
+    "code": 1283
    },
    {
     "name": "L6: Labyrinth I",
-    "index": 20,
-    "offset": 16000,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13057,
-    "rec_0xf2": 1,
-    "rec_0xf3": 51
+    "code": 13057
    },
    {
     "name": "L6: Castle Parapets",
-    "index": 21,
-    "offset": 16800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13058,
-    "rec_0xf2": 2,
-    "rec_0xf3": 51
+    "code": 13058
    },
    {
     "name": "L7: Labyrinth II",
-    "index": 22,
-    "offset": 17600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13313,
-    "rec_0xf2": 1,
-    "rec_0xf3": 52
+    "code": 13313
    },
    {
     "name": "L7: Castle Wizard Room",
-    "index": 23,
-    "offset": 18400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13314,
-    "rec_0xf2": 2,
-    "rec_0xf3": 52
+    "code": 13314
    },
    {
     "name": "L8: Labyrinth III",
-    "index": 24,
-    "offset": 19200,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13569,
-    "rec_0xf2": 1,
-    "rec_0xf3": 53
+    "code": 13569
    },
    {
     "name": "L8: Castle Great Hall",
-    "index": 25,
-    "offset": 20000,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13570,
-    "rec_0xf2": 2,
-    "rec_0xf3": 53
+    "code": 13570
    },
    {
     "name": "L9: Labyrinth IV",
-    "index": 26,
-    "offset": 20800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13825,
-    "rec_0xf2": 1,
-    "rec_0xf3": 54
+    "code": 13825
    },
    {
     "name": "L9: Arnakkian's Arena",
-    "index": 27,
-    "offset": 21600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 13826,
-    "rec_0xf2": 2,
-    "rec_0xf3": 54
+    "code": 13826
    },
    {
     "name": "L10: Elf Villages",
-    "index": 28,
-    "offset": 22400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 14081,
-    "rec_0xf2": 1,
-    "rec_0xf3": 55
+    "code": 14081
    },
    {
     "name": "L11: Dwarf Kingdom",
-    "index": 29,
-    "offset": 23200,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 14337,
-    "rec_0xf2": 1,
-    "rec_0xf3": 56
+    "code": 14337
    },
    {
     "name": "L11: Land Of Giants",
-    "index": 30,
-    "offset": 24000,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 14338,
-    "rec_0xf2": 2,
-    "rec_0xf3": 56
+    "code": 14338
    },
    {
     "name": "L11: River's End",
-    "index": 31,
-    "offset": 24800,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 14339,
-    "rec_0xf2": 3,
-    "rec_0xf3": 56
+    "code": 14339
    },
    {
     "name": "L11: Island Of Eternity",
-    "index": 32,
-    "offset": 25600,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 14340,
-    "rec_0xf2": 4,
-    "rec_0xf3": 56
+    "code": 14340
    },
    {
     "name": "L12: The Unknown",
-    "index": 33,
-    "offset": 26400,
-    "size": 800,
-    "width": 16,
-    "height": 16,
-    "cell_bytes": 1,
-    "code": 14593,
-    "rec_0xf2": 1,
-    "rec_0xf3": 57
+    "code": 14593
    }
   ],
-  "block_layout": {
-   "size": 800,
-   "planes": [
-    {
-     "offset": 0,
-     "size": 256,
-     "name": "cells",
-     "index": "row*16+col (row = y 0..15 down the screen, col = x 0..15)",
-     "meaning": "tile id: 0xFF unexplored; 0 explored floor; saved tiles other than 0xFF/12/13/14 are reset to 0 on save (1,2,3,4 = player arrow, 5-10 = party member by guild colour, 11 = magic reveal: drawn at runtime only)"
-    },
-    {
-     "offset": 256,
-     "size": 256,
-     "name": "north_walls",
-     "index": "row*16+col",
-     "meaning": "7-pixel horizontal line on the TOP edge of the cell; 0xFF none, 0..3 line style (glyph colours: 0 black wall, 1 dark red, 2 bright red, 3 floor colour = open); style meaning inferred from colours"
-    },
-    {
-     "offset": 512,
-     "size": 256,
-     "name": "west_walls",
-     "index": "row*16+col",
-     "meaning": "5-pixel vertical line on the LEFT edge of the cell; same values as north_walls"
-    },
-    {
-     "offset": 768,
-     "size": 16,
-     "name": "east_edge",
-     "index": "row",
-     "meaning": "vertical line on the right edge of column 15 for each row; same values"
-    },
-    {
-     "offset": 784,
-     "size": 16,
-     "name": "south_edge",
-     "index": "col",
-     "meaning": "horizontal line on the bottom edge of row 15 for each column; same values"
-    }
-   ]
-  },
-  "cell": {
-   "unexplored": 255,
-   "width": 16,
-   "height": 16,
-   "cell_bytes": 1,
-   "bits": [],
-   "values": {
-    "255": "unexplored (all planes)",
-    "0": "explored floor / wall style 0",
-    "12": "special tile (colour 0xAC), kept on save",
-    "13": "special tile (colour 0x12), kept on save",
-    "14": "special tile (colour 0x8F), kept on save"
-   },
-   "note": "values are indices, not bit masks (no bit decoding exists). Twinion's played sample holds 0 in the cell plane and 0/1/2 in the wall planes."
-  },
+  "names_confidence": "confirmed",
   "evidence": "DARKSTRT overlay 1E69: ovl_1E69_02D4 (load: 0xFF-fill 256 bytes, then read 800 bytes at (DS:0cf6*0x22 + level_index)*0x320 from automaps.dat), ovl_1E69_0390 (save: every cell not 0xFF/0x0C/0x0D/0x0E becomes 0, then write 800 bytes), ovl_1E69_1433 (map table lookup, ds:0b46), ovl_1E69_0704 (renderer: planes at +0x52, +0x152, +0x252, +0x352, +0x362 of the dialog object, 6x5 pixel cells); CGENN 1000:7bb6..7c0c (new character: 0x6A40 bytes of 0xFF at slot*0x22*0x320)"
  },
  "invariants": [
-  "Everything in a slot between record offsets 8 and 0x1CB inclusive (0x1C4 bytes) is encrypted with the CGENN/TWGENN cipher (ybcrypt.py); bytes 0-7 and 0x1CC-0x1F5 are plain. No checksum, no length field, no per-record key: the cipher key is constant (the file is just re-encrypted slot by slot).",
+  "Everything in a slot between record offsets 8 and 0x1CB inclusive (0x1C4 bytes) is encrypted with the CGENN/TWGENN cipher (docs/server/ybarra.md section 2); bytes 0-7 and 0x1CC-0x1F5 are plain. No checksum, no length field, no per-record key: the cipher key is constant (the file is just re-encrypted slot by slot).",
   "Mode bytes: rec+0x17D/rec+0x1AB must be (1,0) (on-line) or (6,6) (off-line). Anything else makes DARKSTRT print 'Unable to Load copied Characters!' (or, if rec+0x17D is 0, 'Unable To Load Beta Characters!') and exit. An off-line (6,6) character with level >= 20 is refused for on-line play ('Your character is an off-line character above level 20.'); use (1,0) for server-side characters.",
   "name (0x08) and name_copy (0xE7) must be equal: the game loads the name from 0xE7 only, the gallery shows 0x08; the next save rewrites both from the in-memory name.",
   "health_current/mana_current are separate copies from health_max/mana_max (no cross-check on load); set both when raising max (a freshly saved character has current == max). The main loop clamps health_current to 32000.",

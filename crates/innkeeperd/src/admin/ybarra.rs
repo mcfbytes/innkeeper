@@ -34,7 +34,9 @@ impl Part {
             return Some(Part::Header);
         }
         let number: usize = text.parse().ok()?;
-        (1..=SLOTS).contains(&number).then(|| Part::Slot(number - 1))
+        (1..=SLOTS)
+            .contains(&number)
+            .then(|| Part::Slot(number - 1))
     }
 
     fn url_part(self) -> String {
@@ -88,7 +90,9 @@ impl Opened {
 fn pretty(name: &str) -> String {
     let spaced = name.replace('_', " ");
     let mut chars = spaced.chars();
-    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 fn form_name(index: usize, element: usize) -> String {
@@ -305,8 +309,17 @@ fn summary(game: Game, record: &[u8]) -> String {
     parts.join(", ")
 }
 
+/// The header's in-use flag for a slot; a slot the map has no flag for counts as occupied.
+fn occupied(game: Game, header: &[u8], slot: usize) -> bool {
+    schema(game)
+        .header
+        .iter()
+        .find(|field| field.name == "slot_in_use" && slot < field.count)
+        .is_none_or(|field| field.read(header, slot) != Value::Number(0))
+}
+
 impl Admin {
-    fn editor_base(account: u32, game: Game) -> String {
+    pub(super) fn editor_base(account: u32, game: Game) -> String {
         format!("/admin/saves/{account}/ybarra/{}", game.id())
     }
 
@@ -327,11 +340,11 @@ impl Admin {
             }
             Err(error) => return Loaded::Page(self.failed(req, &error)),
         };
-        let found = self.settings.world.store.save_read(
-            AccountId(account),
-            game.chars_path(),
-            None,
-        );
+        let found =
+            self.settings
+                .world
+                .store
+                .save_read(AccountId(account), game.chars_path(), None);
         let (meta, data) = match found {
             Ok(Some(found)) => found,
             Ok(None) => return Loaded::Page(self.not_found(req)),
@@ -474,9 +487,16 @@ impl Admin {
         for (slot, record) in opened.chars.slots.iter().enumerate() {
             rows.push_str(&tr(&[
                 format!("{}", slot + 1),
-                esc(&summary(game, record)),
+                if occupied(game, &opened.chars.header, slot) {
+                    esc(&summary(game, record))
+                } else {
+                    format!(
+                        "<span class=\"muted\">Vacant</span> ({})",
+                        esc(&summary(game, record))
+                    )
+                },
                 link(&format!("{base}/{}", slot + 1), "Edit"),
-                if schema(game).automap.is_some() {
+                if !schema(game).automap.maps.is_empty() {
                     link(&format!("{base}/{}/map", slot + 1), "Automap")
                 } else {
                     String::new()
@@ -489,10 +509,7 @@ impl Admin {
             account_link(account),
             esc(game.chars_path()),
             opened.version,
-            window(
-                "Characters",
-                &table(&["Slot", "Character", "", ""], &rows)
-            ),
+            window("Characters", &table(&["Slot", "Character", "", ""], &rows)),
             window(
                 "File header",
                 &format!(
@@ -506,9 +523,11 @@ impl Admin {
 
     /// `/admin/saves/<account>/ybarra/<game>/<part>`: the form for the header or one slot.
     pub(crate) fn ybarra_part(&self, req: &Req, account: &str, game: &str, part: &str) -> Reply {
-        let (Ok(account), Some(game), Some(part)) =
-            (account.parse::<u32>(), Game::from_id(game), Part::parse(part))
-        else {
+        let (Ok(account), Some(game), Some(part)) = (
+            account.parse::<u32>(),
+            Game::from_id(game),
+            Part::parse(part),
+        ) else {
             return self.not_found(req);
         };
         match self.load_chars(req, account, game) {
@@ -585,9 +604,11 @@ impl Admin {
     /// `POST /admin/saves/<account>/ybarra/<game>/<part>`: stores the changed file as the new
     /// current version.
     pub(crate) fn ybarra_save(&self, req: &Req, account: &str, game: &str, part: &str) -> Reply {
-        let (Ok(account), Some(game), Some(part)) =
-            (account.parse::<u32>(), Game::from_id(game), Part::parse(part))
-        else {
+        let (Ok(account), Some(game), Some(part)) = (
+            account.parse::<u32>(),
+            Game::from_id(game),
+            Part::parse(part),
+        ) else {
             return self.not_found(req);
         };
         let mut opened = match self.load_chars(req, account, game) {
@@ -631,8 +652,19 @@ impl Admin {
             }
         };
         if changed.is_empty() {
-            let flash = Flash::good("Nothing was different, so nothing was saved.", "The ink stays in the pot.");
-            return self.part_page(req, account, &opened, part, Some(&flash), None, StatusCode::OK);
+            let flash = Flash::good(
+                "Nothing was different, so nothing was saved.",
+                "The ink stays in the pot.",
+            );
+            return self.part_page(
+                req,
+                account,
+                &opened,
+                part,
+                Some(&flash),
+                None,
+                StatusCode::OK,
+            );
         }
         let data = opened.chars.seal(&opened.cipher);
         let now = dates::now_ms();
@@ -670,7 +702,15 @@ impl Admin {
             ),
             "Blotted, stamped and back in the drawer.",
         );
-        self.part_page(req, account, &opened, part, Some(&flash), None, StatusCode::OK)
+        self.part_page(
+            req,
+            account,
+            &opened,
+            part,
+            Some(&flash),
+            None,
+            StatusCode::OK,
+        )
     }
 }
 
