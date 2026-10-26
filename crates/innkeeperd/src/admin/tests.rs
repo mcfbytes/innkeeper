@@ -1375,3 +1375,41 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
     assert!(entry.target.contains("v2 character slot 1"), "{}", entry.target);
     assert_eq!(entry.reason.as_deref(), Some("ticket 12"));
 }
+
+#[tokio::test]
+async fn sign_ins_without_an_account_are_listed_with_why_and_never_their_subject() {
+    use crate::signin::store as signin_store;
+    let fx = fixture(Door::Listed).await;
+    let ring = KeyRing::new(vec![HmacKey::from_base64("v1", &BASE64.encode([5; 32])).unwrap()])
+        .unwrap();
+    let now = crate::dates::now_ms();
+    let sealed = || Some(b"SUBJECT-SEALED-BYTES".to_vec());
+    let lone = signin_store::sign_in(&fx.store, &ring, "iss", "lone-subject", "dev", sealed, now)
+        .unwrap()
+        .key;
+    let owner = signin_store::sign_in(&fx.store, &ring, "iss", "owner-subject", "dev", sealed, now)
+        .unwrap()
+        .key;
+    let record = AccountRecord::new(keys::encode_password("SWORDFISH").unwrap(), "Elaine");
+    signin_store::create_owned_account(&fx.store, &owner, &record, now).unwrap();
+
+    let page = fx.get("/admin/signins").await;
+    assert_eq!(page.status, 200);
+    assert!(page.body.contains(&hex(&lone)), "{}", page.body);
+    assert!(!page.body.contains(&hex(&owner)), "{}", page.body);
+    assert!(page.body.contains(&keys::handle(&lone)), "{}", page.body);
+    assert!(page.body.contains("has not answered the age and terms question"), "{}", page.body);
+    for secret in ["lone-subject", "SUBJECT-SEALED", "iss"] {
+        assert!(!page.body.contains(secret), "{secret} leaked");
+    }
+    let dashboard = fx.get("/admin/").await.body;
+    assert!(dashboard.contains("<b>1</b><span>sign-ins without an account"), "{dashboard}");
+
+    let attested = signin_store::Attested { age: 21, terms: 1, at: now };
+    signin_store::record_attestation(&fx.store, &lone, &attested).unwrap();
+    let page = fx.get("/admin/signins").await.body;
+    assert!(
+        page.contains("21+, terms v1") && page.contains("Yes: nothing stops it"),
+        "{page}"
+    );
+}

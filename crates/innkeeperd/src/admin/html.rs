@@ -181,6 +181,7 @@ const FAVICON: &str = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/s
 pub(crate) enum Nav {
     Dashboard,
     Accounts,
+    SignIns,
     Audit,
     Complaints,
     Posts,
@@ -198,9 +199,10 @@ fn item(href: &str, label: &str, here: bool) -> String {
 
 fn menubar(ctx: &Ctx, nav: Nav) -> String {
     let ledger = format!(
-        "{}{}{}",
+        "{}{}{}{}",
         item("/admin/", "Dashboard", nav == Nav::Dashboard),
         item("/admin/accounts", "Accounts", nav == Nav::Accounts),
+        item("/admin/signins", "Sign-ins without an account", nav == Nav::SignIns),
         item("/admin/audit", "Audit log", nav == Nav::Audit),
     );
     let desk = format!(

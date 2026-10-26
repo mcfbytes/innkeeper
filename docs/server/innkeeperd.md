@@ -704,7 +704,7 @@ front of Caddy, so a client-sent header is replaced and never believed.
 
 ### 9.4 What it does
 
-Menu: Ledger (dashboard, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
+Menu: Ledger (dashboard, accounts, sign-ins without an account, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
 Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
 
 - **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`, and an
@@ -717,6 +717,12 @@ Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
   linked identity);
   soft delete and restore (the account tools of [privacy.md](privacy.md) section 3). A purged account
   is shown as its tombstone, marked "purged", with no restore.
+- **Sign-ins without an account** (Ledger): every identity whose group owns no account, newest first (200
+  shown), with its handle, provider, first sign-in, last kept session, how many methods its group has, its
+  age and terms answer, and what would stop it opening an account now (not invited, no age and terms answer,
+  enrolment closed, a suspended account in the group, the daily limit), checked as `POST /auth/accounts`
+  checks it; and its full key with a Copy button, for the invite list (8.1). Only the identity row's plain
+  columns are read, never `subject_sealed`. The dashboard counts them.
 - **Complaints and Member Services:** the operator board (location 0x63, sections 2 and 3). Each links
   the author's account (`posts.account`) and, for a complaint, the account it is about
   (`posts.about_account`, resolved when it was filed); no link is found by a name. "Mark handled"

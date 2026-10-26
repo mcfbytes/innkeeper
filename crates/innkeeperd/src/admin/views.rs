@@ -175,8 +175,13 @@ impl Admin {
             )
         };
         let tiles = format!(
-            "<div class=\"counts\">{}{}{}{}{}</div>",
+            "<div class=\"counts\">{}{}{}{}{}{}</div>",
             tile("/admin/accounts", counts.accounts, "accounts"),
+            tile(
+                "/admin/signins",
+                counts.lone_identities,
+                "sign-ins without an account"
+            ),
             tile("/admin/letters", counts.letters, "letters"),
             tile("/admin/posts", counts.posts, "bulletin posts"),
             tile(

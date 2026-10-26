@@ -10,6 +10,7 @@ mod actions;
 pub(crate) mod allowlist;
 pub(crate) mod cli;
 mod html;
+mod signins;
 pub(crate) mod store;
 mod views;
 mod ybarra;
@@ -700,6 +701,7 @@ impl Admin {
             [] => self.dashboard(req),
             ["accounts"] => self.accounts(req),
             ["accounts", id] => self.account(req, id),
+            ["signins"] => self.lone_signins(req),
             ["complaints"] => self.complaints(req),
             ["complaints", id] => self.complaint(req, id),
             ["posts"] => self.boards(req),
