@@ -129,7 +129,7 @@ pub(crate) const MAP_GROUPS_PER_PLACE_ASSUMED: bool = true;
 pub(crate) const RPG_LAND_ADMITS_ONLY_ITS_VERSION_ASSUMED: bool = true;
 /// A `Send` to an RPG object or group skips the sender: DARKSTRT prints its own chat line when it
 /// sends it, so an echo would show it twice (yserbius.md 5).
-pub(crate) const RPG_SENDS_ECHO_SENDER_ASSUMED: bool = false;
+pub(crate) const RPG_SENDS_ECHO_SENDER_ASSUMED: bool = true;
 /// An account whose stored rating is 0 logs in with the rights to every land this host runs: the
 /// hub refuses a land whose bit (`landType - 1`) is clear, and reads 0 as 1, the Clubhouse alone.
 pub(crate) const UNSET_RATING_GRANTS_EVERY_LAND_ASSUMED: bool = true;
