@@ -52,6 +52,27 @@
     });
   });
 
+  // A file input with data-file-into fills the named hidden field with the file as base64url
+  // when its form is sent (the game-table import); the file itself is not a form field.
+  doc.querySelectorAll('input[type=file][data-file-into]').forEach(function (picker) {
+    var form = picker.form;
+    var into = form && form.elements[picker.dataset.fileInto];
+    if (!into) return;
+    form.addEventListener('submit', function (e) {
+      if (into.value || !picker.files || !picker.files[0]) return;
+      e.preventDefault();
+      picker.files[0].arrayBuffer().then(function (buf) {
+        var bytes = new Uint8Array(buf), text = '';
+        for (var i = 0; i < bytes.length; i += 0x8000) {
+          text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        }
+        into.value = btoa(text).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        picker.disabled = true;
+        form.submit();
+      });
+    });
+  });
+
   // The confirmation box. Its tickbox stands in for the dialog without script, so it must not
   // block the submit with browser validation once the dialog does the asking.
   var dialog = doc.getElementById('confirm-dialog');

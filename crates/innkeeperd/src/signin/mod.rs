@@ -81,6 +81,21 @@ impl Invites {
     }
 }
 
+/// Why an identity cannot open an account, as the portal names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CreateBlock {
+    /// `--enrolment closed`.
+    Closed,
+    /// `--enrolment invite` and no method of the identity's group is on a list.
+    NotInvited,
+    /// No age and terms answer, or one older than this server asks for.
+    NotAttested,
+    /// The group owns a suspended account.
+    Suspended,
+    /// `--accounts-per-day` reached.
+    DailyLimit,
+}
+
 /// What a bound line's Login may do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LoginGate {
@@ -232,6 +247,31 @@ impl SignIn {
         }
         let group = groups::group_keys(&self.store, key)?;
         Ok(group.iter().any(|member| self.invites.lists(member)))
+    }
+
+    /// What would stop the identity opening an account now, checked in the order the account
+    /// request checks it; `None` when nothing would.
+    pub(crate) fn create_block(
+        &self,
+        key: &IdentityKey,
+    ) -> Result<Option<CreateBlock>, StoreError> {
+        if !self.enrolment.web_creates() {
+            return Ok(Some(CreateBlock::Closed));
+        }
+        if !self.invited(key)? {
+            return Ok(Some(CreateBlock::NotInvited));
+        }
+        if !self.attested_enough(key)? {
+            return Ok(Some(CreateBlock::NotAttested));
+        }
+        if store::owns_suspended(&self.store, key)? {
+            return Ok(Some(CreateBlock::Suspended));
+        }
+        let since = dates::now_ms().saturating_sub(dates::DAY);
+        if store::accounts_created_since(&self.store, key, since)? >= self.accounts_per_day {
+            return Ok(Some(CreateBlock::DailyLimit));
+        }
+        Ok(None)
     }
 
     pub(crate) fn has_providers(&self) -> bool {

@@ -10,8 +10,11 @@ mod actions;
 pub(crate) mod allowlist;
 pub(crate) mod cli;
 mod html;
+mod signins;
 pub(crate) mod store;
 mod views;
+mod ybarra;
+mod ybarra_maps;
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -49,6 +52,9 @@ use store::Who;
 const SESSION_LIFETIME: i64 = 8 * dates::HOUR;
 const SESSION_IDLE: i64 = 30 * dates::MINUTE;
 const MAX_FORM: usize = 64 * 1024;
+/// The game-table import carries a whole program as base64url (docs/server/ybarra.md section 3).
+const MAX_IMPORT_FORM: usize = crate::ybarra::MAX_PROGRAM_BYTES * 4 / 3 + 4096;
+const IMPORT_PATH: &str = "/admin/ybarra/import";
 
 const COOKIE_SECURE: &str = "__Host-inn-admin";
 const COOKIE_PLAIN: &str = "inn-admin";
@@ -336,7 +342,12 @@ impl Admin {
                 warn!(handle = %req.who.handle, "portal POST refused: wrong Origin");
                 return self.forbidden(&req, "That request did not come from this office.");
             }
-            let Some(form) = read_form(request).await else {
+            let limit = if path == IMPORT_PATH {
+                MAX_IMPORT_FORM
+            } else {
+                MAX_FORM
+            };
+            let Some(form) = read_form(request, limit).await else {
                 return self.forbidden(&req, "That form was too large or unreadable.");
             };
             let sent = form.get("csrf").map_or("", String::as_str);
@@ -661,7 +672,7 @@ impl Admin {
     }
 }
 
-async fn read_form(request: Request<Incoming>) -> Option<HashMap<String, String>> {
+async fn read_form(request: Request<Incoming>, limit: usize) -> Option<HashMap<String, String>> {
     let kind = request
         .headers()
         .get(CONTENT_TYPE)
@@ -671,7 +682,7 @@ async fn read_form(request: Request<Incoming>) -> Option<HashMap<String, String>
     if !kind.starts_with("application/x-www-form-urlencoded") {
         return None;
     }
-    let collected = Limited::new(request.into_body(), MAX_FORM)
+    let collected = Limited::new(request.into_body(), limit)
         .collect()
         .await
         .ok()?;
@@ -695,6 +706,7 @@ impl Admin {
             [] => self.dashboard(req),
             ["accounts"] => self.accounts(req),
             ["accounts", id] => self.account(req, id),
+            ["signins"] => self.lone_signins(req),
             ["complaints"] => self.complaints(req),
             ["complaints", id] => self.complaint(req, id),
             ["posts"] => self.boards(req),
@@ -704,6 +716,12 @@ impl Admin {
             ["letters", mailbox, id] => self.letter_gate(req, mailbox, id),
             ["saves"] => self.save_owners(req),
             ["saves", account] => self.saves_of(req, account),
+            ["saves", account, "ybarra", game] => self.ybarra_game(req, account, game),
+            ["saves", account, "ybarra", game, part] => self.ybarra_part(req, account, game, part),
+            ["saves", account, "ybarra", game, slot, "map"] => {
+                self.ybarra_maps(req, account, game, slot)
+            }
+            ["ybarra"] => self.ybarra_tables(req),
             ["holds"] => self.holds(req),
             ["audit"] => self.audit(req),
             ["help"] => self.help(req),
@@ -728,6 +746,11 @@ impl Admin {
             ["holds", "place"] => self.hold_place(req),
             ["holds", "release"] => self.hold_release(req),
             ["saves", account, "download"] => self.save_download(req, account),
+            ["saves", account, "ybarra", game, part] => self.ybarra_save(req, account, game, part),
+            ["saves", account, "ybarra", game, slot, "map"] => {
+                self.ybarra_maps_save(req, account, game, slot)
+            }
+            ["ybarra", "import"] => self.ybarra_import(req),
             _ => self.not_found(req),
         }
     }

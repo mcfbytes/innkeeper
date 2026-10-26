@@ -33,7 +33,10 @@ Three code bases, three rule sets, one set of shared principles (section 1):
     with `seg:off` and file offset) or INFERRED. Code never encodes an INFERRED fact without a named
     constant that says so, for example `kTsnKernelIdAssumed`.
 11. **Original game data is never committed**, never copied into `docs/` or `tools/` beyond short
-    quoted strings or byte snippets used as evidence.
+    quoted strings or byte snippets used as evidence. Lists of short names a feature needs (the
+    Ybarra games' races, guilds, spells, skills, maps and items in `crates/innkeeperd/src/ybarra/`)
+    are allowed as resource files; tables, code, graphics and prose stay out (read at run time from
+    the operator's copy, as the character cipher is).
 
 ### 1.1 Naming vocabulary
 

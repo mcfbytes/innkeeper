@@ -39,7 +39,7 @@ fn needs_confirmation() -> Flash {
 }
 
 impl Admin {
-    fn log_change(
+    pub(super) fn log_change(
         &self,
         req: &Req,
         action: &str,

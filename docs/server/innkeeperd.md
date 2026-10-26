@@ -704,7 +704,7 @@ front of Caddy, so a client-sent header is replaced and never believed.
 
 ### 9.4 What it does
 
-Menu: Ledger (dashboard, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
+Menu: Ledger (dashboard, accounts, sign-ins without an account, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
 Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
 
 - **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`, and an
@@ -717,6 +717,12 @@ Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
   linked identity);
   soft delete and restore (the account tools of [privacy.md](privacy.md) section 3). A purged account
   is shown as its tombstone, marked "purged", with no restore.
+- **Sign-ins without an account** (Ledger): every identity whose group owns no account, newest first (200
+  shown), with its handle, provider, first sign-in, last kept session, how many methods its group has, its
+  age and terms answer, and what would stop it opening an account now (not invited, no age and terms answer,
+  enrolment closed, a suspended account in the group, the daily limit), checked as `POST /auth/accounts`
+  checks it; and its full key with a Copy button, for the invite list (8.1). Only the identity row's plain
+  columns are read, never `subject_sealed`. The dashboard counts them.
 - **Complaints and Member Services:** the operator board (location 0x63, sections 2 and 3). Each links
   the author's account (`posts.account`) and, for a complaint, the account it is about
   (`posts.about_account`, resolved when it was filed); no link is found by a name. "Mark handled"
@@ -726,7 +732,9 @@ Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
   at least 8 characters, written to the audit log **before** the body is shown.
 - **Legal holds:** list, place (with a reason) and release, through the existing hold code. A hold on a
   number that was never issued is refused.
-- **Saves:** list and download; no editing. Each download is audited.
+- **Saves:** list and download; each download is audited. The characters and automaps of Yserbius,
+  Twinion and Cawdor can be edited once their tables are imported from the operator's copy of the game
+  ([ybarra.md](ybarra.md)); each change is a new save version, refused while the account is online, and audited.
 - **Audit:** every state-changing action and every letter read or save download, with who, what,
   target and reason. No bodies, subjects or tokens are ever written.
 

@@ -9,6 +9,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::signin::keys::{self, IdentityKey};
 use crate::sqlite_store::SqliteStore;
 use crate::subject::{c_string, post_author, trim_nul};
+use crate::ybarra::cipher::Cipher;
+use crate::ybarra::Game;
 
 fn backend(error: rusqlite::Error) -> StoreError {
     StoreError::backend(error)
@@ -275,6 +277,7 @@ pub(crate) struct Counts {
     pub(crate) posts: i64,
     pub(crate) complaints_waiting: i64,
     pub(crate) holds: i64,
+    pub(crate) lone_identities: i64,
 }
 
 /// Complaints and Member Services messages: `posts.kind` (docs/server/store.md section 3).
@@ -306,6 +309,11 @@ pub(crate) fn counts(store: &SqliteStore, now: i64) -> Result<Counts, StoreError
             &[],
         )?,
         holds: one("SELECT COUNT(*) FROM holds WHERE expires_at > ?1", &[&now])?,
+        lone_identities: one(
+            "SELECT COUNT(*) FROM identities i WHERE i.deleted_at IS NULL AND NOT EXISTS
+             (SELECT 1 FROM group_accounts g WHERE g.identity_group = i.identity_group)",
+            &[],
+        )?,
     })
 }
 
@@ -1063,6 +1071,156 @@ pub(crate) fn save_owners(store: &SqliteStore) -> Result<Vec<SaveOwner>, StoreEr
         })
         .map_err(backend)?;
     rows.collect::<Result<_, _>>().map_err(backend)
+}
+
+// ---- sign-ins without an account ----
+
+/// A sign-in method whose group owns no account: what the identity row holds besides its sealed
+/// subject, which is never read here.
+#[derive(Clone, Debug)]
+pub(crate) struct LoneIdentity {
+    pub(crate) key: IdentityKey,
+    pub(crate) provider: String,
+    pub(crate) created_at: i64,
+    /// The newest web session it opened, while the session rows are kept.
+    pub(crate) last_session: Option<i64>,
+    /// Methods in its group, itself included.
+    pub(crate) methods: i64,
+    pub(crate) attested: Option<(i64, i64)>,
+}
+
+/// The newest `limit` identities whose group owns no account and that are not deleted.
+pub(crate) fn lone_identities(
+    store: &SqliteStore,
+    limit: i64,
+) -> Result<Vec<LoneIdentity>, StoreError> {
+    let conn = store.connection();
+    let mut statement = conn
+        .prepare(
+            "SELECT i.identity_key, i.provider, i.created_at,
+                    (SELECT MAX(s.created_at) FROM sessions s WHERE s.identity_key = i.identity_key),
+                    (SELECT COUNT(*) FROM identities o WHERE o.identity_group = i.identity_group),
+                    i.attested_age, i.terms_version
+             FROM identities i
+             WHERE i.deleted_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM group_accounts g WHERE g.identity_group = i.identity_group)
+             ORDER BY i.created_at DESC LIMIT ?1",
+        )
+        .map_err(backend)?;
+    let rows = statement
+        .query_map([limit], |row| {
+            Ok((
+                row.get::<_, Vec<u8>>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, Option<i64>>(5)?,
+                row.get::<_, Option<i64>>(6)?,
+            ))
+        })
+        .map_err(backend)?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (key, provider, created_at, last_session, methods, age, terms) =
+            row.map_err(backend)?;
+        let Ok(key) = IdentityKey::try_from(key.as_slice()) else {
+            continue;
+        };
+        out.push(LoneIdentity {
+            key,
+            provider,
+            created_at,
+            last_session,
+            methods,
+            attested: age.zip(terms),
+        });
+    }
+    Ok(out)
+}
+
+// ---- Ybarra ciphers ----
+
+/// A game's cipher as imported, with where it came from.
+#[derive(Debug)]
+pub(crate) struct CipherRow {
+    pub(crate) game: Game,
+    pub(crate) cipher: Cipher,
+    pub(crate) source_sha256: String,
+    pub(crate) imported_at: i64,
+}
+
+/// Keeps a game's cipher, replacing the one imported before.
+pub(crate) fn cipher_put(
+    store: &SqliteStore,
+    game: Game,
+    cipher: &Cipher,
+    source_sha256: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    store
+        .connection()
+        .execute(
+            "INSERT INTO ybarra_ciphers (game, shuffle, masks, key, source_sha256, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (game) DO UPDATE SET shuffle = excluded.shuffle, masks = excluded.masks,
+                 key = excluded.key, source_sha256 = excluded.source_sha256,
+                 imported_at = excluded.imported_at",
+            params![
+                game.id(),
+                cipher.shuffle.as_slice(),
+                cipher.mask_bytes(),
+                cipher.key.as_slice(),
+                source_sha256,
+                now
+            ],
+        )
+        .map_err(backend)?;
+    Ok(())
+}
+
+/// Every imported cipher, in the order of `Game::ALL`. A row the code cannot use (tables edited
+/// by hand) is left out, so the game reads as not imported.
+pub(crate) fn ciphers(store: &SqliteStore) -> Result<Vec<CipherRow>, StoreError> {
+    let conn = store.connection();
+    let mut statement = conn
+        .prepare("SELECT game, shuffle, masks, key, source_sha256, imported_at FROM ybarra_ciphers")
+        .map_err(backend)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+                row.get::<_, Vec<u8>>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })
+        .map_err(backend)?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (game, shuffle, masks, key, source_sha256, imported_at) = row.map_err(backend)?;
+        let (Some(game), Ok(cipher)) = (Game::from_id(&game), Cipher::new(&shuffle, &masks, &key))
+        else {
+            continue;
+        };
+        out.push(CipherRow {
+            game,
+            cipher,
+            source_sha256,
+            imported_at,
+        });
+    }
+    out.sort_by_key(|row| Game::ALL.iter().position(|game| *game == row.game));
+    Ok(out)
+}
+
+pub(crate) fn cipher_for(store: &SqliteStore, game: Game) -> Result<Option<Cipher>, StoreError> {
+    Ok(ciphers(store)?
+        .into_iter()
+        .find(|row| row.game == game)
+        .map(|row| row.cipher))
 }
 
 #[cfg(test)]

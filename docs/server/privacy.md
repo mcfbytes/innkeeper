@@ -32,6 +32,7 @@ Unix milliseconds UTC.
 | `group_accounts` | `account`, `identity_group`, `created_at` | Which accounts a group owns, and the per-day account limit | With the account |
 | `sessions` | `token_hash` (SHA-256 of the token), `identity_key`, `account` (the account the line logged on to), `created_at`, `expires_at` | A WebSocket is bound to the identity | Logout and account deletion set `expires_at` to now; hard-purged 30 days after `expires_at` (section 6) |
 | `operators`, `staff`, `admin_sessions`, `admin_audit` | the portal's own tables (section 8) | Who may use the portal and what they did | Section 6 |
+| `ybarra_ciphers` | `game`, `shuffle`, `masks`, `key`, `source_sha256`, `imported_at` | The portal's character editor: the Ybarra games' character-file tables, imported from the operator's copy ([ybarra.md](ybarra.md)); no personal data | Kept until imported again |
 
 `audit_sessions.identity_key` is the signed-in identity's HMAC, NULL for a line without a session
 or once that identity has been purged.
@@ -465,7 +466,9 @@ operator's identity key (the portal shows its handle; never the subject), action
 account it concerns, and the typed reason. Letters are metadata
 only until an operator types a reason of at least 8 characters to read one; the reason is stored
 in the audit row before the body is shown. Bodies, subjects and tokens are not logged. A refused
-sign-in logs the handle only. `operators` holds each identity key the portal has seen, the parent
+sign-in logs the handle only. The list of sign-ins without an account shows, per identity, its handle, full
+key, provider, dates, group size and age and terms answer, the same columns the account page shows for
+linked methods; the sealed subject is never read. `operators` holds each identity key the portal has seen, the parent
 of its rows; `staff` holds allowed or revoked identity keys with a note; the "handled" marks are
 `handled_at` and `handled_by` on the complaint and Member Services posts themselves. The portal links
 a complaint to its author's account and its `about_account`, never by a name. All are purged as in

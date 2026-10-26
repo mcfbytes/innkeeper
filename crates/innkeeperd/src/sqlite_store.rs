@@ -24,7 +24,7 @@ pub(crate) const BASELINE_VERSION: i32 = 5;
 
 /// Changes after the baseline, in order: entry `n` takes a database from `BASELINE_VERSION + n` to
 /// one more. Each runs in the transaction that also writes the new `user_version`.
-const MIGRATIONS: &[&str] = &[IDENTITY_GROUPS];
+const MIGRATIONS: &[&str] = &[IDENTITY_GROUPS, YBARRA_CIPHERS];
 
 /// Version 6: accounts belong to an identity group, so linked sign-ins share them. Each existing
 /// identity becomes a group of one that owns its accounts (docs/server/store.md section 3.1).
@@ -249,6 +249,20 @@ const BASELINE: &str = "
     CREATE INDEX admin_audit_by_time ON admin_audit(recorded_at);
     CREATE INDEX admin_audit_by_operator ON admin_audit(identity_key);
     CREATE INDEX admin_audit_by_account ON admin_audit(account);
+";
+
+/// Version 7: the character-file cipher of each Ybarra game, read by the portal from the
+/// operator's own copy of a game program (docs/server/ybarra.md section 3). A game program, not
+/// an account, is its source, so nothing refers to it and the retention purge leaves it alone.
+const YBARRA_CIPHERS: &str = "
+    CREATE TABLE ybarra_ciphers (
+        game TEXT PRIMARY KEY CHECK (game IN ('yserbius', 'twinion', 'cawdor')),
+        shuffle BLOB NOT NULL CHECK (length(shuffle) = 707),
+        masks BLOB NOT NULL CHECK (length(masks) = 128),
+        key BLOB NOT NULL CHECK (length(key) = 8),
+        source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+        imported_at INTEGER NOT NULL
+    ) STRICT;
 ";
 
 /// Why a database file cannot be used as it is.

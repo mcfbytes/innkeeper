@@ -301,6 +301,16 @@ pub(crate) enum AdminAction {
         #[arg(long)]
         data_dir: PathBuf,
     },
+    /// Read a Ybarra game's character-file cipher from your copy of one of its programs, for the
+    /// portal's character editor: CGENN.EXE or DARKSTRT.EXE (Yserbius), TWGENN.EXE or FATES.EXE
+    /// (Twinion), Cawdor's TWGENN.EXE or RUINS.EXE. Works while the server runs.
+    YbarraImport {
+        /// One or more game programs.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        data_dir: PathBuf,
+    },
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]

@@ -65,6 +65,21 @@ fn run_action(action: AdminAction) -> Result<(), String> {
             );
             Ok(())
         }
+        AdminAction::YbarraImport { files, data_dir } => {
+            let store = open(&data_dir)?;
+            for file in files {
+                let bytes = std::fs::read(&file)
+                    .map_err(|error| format!("cannot read {}: {error}", file.display()))?;
+                let game = crate::ybarra::import(&store, &bytes, now)
+                    .map_err(|error| format!("{}: {error}", file.display()))?;
+                println!(
+                    "{}: the character editor can now open {} saves.",
+                    file.display(),
+                    game.title()
+                );
+            }
+            Ok(())
+        }
         AdminAction::List { data_dir } => {
             let store = open(&data_dir)?;
             let rows = store::staff_list(&store).map_err(|error| error.to_string())?;

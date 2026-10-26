@@ -98,12 +98,13 @@ The schema version is SQLite's `user_version`. **Version 5 is the baseline** (`B
 `sqlite_store.rs`): `SqliteStore::open` on an empty file creates every table, index and trigger
 below in one transaction and writes 5. After it comes `MIGRATIONS`, an ordered list: entry `n` takes
 a database from version `5 + n` to the next, each in one transaction with its version bump.
-`SCHEMA_VERSION` is 5 plus the list's length, so 6 today; a new file runs the baseline and then
+`SCHEMA_VERSION` is 5 plus the list's length, so 7 today; a new file runs the baseline and then
 every migration.
 
 | Version | Migration | What it does |
 |---|---|---|
 | 6 | `IDENTITY_GROUPS` | Accounts belong to an identity group instead of one identity, so the sign-ins a player linked share them ([innkeeperd.md](innkeeperd.md) section 8.7). Creates `identity_groups`; adds `identities.identity_group` and `identities.linked_at`; gives every existing identity a group of its own (numbered by the identity's rowid, `linked_at` = `created_at`); creates `group_accounts` and copies each `identity_accounts` row into it under the owner's group with its `created_at`; drops `identity_accounts`. Nothing else changes: an existing player has one sign-in method and the same accounts (`version_5_moves_each_identity_into_a_group_of_its_own_with_its_accounts`). |
+| 7 | `YBARRA_CIPHERS` | Creates `ybarra_ciphers`, the character-file tables of the Ybarra games that the portal imports from the operator's copy ([ybarra.md](ybarra.md) section 3). Empty until an import; nothing else changes. |
 
 Versions 1 to 4 were a chain of in-place `ALTER TABLE` upgrades over what was all test data. They
 are not converted. A file with tables and a version below 5 (or no version) is refused, untouched,
@@ -159,6 +160,7 @@ A cascade is used only where the child has no meaning alone.
 | `staff` | `identity_key` | `note`, `added_at`, `revoked_at` | `identity_key` → `operators` |
 | `admin_sessions` | `token_hash` | `identity_key`, `created_at`, `last_seen_at`, `expires_at` | `identity_key` → `operators` (CASCADE) |
 | `admin_audit` | `id` (AUTOINCREMENT) | `recorded_at`, `identity_key`, `action`, `target`, `reason`, `account` | `identity_key` → `operators`; `account` → `accounts` |
+| `ybarra_ciphers` | `game` | `shuffle`, `masks`, `key`, `source_sha256`, `imported_at` | none: game data read from the operator's program ([ybarra.md](ybarra.md) section 3), version 7 |
 
 `posts.kind` is a virtual generated column: `member_services` for land 0, location `0x63`,
 section 2; `complaint` for any other board at location `0x63`, in any land; `topic` for land 0,
