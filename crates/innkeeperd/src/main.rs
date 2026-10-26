@@ -32,6 +32,7 @@ mod subject;
 mod switchboard;
 mod trivia;
 mod websocket;
+mod ybarra;
 
 use std::io::{self, Write};
 use std::process::ExitCode;

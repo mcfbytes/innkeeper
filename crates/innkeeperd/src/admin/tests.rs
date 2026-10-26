@@ -1257,3 +1257,116 @@ async fn the_help_and_audit_pages_render_and_the_menu_offers_day_and_dusk() {
         .body
         .contains("AdminVignette"));
 }
+
+/// A value an editor form may send for a field that differs from what is stored.
+fn another_value(field: &crate::ybarra::schema::Field, bytes: &[u8]) -> String {
+    use crate::ybarra::schema::{Kind, Value};
+    match (field.kind, field.read(bytes, 0)) {
+        (Kind::Str, Value::Text(text)) => if text == "Bob" { "Al".into() } else { "Bob".into() },
+        (_, Value::Raw(mut raw)) => {
+            raw[0] ^= 1;
+            Value::Raw(raw).form_text()
+        }
+        (_, Value::Number(number)) => {
+            let (low, high) = field.bounds();
+            if number == low { high.to_string() } else { low.to_string() }
+        }
+        (_, other) => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_online_edits() {
+    use crate::ybarra::cipher::tests::sample;
+    use crate::ybarra::extract::tests::fake_exe;
+    use crate::ybarra::schema::schema;
+    use crate::ybarra::{CharFile, Game, CHARS_FILE_BYTES};
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+    let fx = fixture(Door::Listed).await;
+    fx.account(100_001, "Elaine");
+    let path = Game::Yserbius.chars_path();
+    let cipher = sample();
+    let mut plain = CharFile::open(&cipher, &vec![0u8; CHARS_FILE_BYTES]).unwrap();
+    plain.slots[0][8..14].copy_from_slice(b"Thorg\0");
+    fx.store
+        .save_write(AccountId(100_001), path, &plain.seal(&cipher), 1000, true)
+        .unwrap();
+
+    // Without the game's tables the editor says how to get them.
+    let page = fx.get("/admin/saves/100001/ybarra/yserbius").await.body;
+    assert!(page.contains("import the game"), "{page}");
+    let saves = fx.get("/admin/saves/100001").await.body;
+    assert!(saves.contains("/admin/saves/100001/ybarra/yserbius"), "{saves}");
+
+    let refused = fx
+        .post("/admin/ybarra/import", &[("program", &URL_SAFE_NO_PAD.encode(b"MZ junk"))])
+        .await;
+    assert!(refused.body.contains("Nothing was imported"), "{}", refused.body);
+    let program = URL_SAFE_NO_PAD.encode(fake_exe(Game::Yserbius, &cipher));
+    let imported = fx.post("/admin/ybarra/import", &[("program", &program)]).await;
+    assert_eq!(imported.status, 200);
+    assert!(imported.body.contains("saves can now be opened"), "{}", imported.body);
+    let tables = fx.get("/admin/ybarra").await.body;
+    assert!(tables.contains("ready"), "{tables}");
+
+    let list = fx.get("/admin/saves/100001/ybarra/yserbius").await;
+    assert_eq!(list.status, 200);
+    assert!(list.body.contains("/admin/saves/100001/ybarra/yserbius/1"), "{}", list.body);
+    let form = fx.get("/admin/saves/100001/ybarra/yserbius/1").await;
+    assert_eq!(form.status, 200);
+    assert!(form.body.contains("name=\"version\" value=\"1\""), "{}", form.body);
+
+    // Change whichever field holds the name's first byte.
+    let fields = &schema(Game::Yserbius).record;
+    let index = fields
+        .iter()
+        .position(|field| field.mirror_of.is_none() && field.span().any(|at| at == 8))
+        .unwrap();
+    let name = format!("f{index}_0");
+    let value = another_value(&fields[index], &plain.slots[0]);
+    let mut expected = plain.slots[0];
+    fields[index].write(&mut expected, 0, &value).unwrap();
+
+    let stale = fx
+        .post("/admin/saves/100001/ybarra/yserbius/1", &[("version", "0"), (&name, &value)])
+        .await;
+    assert_eq!(stale.status, 409, "{}", stale.body);
+    assert!(stale.body.contains("changed since this form was opened"), "{}", stale.body);
+
+    let mut host = Host::new(&fx.settings, ConnectionId(7));
+    assert!(accepted(&host.answer(&login(100_001, "SWORDFISH")).outgoing));
+    let online = fx
+        .post("/admin/saves/100001/ybarra/yserbius/1", &[("version", "1"), (&name, &value)])
+        .await;
+    assert_eq!(online.status, 409);
+    assert!(online.body.contains("is online now"), "{}", online.body);
+    host.hang_up();
+    assert_eq!(fx.store.save_versions(AccountId(100_001), path).unwrap().len(), 1);
+
+    let saved = fx
+        .post(
+            "/admin/saves/100001/ybarra/yserbius/1",
+            &[("version", "1"), (&name, &value), ("reason", "ticket 12")],
+        )
+        .await;
+    assert_eq!(saved.status, 200, "{}", saved.body);
+    assert!(saved.body.contains("Saved as v2"), "{}", saved.body);
+    let (meta, data) = fx.store.save_read(AccountId(100_001), path, None).unwrap().unwrap();
+    assert_eq!(meta.version, 2);
+    let after = CharFile::open(&cipher, &data).unwrap();
+    assert_eq!(after.slots[0], expected);
+    assert_eq!(after.slots[1..], plain.slots[1..]);
+    assert_eq!(after.header, plain.header);
+
+    // A value outside its field is refused and nothing is stored.
+    let bad = fx
+        .post("/admin/saves/100001/ybarra/yserbius/header", &[("version", "2"), ("f0_0", "zz")])
+        .await;
+    assert_eq!(bad.status, 422, "{}", bad.body);
+    assert_eq!(fx.store.save_versions(AccountId(100_001), path).unwrap().len(), 2);
+    assert_eq!(fx.audit_actions(), ["save.edit", "ybarra.import"]);
+    let entry = &store::recent_audit(&fx.store, 1, None).unwrap()[0];
+    assert!(entry.target.contains("v2 character slot 1"), "{}", entry.target);
+    assert_eq!(entry.reason.as_deref(), Some("ticket 12"));
+}

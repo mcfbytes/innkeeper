@@ -45,7 +45,7 @@ pub(crate) struct OnlineRow {
     pub(crate) transport: &'static str,
 }
 
-fn tr(cells: &[String]) -> String {
+pub(crate) fn tr(cells: &[String]) -> String {
     let mut row = String::from("<tr>");
     for cell in cells {
         row.push_str("<td>");
@@ -56,7 +56,7 @@ fn tr(cells: &[String]) -> String {
     row
 }
 
-fn table(head: &[&str], rows: &str) -> String {
+pub(crate) fn table(head: &[&str], rows: &str) -> String {
     let mut out = String::from("<div class=\"tablewrap\"><table><thead><tr>");
     for name in head {
         let _ = write!(out, "<th scope=\"col\">{}</th>", esc(name));
@@ -65,15 +65,15 @@ fn table(head: &[&str], rows: &str) -> String {
     out
 }
 
-fn link(href: &str, text: &str) -> String {
+pub(crate) fn link(href: &str, text: &str) -> String {
     format!("<a href=\"{}\">{}</a>", esc(href), esc(text))
 }
 
-fn account_link(id: u32) -> String {
+pub(crate) fn account_link(id: u32) -> String {
     link(&format!("/admin/accounts/{id}"), &id.to_string())
 }
 
-fn flag(text: &str, class: &str) -> String {
+pub(crate) fn flag(text: &str, class: &str) -> String {
     format!("<span class=\"flag {class}\">{}</span>", esc(text))
 }
 
@@ -1239,7 +1239,9 @@ impl Admin {
                 &table(&["Account", "Persona", "Files"], &rows),
             )
         };
-        let note = "<p class=\"muted\">Saved games are shown and downloaded as they are. They cannot be edited here.</p>";
+        let note = "<p class=\"muted\">Saved games are shown and downloaded as they are. The characters of \
+            Yserbius, Twinion and Cawdor can be changed in the character editor (from an account's saved games), \
+            once the <a href=\"/admin/ybarra\">game tables</a> are imported.</p>";
         self.render(
             req,
             Nav::Saves,
@@ -1304,9 +1306,24 @@ impl Admin {
                         html::action_form(&form, "Download", ""),
                     ]));
                 }
+                let editor = crate::ybarra::Game::ALL
+                    .into_iter()
+                    .find(|game| game.chars_path() == file.path)
+                    .map_or_else(String::new, |game| {
+                        format!(
+                            "<p>{}</p>",
+                            link(
+                                &format!("/admin/saves/{id}/ybarra/{}", game.id()),
+                                &format!("Open the {} characters in the editor", game.title())
+                            )
+                        )
+                    });
                 sections.push_str(&window(
                     &file.path,
-                    &table(&["Version", "Size", "Modified", "Hash", ""], &rows),
+                    &format!(
+                        "{editor}{}",
+                        table(&["Version", "Size", "Modified", "Hash", ""], &rows)
+                    ),
                 ));
             }
             sections

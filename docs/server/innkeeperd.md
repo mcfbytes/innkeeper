@@ -726,7 +726,9 @@ Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
   at least 8 characters, written to the audit log **before** the body is shown.
 - **Legal holds:** list, place (with a reason) and release, through the existing hold code. A hold on a
   number that was never issued is refused.
-- **Saves:** list and download; no editing. Each download is audited.
+- **Saves:** list and download; each download is audited. The characters and automaps of Yserbius,
+  Twinion and Cawdor can be edited once their tables are imported from the operator's copy of the game
+  ([ybarra.md](ybarra.md)); each change is a new save version, refused while the account is online, and audited.
 - **Audit:** every state-changing action and every letter read or save download, with who, what,
   target and reason. No bodies, subjects or tokens are ever written.
 

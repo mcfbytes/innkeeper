@@ -9,6 +9,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::signin::keys::{self, IdentityKey};
 use crate::sqlite_store::SqliteStore;
 use crate::subject::{c_string, post_author, trim_nul};
+use crate::ybarra::cipher::Cipher;
+use crate::ybarra::Game;
 
 fn backend(error: rusqlite::Error) -> StoreError {
     StoreError::backend(error)
@@ -1063,6 +1065,90 @@ pub(crate) fn save_owners(store: &SqliteStore) -> Result<Vec<SaveOwner>, StoreEr
         })
         .map_err(backend)?;
     rows.collect::<Result<_, _>>().map_err(backend)
+}
+
+// ---- Ybarra ciphers ----
+
+/// A game's cipher as imported, with where it came from.
+#[derive(Debug)]
+pub(crate) struct CipherRow {
+    pub(crate) game: Game,
+    pub(crate) cipher: Cipher,
+    pub(crate) source_sha256: String,
+    pub(crate) imported_at: i64,
+}
+
+/// Keeps a game's cipher, replacing the one imported before.
+pub(crate) fn cipher_put(
+    store: &SqliteStore,
+    game: Game,
+    cipher: &Cipher,
+    source_sha256: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    store
+        .connection()
+        .execute(
+            "INSERT INTO ybarra_ciphers (game, shuffle, masks, key, source_sha256, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT (game) DO UPDATE SET shuffle = excluded.shuffle, masks = excluded.masks,
+                 key = excluded.key, source_sha256 = excluded.source_sha256,
+                 imported_at = excluded.imported_at",
+            params![
+                game.id(),
+                cipher.shuffle.as_slice(),
+                cipher.mask_bytes(),
+                cipher.key.as_slice(),
+                source_sha256,
+                now
+            ],
+        )
+        .map_err(backend)?;
+    Ok(())
+}
+
+/// Every imported cipher, in the order of `Game::ALL`. A row the code cannot use (tables edited
+/// by hand) is left out, so the game reads as not imported.
+pub(crate) fn ciphers(store: &SqliteStore) -> Result<Vec<CipherRow>, StoreError> {
+    let conn = store.connection();
+    let mut statement = conn
+        .prepare("SELECT game, shuffle, masks, key, source_sha256, imported_at FROM ybarra_ciphers")
+        .map_err(backend)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Vec<u8>>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+                row.get::<_, Vec<u8>>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })
+        .map_err(backend)?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (game, shuffle, masks, key, source_sha256, imported_at) = row.map_err(backend)?;
+        let (Some(game), Ok(cipher)) = (Game::from_id(&game), Cipher::new(&shuffle, &masks, &key))
+        else {
+            continue;
+        };
+        out.push(CipherRow {
+            game,
+            cipher,
+            source_sha256,
+            imported_at,
+        });
+    }
+    out.sort_by_key(|row| Game::ALL.iter().position(|game| *game == row.game));
+    Ok(out)
+}
+
+pub(crate) fn cipher_for(store: &SqliteStore, game: Game) -> Result<Option<Cipher>, StoreError> {
+    Ok(ciphers(store)?
+        .into_iter()
+        .find(|row| row.game == game)
+        .map(|row| row.cipher))
 }
 
 #[cfg(test)]
