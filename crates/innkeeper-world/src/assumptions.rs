@@ -253,3 +253,7 @@ pub(crate) const ERASE_NEEDS_AUTHOR_OR_PRIVILEGE_ASSUMED: bool = true;
 /// host gives nobody sysop powers over mailboxes, and a refusal ends the 30 s wait the 37/20 form
 /// sets (the word 0x7530 it carries).
 pub(crate) const SHORT_MAIL_FORM_IS_REFUSED_ASSUMED: bool = true;
+/// A game group's land-type byte names the title whose `GameInfo` tID it is, also where no live run
+/// has shown that title's group yet (MiniGolf, Stratego, Graffiti, Red Baron and 3-D Golf were seen;
+/// docs/server/game-services.md section 1). A live group of another title would settle each byte.
+pub(crate) const UNSEEN_GAME_BYTES_NAME_THEIR_TITLE_ASSUMED: bool = true;
