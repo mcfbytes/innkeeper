@@ -240,7 +240,7 @@ These waited, and the host now answers them. Each INFERRED choice is a named con
 
 ### 3.2 Live, and a block is not established
 
-1. **LSCI command 27** (DONE, see [hub-services.md](hub-services.md)). Sub 9 and the complaint form of sub 0 are kept as complaints; sub 6 is parsed and applied; sub 8 has no sender. Subs 0, 1, 13 and 14 keep the RPG shapes (section 1.2). Still open: the hub bulletin board (location 66) lists no boards, so 27/6 has no live path, and the SL and LL top-score boards are read empty and written nowhere.
+1. **LSCI command 27** (DONE, see [hub-services.md](hub-services.md)). Sub 9 and the complaint form of sub 0 are kept as complaints; sub 6 is parsed and applied; sub 8 has no sender. Subs 0, 1, 13 and 14 keep the RPG shapes (section 1.2). Still open: the hub bulletin board (location 66) lists no boards, so 27/6 has no live path, and the SL and LL top-score boards are read empty and written nowhere. Top scores: the protocol is [scores.md](scores.md) part 1 (SierraLand boards 10 to 13; CasinoLand and the hub have none); not yet implemented.
 2. **38 hint** (DONE, see [hub-services.md](hub-services.md) section 4). The layout, the wait and the replies are now CONFIRMED live.
 3. **34/4 and 34/8** (DONE, see [services.md](services.md)). The logon's 34/4 stays unanswered, later ones are answered, and 34/8 is absorbed.
 4. **37/30** (DONE, see [services.md](services.md)). Acked for the two service boxes the system list names, and the client waits on nothing.
