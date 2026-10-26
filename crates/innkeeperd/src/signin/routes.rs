@@ -209,7 +209,12 @@ impl SignIn {
             state.link.clone_from(&link);
             self.states().seal(&state)
         };
-        match self.rp.begin(provider, Audience::Player, seal).await {
+        // Linking wants a second account, which the provider would otherwise quietly reuse.
+        match self
+            .rp
+            .begin(provider, Audience::Player, link.is_some(), seal)
+            .await
+        {
             Ok(authorize) => super::pages::redirect(authorize.as_str()),
             Err(error) => {
                 warn!(provider, %error, "sign-in could not start");
