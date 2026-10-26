@@ -249,7 +249,8 @@ fn fields_html(
         let mut html = String::new();
         if field.count == 1 {
             let (name, text) = shown(index, field, 0);
-            html.push_str(&input(field, &name, &pretty(&field.name), &text));
+            let label = field.label.clone().unwrap_or_else(|| pretty(&field.name));
+            html.push_str(&input(field, &name, &label, &text));
             if !matches!(field.confidence.as_deref(), Some("confirmed")) {
                 html = html.replacen("</label>", &format!("{}</label>", confidence(field)), 1);
             }

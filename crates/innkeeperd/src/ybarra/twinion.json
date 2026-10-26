@@ -546,13 +546,2688 @@
    "evidence": "char+0x7a <- player obj +0x1c; automap draws arrow tile facing+1 (tiles 1-4); new character: 3"
   },
   {
-   "name": "unknown_0xf6",
-   "group": "Game flags",
+   "name": "gauntlet_droit_class_reward",
+   "label": "Gauntlet Droit end: class-specific 'well done' reward received",
+   "group": "Quest flags, L1: Gauntlet Droit",
+   "offset": 248,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "reward received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x02; L1: Gauntlet Droit; map3 f0x26e e14@dir3:1f..6f: if 0, class praise, sets 1 (and flag 0x80=2), AddExp 1000, AddSkill 0x14, TeachSpell 8, GiveItem; else 'already received your rewards'"
+  },
+  {
+   "name": "lava_glove_gauntlet",
+   "label": "Gauntlet Droit Lava Glove quest; 2 lets the glove be re-won",
+   "group": "Quest flags, L1: Gauntlet Droit",
+   "offset": 374,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "1": "glove recovered",
+    "2": "rewards given / glove re-obtainable"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x80; L1: Gauntlet Droit; L8: Dragon's Ire; map3 f0xd1a e42@ed: with glove 0xc8 and 0 set 1 'to the ancient foundry'; f0x26e e14 sets 2 with rewards; f0x119 e10@77: glove and 2 -> take glove, send to end; f0x86c e25 rogue leader drops glove when 0 or 2; map20 Qao Tsur (e12) and glove portal (e39) set 2 so the glove can be re-won"
+  },
+  {
+   "name": "gauche_lock_test_reward",
+   "label": "Magical-lock bashing test reward taken",
+   "group": "Quest flags, L1: Gauntlet Gauche",
+   "offset": 349,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x67; L1: Gauntlet Gauche; map2 f0x100b e39@cell:58: if 0 exp 200 + 100 gold, set 1; else 'gained all you can from this test'"
+  },
+  {
+   "name": "bats_treasure_room",
+   "label": "Bats' treasure room looted",
+   "group": "Quest flags, L1: Gauntlet Gauche",
+   "offset": 376,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "looted"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x82; L1: Gauntlet Gauche; map2 f0x59b e15@cell:1f: if 0 items + 300 gold + exp, set 1, else 'nothing more here'"
+  },
+  {
+   "name": "gauche_twin_stashes",
+   "label": "Two item stashes: holds cell of first stash taken, 2 = both",
+   "group": "Quest flags, L1: Gauntlet Gauche",
+   "offset": 384,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "0x9f": "stash at 9f taken",
+    "0xe6": "stash at e6 taken",
+    "2": "both taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8a; L1: Gauntlet Gauche; map2 f0x7b0 e18@cell:9f and f0x8e2 e19@cell:e6: skip if 2 or == own Pos; give items; set 2 if other cell stored, else store Pos"
+  },
+  {
+   "name": "gauche_bizarre_reward",
+   "label": "'Something bizarre' reward (never set; likely repeatable)",
+   "group": "Quest flags, L1: Gauntlet Gauche",
+   "offset": 385,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 0x8b; L1: Gauntlet Gauche; map2 f0xc16 e27@cell:f0: if kind3 counter 4 == 50 and flag clear -> items, 1000 exp, 1000 gold; no setter found"
+  },
+  {
+   "name": "gauche_door_test_reward",
+   "label": "Magical-door destroying test reward taken",
+   "group": "Quest flags, L1: Gauntlet Gauche",
+   "offset": 403,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x9d; L1: Gauntlet Gauche; map2 f0x11e9 e42@cell:c6: if 0 exp 200 + 100 gold, set 1, else 'gained all you can'"
+  },
+  {
+   "name": "main_entrance_queen_key_door_unlocked",
+   "label": "Main Entrance level-12 solo gate opened for good with the Queen's key",
+   "group": "Quest flags, L1: Main Entrance",
    "offset": 246,
-   "type": "bytes",
-   "len": 135,
+   "type": "u8",
+   "enum": {
+    "0": "locked",
+    "1": "unlocked permanently"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x00; L1: Main Entrance; L3: Queen's Palace; map1 f0x10f e6@dir1:cc: needs PartyMinLvl 12 + solo; using item 0xea (Queen's key) prints door stays unlocked, sets 1, takes 0xea and 0xe0; map1 f0x5d7 e14@cell:cd teleports back if 0; map8 f0x1096 e53: palace portal to main entrance if has 0xea or flag set (needs 0x21==2), else gives key 0xea"
+  },
+  {
+   "name": "main_entrance_north_door_map_rings_quest",
+   "label": "North secret door opened with the fused map; then Queen's ring-quest briefing",
+   "group": "Quest flags, L1: Main Entrance",
+   "offset": 247,
+   "type": "u8",
+   "enum": {
+    "0": "sealed",
+    "1": "door opened with map",
+    "2": "Queen's ring quest briefing heard"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x01; L1: Main Entrance; L2: The Reservoir; map1 f0x21e e7@dir0:ce: level 23 solo; with map item 0xeb (from Cartography quest, flag 0x3c) the door's magic is dispelled, sets 1, takes 0xeb; map1 f0x4bd e12@cell:be: if 1, Queen speaks of the deities' rings and Portal of Time, sets 2; map6 f0x59e e19 only prints its shore text while 0"
+  },
+  {
+   "name": "final_journey_stage",
+   "label": "Final-journey nexus stage: Spheres Asunder done, then Gateway reached",
+   "group": "Quest flags, L1: Main Entrance",
+   "offset": 469,
+   "type": "u8",
+   "enum": {
+    "0": "not started",
+    "1": "nexus portals open (after Spheres Asunder)",
+    "2": "reached Gateway; Main Entrance sends to Dissemination"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xdf; L1: Main Entrance; L1: Gauntlet Droit; L2: The Reservoir; L3: Queen's Palace; L10: Halls of Babble; Spheres Asunder; L12: The Gateway; map30 f0xdf2 e25@b04f:28 sets 1 (after sphere flags 0x8c..0x8f); value 1 opens nexus teleports map3 e26 'nexus point...final journey', map6 e20/e22, map8 e54, map24 e28 (alone); map32 f0x692 e13@88 sets 2; map1 e17/e18 alone with 1 or 2: portal to chambers of time / start of Dissemination | f0xdf2 sets 1 on the fifth ring (after the attribute loss); map32 f0x692 sets 2 at the Queen-defeated event"
+  },
+  {
+   "name": "aqueduct_rope_taken",
+   "label": "Coil of rope (item 0xe0) picked up in the Aqueduct",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 249,
+   "type": "u8",
+   "enum": {
+    "0": "rope still there",
+    "1": "rope taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x03; L2: Queen's Aqueduct; map4 f0x148c e49@dir0:72: if 1 'nothing here', else GiveItem 0xe0 (rope) and set 1; rope later used for the Reservoir rescue (flag 0x30)"
+  },
+  {
+   "name": "aqueduct_door_maze_pickpocket",
+   "label": "Aqueduct door-maze reward and pickpocket encounter state",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 250,
+   "type": "u8",
+   "enum": {
+    "0": "maze not done",
+    "1": "maze reward received",
+    "2": "robbed by pickpocket (inferred)",
+    "3": "pickpocket fought"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x04; L2: Queen's Aqueduct; map4 f0xd37 e37@b04f:10: if 0, ranger rewards door-maze completion (item 0x2b by class, 500 gold, 400 exp), sets 1; else 'the ranger is gone'; f0xf17 e40@b04f:15: if <=1 pickpocket steals gold (value 2 presumably set on that path, not shown); if 2 fight the pickpocket with loot, sets 3"
+  },
+  {
+   "name": "aqueduct_test_branch_a",
+   "label": "Aqueduct trial, branch A progress (first 'onward to greater tests' marker)",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 252,
+   "type": "u8",
+   "enum": {
+    "0": "not started",
+    "1": "first marker passed",
+    "2": "later stage",
+    "3": "branch complete"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x06; L2: Queen's Aqueduct; map4 f0x24f e15@dir3:09 sets 1 ('Onward to greater tests'); f0x68c e27 junction seals the east door once 0x06 is set (and 0x07 clear); f0x1371 e47@cell:08 sets 2; f0x539 e25 requires 0x06==3 and 0x07==3 to pass; f0x1124 e43 thief needs both set"
+  },
+  {
+   "name": "aqueduct_test_branch_b",
+   "label": "Aqueduct trial, branch B progress (first 'onward to more adventure' marker)",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 253,
+   "type": "u8",
+   "enum": {
+    "0": "not started",
+    "1": "first marker passed",
+    "3": "branch complete"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x07; L2: Queen's Aqueduct; map4 f0x213 e14@dir1:07 sets 1 ('Onward to more adventure'); f0x68c e27 seals the south door once 0x07 is set (and 0x06 clear); f0x1371 e47 reads it; f0x539 e25 requires 0x07==3; f0x1124 e43 needs it set"
+  },
+  {
+   "name": "aqueduct_thief_scar_given",
+   "label": "Aqueduct thief has given you the proving scar (ignores you afterwards)",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 254,
+   "type": "u8",
+   "enum": {
+    "0": "no scar",
+    "1": "scarred"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x08; L2: Queen's Aqueduct; map4 f0x1124 e43@b04f:9f: if 1 thief 'sees his mark, ignores you'; with 0x06,0x07 set and 0x0a==1 sets 0x09=1, scar damage, sets 0x08=1; otherwise steals gold, damages, teleports back"
+  },
+  {
+   "name": "aqueduct_trial_completion",
+   "label": "Aqueduct trial: scar earned, then finished with the female voice's reward",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 255,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "scar earned",
+    "2": "trial finished, reward received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x09; L2: Queen's Aqueduct; map4 f0x1124 e43 sets 1 with the scar; f0x539 e25@dir2:af: if 1 voice praises, AddExp 2500, sets 2; if 2 'You've passed here before'"
+  },
+  {
+   "name": "lord_aqueus_defeated",
+   "label": "Lord Aqueus defeated (throne room reached); waters become safe",
+   "group": "Quest flags, L2: Queen's Aqueduct",
+   "offset": 256,
+   "type": "u8",
+   "enum": {
+    "0": "alive",
+    "1": "defeated"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0a; L2: Queen's Aqueduct; L2: Twinion's Falls; L2: The Reservoir; map6 f0x1052 e36@cell:2d,3c sets 1 entering the late Aqueus's throne room; map6 f0x7a7 e24@b04f:3d Aqueus fight only while 0; water-damage cells in map4 f0x2d2, map5 f0x2b, map6 f0xc skip damage when set ('defeated Aqueus, travel safely'); map4 f0x41e e23 door 'now that you've conquered Lord Aqueus'; map4 e43 thief requires it"
+  },
+  {
+   "name": "sartiq_chant_learned",
+   "label": "First chant learned from the dying giant Sartiq (parts the narrows)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 257,
+   "type": "u8",
+   "enum": {
+    "0": "not learned",
+    "1": "chant learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0b; L2: The Reservoir; map6 f0x93e e25@b04f:41: Sartiq burns a ritual chant into your mind, sets 1; f0x169 e4 water cells: if 1 the waters part, else lethal currents; f0xf4d e34 Malik reacts to the chant when 1"
+  },
+  {
+   "name": "sartiq_rhyme_learned",
+   "label": "Full Rhyme learned from Sartiq (opens Aqueus's throne-room gate)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 258,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "rhyme learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0c; L2: The Reservoir; map6 f0x93e e25: with 0x0b==1 and 0x0d==1 Sartiq teaches the Rhyme and dies, sets 1; f0x50c e15@dir3:3e gate magic dissipates if 1, else 'chant doesn't work here'"
+  },
+  {
+   "name": "malik_mark_received",
+   "label": "Thief Malik carved his ally mark (proof for Sartiq)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 259,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "marked"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0d; L2: The Reservoir; map6 f0xf4d e34@b04f:72: if 0 and 0x0b==1, Malik hears the chant, carves a mark (damage), sets 1; read by Sartiq f0x93e"
+  },
+  {
+   "name": "kilam_stubborn_door_knocks",
+   "label": "Kilam's tip bought; knock counter for the stubborn NW door",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 260,
+   "type": "u8",
+   "enum": {
+    "0": "no tip",
+    "1": "tip bought",
+    "2": "knocked once",
+    "3": "door opens"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x0e; L2: The Reservoir; map6 f0x108e e37@b04f:ff: Kilam sells the tip for 1000 gold, sets 1; f0x43e e14@dir1:04: knock 1 sets 2, knock again (value 3 set on that path, presumably), at 3 'opens just as Kilam said'"
+  },
+  {
+   "name": "reservoir_drowning_party",
+   "label": "Reservoir drowning party: rescue with rope / Shalana revival outcome",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 294,
+   "type": "u8",
+   "enum": {
+    "0": "not met",
+    "1": "rescued with rope",
+    "2": "swept away / survivors met (inferred)",
+    "3": "failed to revive Shalana"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x30; L2: The Reservoir; map6 f0xa33 e26@cell:68: solo; using rope 0xe0 pulls them to safety (items 0x3, 0xba, 2000 gold/exp), sets 1; any other item: party swept away (that path jumps near the same SetFlag; likely sets 2); f0x11bf e40@cell:8f survivors scene when 2: reviving Shalana (items/spell) gives rewards, set 2 per listing; failure sets 3 and the party beats you; f0x59e e19 hints at the party while 0"
+  },
+  {
+   "name": "reservoir_spell_e",
+   "label": "Reservoir spell 0xe received (classes 1/5)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 380,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x86; L2: The Reservoir; map6 f0x14cf e43@cell:17: class 1/5 and 0 -> TeachSpell 0xe, set 1"
+  },
+  {
+   "name": "reservoir_spell_3",
+   "label": "Reservoir spell 3 received (classes 4/5)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 382,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x88; L2: The Reservoir; map6 f0x1453 e42@cell:ce: class 4/5 and 0 -> TeachSpell 3, set 1"
+  },
+  {
+   "name": "reservoir_spell_fa",
+   "label": "Learned spell 0x0b at Reservoir fountain fa (class 4/5)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 435,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xbd; L2: The Reservoir; map6 f0x13d7 e41@cell:fa: class 4 or 5 and clear -> TeachSpell(0xb), set 1"
+  },
+  {
+   "name": "reservoir_spell_71",
+   "label": "Learned spell 0x17 at Reservoir warm fountain 71 (class 1)",
+   "group": "Quest flags, L2: The Reservoir",
+   "offset": 457,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xd3; L2: The Reservoir; map6 f0x154b e44@cell:71: class 1 and clear -> TeachSpell(0x17), set 1 'new spell'; class 4 gets skill 0x16 instead"
+  },
+  {
+   "name": "falls_sluice_gates_open",
+   "label": "Twinion's Falls sluice-gate lever position (toggles pressure-locked doors)",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 261,
+   "type": "u8",
+   "enum": {
+    "0": "sluice closed",
+    "1": "sluice open"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0f; L2: Twinion's Falls; map5 f0x6e8 e23@dir3:6e,ae toggles: if 0 'sluice gates opened, doors west unlocked' (set nonzero), else 'gates closed', set 0; f0x1304 e41 door opens when 1; f0x1384 e42 solo door uses it with 0x10"
+  },
+  {
+   "name": "falls_proving_grounds_progress",
+   "label": "Proving Grounds progress at Twinion's Falls: near end, then rewarded",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 262,
+   "type": "u8",
+   "enum": {
+    "0": "not reached",
+    "1": "near the end",
+    "2": "rewarded"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x10; L2: Twinion's Falls; L2: Queen's Aqueduct; map5 f0x390 e16@dir2:f1 'almost to the end of the Proving Grounds', sets 1; f0x178 e5@dir3:35 if 1: sets 2, 2000 exp, 1200 gold, teleport; map4 f0x1408 e48 gate appears if 1 or 2; map5 f0x1384 e42 door"
+  },
+  {
+   "name": "falls_bridge_active",
+   "label": "Falls tower bridge extended (tower keeper visited); reset when you leave",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 263,
+   "type": "u8",
+   "enum": {
+    "0": "bridge not up",
+    "1": "bridge up"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x11; L2: Twinion's Falls; map5 f0x641 e22@b04f:6e,ae tower greeting sets 1 and builds bridge cells 7e/8e/9e; f0x3cc e17, f0x14a2 e44, f0x1665 e45 show bridge walls if 1, else water below; f0x1839 e46 (cells 4f,50,6c,a0,ac,cf,f1) resets to 0"
+  },
+  {
+   "name": "falls_wizard_riddle_solved",
+   "label": "Twinion's Falls wizard's 'keep an adventurer busy' riddle solved (exp once)",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 293,
+   "type": "u8",
+   "enum": {
+    "0": "not solved",
+    "1": "solved, exp given"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2f; L2: Twinion's Falls; map5 f0xf63 e37@b04f:c7,c9: kind-3 0x3/0x4 track the back-and-forth visits; on the third, if 0x2f!=1 wizard 'Now I get it', sets 1, AddExp"
+  },
+  {
+   "name": "ranger_told_of_cleric",
+   "label": "Told the Ranger where the confused Cleric is; rewarded",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 367,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x79; L2: Twinion's Falls; map5 f0x9c5 e30@b04f:57: if 0 and kind3 flag 0xb==1, 100 gold + item 0xb6, set 1"
+  },
+  {
+   "name": "merchant_grog_petrify",
+   "label": "Merchant's grog taught Petrify spell",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 377,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x83; L2: Twinion's Falls; map5 f0x18f7 e48@b04f:3c: classes 3/5 if 0: TeachSpell 9, pay gold, set 1; otherwise paid heal"
+  },
+  {
+   "name": "falls_light_fountain",
+   "label": "Fountain of gleaming light used (spell by class)",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 378,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x84; L2: Twinion's Falls; map5 f0x19ee e49@cell:0b: if 0, class 2/4/5 TeachSpell 0x15/0x14, set 1 (also set 1 for other classes)"
+  },
+  {
+   "name": "falls_sour_fountain",
+   "label": "Sour-water fountain spell received",
+   "group": "Quest flags, L2: Twinion's Falls",
+   "offset": 379,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x85; L2: Twinion's Falls; map5 f0x1b00 e50@cell:e5: classes 4/5 TeachSpell 0x15 or class 2 spell 0xc, set 1; else 'dry well'"
+  },
+  {
+   "name": "palace_old_thief_rune_hint",
+   "label": "Old thief in the Queen's Palace told you about the rune-marked stone",
+   "group": "Quest flags, L3: Queen's Palace",
+   "offset": 275,
+   "type": "u8",
+   "enum": {
+    "0": "not met",
+    "1": "hint received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1d; L3: Queen's Palace; map8 f0x328 e8@b04f:db: thief gives the hint, sets 1 (afterwards 'slipped away'); f0x22b e7@dir3:ec: only if 1 can the stone be found (detect skill/spell/items) to open the secret door"
+  },
+  {
+   "name": "palace_chasm_bridge_triggered",
+   "label": "Palace chasm drawbridge triggered by a fireball (later vanishes)",
+   "group": "Quest flags, L3: Queen's Palace",
+   "offset": 276,
+   "type": "u8",
+   "enum": {
+    "0": "no bridge",
+    "1": "bridge extended"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1e; L3: Queen's Palace; map8 f0x4f5 e16@cell:09,18,19,29: fireball from the right square sets 1 and builds cell 2a; when already 1, 'bridge you triggered has vanished', sets 0; f0x11e1 e56@cell:2a: if 1 cross the chasm, else fall to death"
+  },
+  {
+   "name": "queen_audience_quest_state",
+   "label": "Queen's Palace quest state: tasked by the Queen, then passage granted",
+   "group": "Quest flags, L3: Queen's Palace",
+   "offset": 279,
+   "type": "u8",
+   "enum": {
+    "0": "not met",
+    "1": "audience held, task given",
+    "2": "passage granted (waters calm, key portal)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x21; L3: Queen's Palace; map8 f0x1447 (called from the Queen's audience f0x1301 e58) sets 1 if 0; map8 f0x3 e0@b04f:8e: if 1 sets 2 (listing not in dossier); f0x101d e51@cell:7d,9d waters calm only if 2, else pushed back to 8e; f0x1096 e53 portal to main entrance (and Queen's key 0xea) only if 2 | map8 f0x3 e0@b04f:8e (checked): if 0x20==1 empty throne; if 0x21==1 Queen Aeowyn gives the map-piece quest and the key hint, sets 2; else \"off looking for clues\". f0x1447 sets 1 when 0."
+  },
+  {
+   "name": "queen_first_audience_done",
+   "label": "First audience with Queen Aeowyn in her palace held (exp reward)",
+   "group": "Quest flags, L3: Queen's Palace",
+   "offset": 283,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "audience held"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x25; L3: Queen's Palace; map8 f0x1301 e58@cell:39,5e,d9,ea: on the matching square, if 0: Picture 0x15 (Queen), speech subs incl. f0x1447 (sets 0x21=1), sets 1, AddExp"
+  },
+  {
+   "name": "palace_wizard_reached",
+   "label": "Past the old trap-wizard's room in the Queen's Palace (he no longer appears)",
+   "group": "Quest flags, L3: Queen's Palace",
+   "offset": 368,
+   "type": "u8",
+   "enum": {
+    "0": "wizard present",
+    "1": "passed/defeated"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x7a; L3: Queen's Palace; map8 f0x1535 e60@b04f:2f: if 0, wizard speech + fight (AddMonster 0x22); f0x15ce e61@cell:1f (next cell) sets 1"
+  },
+  {
+   "name": "palace_steaming_fountain",
+   "label": "Steaming fountain spell received (classes 3/5)",
+   "group": "Quest flags, L3: Queen's Palace",
+   "offset": 383,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x89; L3: Queen's Palace; map8 f0x148d e59@cell:1d: class 5/3 and 0 -> TeachSpell 6, set 1; other classes scalded"
+  },
+  {
+   "name": "coliseum_arena_warriors_won",
+   "label": "Coliseum arena fight (party of warriors) triggered/won",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 264,
+   "type": "u8",
+   "enum": {
+    "0": "not fought",
+    "1": "fought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x12; L3: The Coliseum; map7 f0x6c9 e14@b04f:4c,4d: if 0 sets 1 and spawns warriors scaled to party size; summed with 0x13-0x15 in f0x242 e10 vs 0x17"
+  },
+  {
+   "name": "coliseum_arena_mages_won",
+   "label": "Coliseum arena fight (mage and muscle) triggered/won",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 265,
+   "type": "u8",
+   "enum": {
+    "0": "not fought",
+    "1": "fought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x13; L3: The Coliseum; map7 f0xa16 e19@b04f:42,43: if 0 sets 1 and spawns mixed mage/fighter party; summed in f0x242"
+  },
+  {
+   "name": "coliseum_arena_enchanters_won",
+   "label": "Coliseum arena fight (enchanters) triggered/won",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 266,
+   "type": "u8",
+   "enum": {
+    "0": "not fought",
+    "1": "fought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x14; L3: The Coliseum; map7 f0xe1e e24@b04f:b2,b3: if 0 sets 1 and spawns enchanters; summed in f0x242"
+  },
+  {
+   "name": "coliseum_arena_undead_won",
+   "label": "Coliseum arena fight (undead heroes) triggered/won",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 267,
+   "type": "u8",
+   "enum": {
+    "0": "not fought",
+    "1": "fought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x15; L3: The Coliseum; map7 f0x12d1 e28@b04f:bc,bd: if 0 sets 1 and spawns undead; summed in f0x242"
+  },
+  {
+   "name": "coliseum_arenas_rewarded_count",
+   "label": "Number of Coliseum arenas already rewarded (0..4)",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 269,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "4": "all four arenas done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x17; L3: The Coliseum; map7 f0x242 e10@dir1:7d,8d: sum of 0x12..0x15 > 0x17 -> 'Well done', sets 0x17 to the sum, AddExp; f0x108 e6: if <4 'more Arenas to complete', teleport to Queen's Palace; f0x1a8c e43 'nothing more' at 4"
+  },
+  {
+   "name": "coliseum_treasure_57_found",
+   "label": "Coliseum treasure square 57 visited",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 270,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "found"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x18; L3: The Coliseum; map7 f0x1417 e29@cell:57 sets 1; sum of 0x18..0x1b compared to 0x1c, sub_15fd gives items/gold"
+  },
+  {
+   "name": "coliseum_treasure_7a_found",
+   "label": "Coliseum treasure square 7a visited",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 271,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "found"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x19; L3: The Coliseum; map7 f0x14b9 e30@cell:7a sets 1; same sum/0x1c logic"
+  },
+  {
+   "name": "coliseum_treasure_a8_found",
+   "label": "Coliseum treasure square a8 visited",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 272,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "found"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1a; L3: The Coliseum; map7 f0x155b e31@cell:a8 sets 1; same sum/0x1c logic"
+  },
+  {
+   "name": "coliseum_treasure_75_found",
+   "label": "Coliseum treasure square 75 visited",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 273,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "found"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1b; L3: The Coliseum; map7 f0x16d6 e32@cell:75 sets 1; same sum/0x1c logic"
+  },
+  {
+   "name": "coliseum_treasures_claimed_count",
+   "label": "Count of Coliseum treasure squares already paid out (0..4)",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 274,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "4": "all claimed"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1c; L3: The Coliseum; map7 f0x1417/0x14b9/0x155b/0x16d6: if sum(0x18..0x1b) > 0x1c set 0x1c=sum and call f0x15fd, which picks items by the count ('You find some useful items', items 0x1d, 0x75 + two more, gold)"
+  },
+  {
+   "name": "coliseum_spell_3a",
+   "label": "Learned spell 0x00 at Coliseum 3a (class 4)",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 458,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xd4; L3: The Coliseum; map7 f0x1a29 e42@cell:3a: class 4 and clear -> TeachSpell(0x0), set 1"
+  },
+  {
+   "name": "coliseum_spell_d5",
+   "label": "Learned spell 0x07 at Coliseum d5 (class 4/5)",
+   "group": "Quest flags, L3: The Coliseum",
+   "offset": 464,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xda; L3: The Coliseum; map7 f0x19b7 e41@cell:d5: class 5 or 4 and clear -> TeachSpell(0x7), set 1"
+  },
+  {
+   "name": "guild_armor_received",
+   "label": "Guild armor quest: Guild armor received at the Armory, then a replacement",
+   "group": "Quest flags, L4: Armory",
+   "offset": 315,
+   "type": "u8",
+   "enum": {
+    "0": "not received",
+    "1": "Guild armor received",
+    "2": "replacement armor received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x45; L4: Armory; L4: Night Elf Ingress; L5: The Enclave; L6: Twinion Keep; L6: Race Track; L6: Rat Race; map11 class rooms e0,e1,e4,e60,e64,e66 (Cleric/Thief/Knight/Ranger/Barbarian...): f0x1693 AddExp 50000, sets 1 'Guild armor'; f0x16dd replacement armor sets 2; f0x670 e21 armorer forged another key when 1; skeleton key 0xd0 re-issued in map9 e22/e40, map12 e45/e55, map15 e13/e40 by class; map16/17 doors open with key 0xd0 when 1; map12 f0xec4 Orc Knight looking for the key while 0"
+  },
+  {
+   "name": "trident_fountain_used",
+   "label": "Trident Fountain first use (mana and Shield-type spell)",
+   "group": "Quest flags, L4: Armory",
+   "offset": 316,
+   "type": "u8",
+   "enum": {
+    "0": "not used",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x46; L4: Armory; map11 f0x834 e36@cell:85: first time sets 1, AddMana 10000, TeachSpell 0x15 or 0xf by class; later only mana"
+  },
+  {
+   "name": "grimoire_fountain_spell",
+   "label": "Grimoire Fountain spell received (spell by class)",
+   "group": "Quest flags, L4: Armory",
+   "offset": 345,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x63; L4: Armory; map11 f0x340 e7@cell:c3: if 0 set 1, TeachSpell 0x14/0x7/0xc/0xd by class"
+  },
+  {
+   "name": "snowy_fountain_rope_quest_done",
+   "label": "Night Elf Ingress: rope (0xe0) dropped in Snowy Fountain; class skill reward given",
+   "group": "Quest flags, L4: Night Elf Ingress",
+   "offset": 307,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done (later visits just take a rope)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3d; L4: Night Elf Ingress; map9 f0x6 e0@cell:02: if ==1 takes rope 0xe0 and prints the fountain text; else with rope 0xe0: take it, set 1, AddSkill(5,1) for classes 0/2/3/5 or AddSkill(1,1) for classes 4/1; without rope \"must prove you have completed the Rope Quest\""
+  },
+  {
+   "name": "night_elf_vats_room_loot",
+   "label": "Night Elf Ingress vat room: gold found, later dropped items found",
+   "group": "Quest flags, L4: Night Elf Ingress",
+   "offset": 308,
+   "type": "u8",
+   "enum": {
+    "0": "untouched",
+    "1": "gold taken",
+    "2": "items taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3e; L4: Night Elf Ingress; map9 f0x7ef e21@cell:6a: if 0 +5000 gold, set 1; if 1 and 0x42==1 gives items 0x6c, 0x96 ('items an unlucky adventurer dropped'), set 2; else 'room is empty'"
+  },
+  {
+   "name": "snicker_thief_dealings",
+   "label": "Night Elf Ingress thief Snicker: paid-for hints/items progression",
+   "group": "Quest flags, L4: Night Elf Ingress",
+   "offset": 309,
+   "type": "u8",
+   "enum": {
+    "0": "not met",
+    "1": "met, hint bought",
+    "2": "bought item 0x90",
+    "3": "bought item 0x65"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3f; L4: Night Elf Ingress; map9 f0xdf7 e42@b04f:ad: 0 -> pay 1000 gold, hint about his three brothers, set 1; 1 -> item 0x90 for 5000 gold, set 2; 2 with item 0xdf -> item 0x65 for 5000 gold, set 3; then 'busy helping himself'"
+  },
+  {
+   "name": "windy_fountain_used",
+   "label": "Windy Fountain used with the Key of C (class skill gained)",
+   "group": "Quest flags, L4: Night Elf Ingress",
+   "offset": 310,
+   "type": "u8",
+   "enum": {
+    "0": "not used",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x40; L4: Night Elf Ingress; map9 f0x1038 e55@cell:d3: with item 0xdf takes it, AddSkill by class (0x10/0x7/0xc/0x8), sets 1; afterwards 'no effect', key falls in"
+  },
+  {
+   "name": "misty_fountain_used",
+   "label": "Misty Fountain used with the Front Door Key (class spell taught)",
+   "group": "Quest flags, L4: Night Elf Ingress",
+   "offset": 311,
+   "type": "u8",
+   "enum": {
+    "0": "not used",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x41; L4: Night Elf Ingress; map9 f0x126e e60@cell:e7: with item 0xde takes it ('Front Door Key disappears'), sets 1, TeachSpell 0x17 or 0x8 by class; afterwards 'no further effect'"
+  },
+  {
+   "name": "amazeing_map_piece_obtained",
+   "label": "aMAZEing: map piece (item 0xd3) obtained for item 0xd2",
+   "group": "Quest flags, L4: aMAZEing",
+   "offset": 312,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "piece obtained"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x42; L4: aMAZEing; L4: Night Elf Ingress; map10 f0x3b1 e21@cell:58: with item 0xd2 gives map piece 0xd3, AddExp, sets 1; if 1 and piece lost, gives it back; map9 f0x7ef e21 vat-room items need 0x42==1"
+  },
+  {
+   "name": "amazeing_chaos_gold_bag",
+   "label": "aMAZEing square b1: 25,000-gold bag (Chaos) or robbed of 2,000 (otherwise), once",
+   "group": "Quest flags, L4: aMAZEing",
+   "offset": 313,
+   "type": "u8",
+   "enum": {
+    "0": "not visited",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x43; L4: aMAZEing; map10 f0x767 e39@cell:b1: if 0: Chaos align -> +25000 gold, item 0x33 + one more; else -2000 gold by chaotic adventurers; sets 1 either way"
+  },
+  {
+   "name": "amazeing_harmony_gold_bag",
+   "label": "aMAZEing square c4: 25,000-gold bag (Harmony) or robbed of 2,000 (otherwise), once",
+   "group": "Quest flags, L4: aMAZEing",
+   "offset": 314,
+   "type": "u8",
+   "enum": {
+    "0": "not visited",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x44; L4: aMAZEing; map10 f0x9ef e44@cell:c4: if 0: Harmony align -> +25000 gold, item 0x21 + one more; else -2000 gold by harmonic adventurers; sets 1"
+  },
+  {
+   "name": "queen_map_quest_complete",
+   "label": "Queen's map quest done: four map pieces fused into the Queen's map",
+   "group": "Quest flags, L5: Cartography Shop",
+   "offset": 306,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "complete"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3c; L5: Cartography Shop; L5: Graveyard; map13 f0x91f e18@b04f:40..b0: Queen Aeowyn fuses pieces 0xd3-0xd6 with tokens 0xe2-0xe6, gives map 0xeb, big exp, sets 1; while 0 the race NPCs (Tyndil, Kalydor, Dabelais, Syrene) hand out tokens and the race-locked doors (e10-e13, e20, e21, e25, e26) take token keys, afterwards 'doors remain open'; map14 f0xed1 e36 sign lets you in with the 4 pieces or flag; map 0xeb opens main-entrance door (flag 0x01)"
+  },
+  {
+   "name": "northstar_fountain_used",
+   "label": "NorthStar Fountain first use (mana, +Strength, +Initiative)",
+   "group": "Quest flags, L5: Cartography Shop",
+   "offset": 325,
+   "type": "u8",
+   "enum": {
+    "0": "not used",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x4f; L5: Cartography Shop; map13 f0x14b3 e70@cell:fc: first time AddMana 10000, attr3 +2, attr0 +1, sets 1; later mana only"
+  },
+  {
+   "name": "graveyard_spirit_blessing",
+   "label": "Graveyard spirits' blessing chosen, then tomb reward taken",
+   "group": "Quest flags, L5: Graveyard",
+   "offset": 326,
+   "type": "u8",
+   "enum": {
+    "0": "no blessing",
+    "1": "blessing chosen (one of 4 attribute gifts)",
+    "2": "tomb reward taken too"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x50; L5: Graveyard; map14 e33/e39/e42/e46 b04f:b7/c7/d7/e7: if 0 set 1 + AddAttr str/def/agi/init +2, else 'already chosen'; e20@cell:ae: if 1, class-specific items+exp, set 2; e55 door msg when 1; e56 NPC when 0"
+  },
+  {
+   "name": "skeletal_fountain_spell",
+   "label": "Learned spell 0x10 at Skeletal Fountain, Graveyard (class 4)",
+   "group": "Quest flags, L5: Graveyard",
+   "offset": 461,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xd7; L5: Graveyard; map14 f0x60e e17@cell:4c: class 4 and clear -> TeachSpell(0x10), set 1; other classes get skills 0xa/0xf"
+  },
+  {
+   "name": "enclave_fellowship_key_items",
+   "label": "Enclave water key: items and fellowship key retrieved using the Life Jacket",
+   "group": "Quest flags, L5: The Enclave",
+   "offset": 317,
+   "type": "u8",
+   "enum": {
+    "0": "not retrieved",
+    "1": "retrieved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x47; L5: The Enclave; L4: Armory; map12 f0x320 e11@cell:28: with Life Jacket 0xe1 gives key 0xd8, items 0x45, 0x8e, 50000 exp, sets 1 (jacket floats away); if 1 re-gives key 0xd8; read by Armory class rooms (map11 e0,e1,e4,e60,e64,e66) with 0x45 to decide armor/replacement"
+  },
+  {
+   "name": "herbal_fountain_used",
+   "label": "Herbal Fountain first use (heal, mana, Cure spell)",
+   "group": "Quest flags, L5: The Enclave",
+   "offset": 318,
+   "type": "u8",
+   "enum": {
+    "0": "not used",
+    "1": "used"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x48; L5: The Enclave; map12 f0x165 e6@cell:0c: first time sets 1, heals, TeachSpell 0x8 or 0x13 by class; later only heals"
+  },
+  {
+   "name": "enclave_parchment_map_found",
+   "label": "Enclave: Parchment Map piece (item 0xd4) obtained",
+   "group": "Quest flags, L5: The Enclave",
+   "offset": 319,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "obtained"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x49; L5: The Enclave; map12 f0x201 e7@b04f:0e: two men fall in the lava, gives map piece 0xd4, AddExp, sets 1; if 1 and piece lost, gives it back"
+  },
+  {
+   "name": "enclave_vault_safe_opened",
+   "label": "Enclave vault safe opened with the Diamond Lockpick",
+   "group": "Quest flags, L5: The Enclave",
+   "offset": 320,
+   "type": "u8",
+   "enum": {
+    "0": "locked",
+    "1": "looted"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x4a; L5: The Enclave; map12 f0x560 e22@cell:79: with item 0xda, if 0: +100000 gold, items 0x92, 0x48, 0x36, sets 1"
+  },
+  {
+   "name": "skeleton_key_race_door",
+   "label": "Race-matched door used with item 0xd5 (Skeleton Key) in Race Track / Rat Race",
+   "group": "Quest flags, L6: Race Track",
+   "offset": 327,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "done (exp given)"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x51; L6: Race Track; L6: Rat Race; map16 f0x2c9 e8@22/5b/74/cc and map17 f0x6ff e18@3a/57/b1/dc: HasItem(0xd5) and GetRace matches the cell -> set 1, AddExp, sub; map17 e5/e10/e11 hint NPCs (elf with Skeleton Key, thief, Snicker) shown only while 0"
+  },
+  {
+   "name": "universal_spring_spell",
+   "label": "Universal Spring: spell gift taken (Poison Cloud)",
+   "group": "Quest flags, L6: Race Track",
+   "offset": 328,
+   "type": "u8",
+   "enum": {
+    "0": "not taken",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x52; L6: Race Track; map16 f0xaff e52@cell:c5: if 0 set 1, TeachSpell 0x15 or 0xa by class, text 'Universal Spring ... Poison Cloud'"
+  },
+  {
+   "name": "horse_race_winnings",
+   "label": "Horse race won, 50000 gold winnings collected",
+   "group": "Quest flags, L6: Race Track",
+   "offset": 329,
+   "type": "u8",
+   "enum": {
+    "0": "not collected",
+    "1": "collected"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x53; L6: Race Track; map16 f0xbb8 e54@cell:e3: if 0 AddGold 50000, set 1, 'your horse finished first'"
+  },
+  {
+   "name": "unity_fountain_spell",
+   "label": "Learned spell 0x12 at Unity Fountain, Rat Race (class 5)",
+   "group": "Quest flags, L6: Rat Race",
+   "offset": 460,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xd6; L6: Rat Race; map17 f0x410 e9@cell:1f: class 5 and clear -> TeachSpell(0x12), set 1; other classes get skills 0x15/0x14"
+  },
+  {
+   "name": "journeys_end_fountain_spell",
+   "label": "Learned spell 0x12 at Journey's End Fountain, Twinion Keep (class 4)",
+   "group": "Quest flags, L6: Twinion Keep",
+   "offset": 459,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "learned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xd5; L6: Twinion Keep; map15 f0xb26 e42@cell:99: class 4 and clear -> TeachSpell(0x12), set 1; other classes get skills 0x8/0x0"
+  },
+  {
+   "name": "giant_asp_treasure",
+   "label": "Giant Asp's treasure trove taken (Ruby Lockpick, 25000 gold)",
+   "group": "Quest flags, L7: Snake Pit",
+   "offset": 333,
+   "type": "u8",
+   "enum": {
+    "0": "not taken",
+    "1": "taken (Ruby Lockpick re-given if lost)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x57; L7: Snake Pit; map19 f0x646 e7@cell:59: needs Snake Charm 0xd7; if 0 give 0xdd + items + 50000 exp + 25000 gold, take charm, set 1; if 1 and no 0xdd, re-give it"
+  },
+  {
+   "name": "tipekans_registered",
+   "label": "Tipekans visitor registration; 2 = thieves' hidden loot taken",
+   "group": "Quest flags, L7: Tipekans",
+   "offset": 330,
+   "type": "u8",
+   "enum": {
+    "0": "not registered",
+    "1": "registered visitor",
+    "2": "registered, hidden loot taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x54; L7: Tipekans; map18 f0xd e0@cell:06,31 (entrance) gets 1/2, sets 1 (listing absent); e31 Gremlin Cleric trades Emerald (0xdb) for Diamond Lockpick (0xda) only if 1 or 2 ('must be a registered visitor'); e36@51: if 1 give items, set 2, else 'hiding place now empty'; e33 calls sub if 0 | map18 f0xd checked: with Tnepres Key 0xd9 the watchman takes... gives welcome scroll 0xaa, sets 1 (registered); 2 -> takes an item"
+  },
+  {
+   "name": "snakeskin_map_found",
+   "label": "Snakeskin Map (one of Queen's 4 map pieces) found",
+   "group": "Quest flags, L7: Tipekans",
+   "offset": 331,
+   "type": "u8",
+   "enum": {
+    "0": "not found",
+    "1": "found (re-given if lost)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x55; L7: Tipekans; map18 f0x753 e23@cell:87: if 0 give map 0xd6 + items + exp, set 1, Ruby Lockpick 0xdd crumbles; if 1 and no 0xd6, re-give map"
+  },
+  {
+   "name": "tipekans_lockpick_exchange",
+   "label": "Thieves swapped lockpick for rope; opens Ballroom entrance and Lord Zzuf statue",
+   "group": "Quest flags, L7: Tipekans",
+   "offset": 332,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x56; L7: Tipekans; L5: The Enclave; map18 f0x84b e25@cell:93: with Emerald Lockpick 0xdc, take it, +50000 exp, set 1, give rope; map18 e10@dir1:39,dir3:3b: if 1 and alone, secret Ballroom entrance; map12 f0xba4 e48: if 1 statue of Lord Zzuf moves, passage opens"
+  },
+  {
+   "name": "dragon_feud_reward",
+   "label": "Proof of kill (item 0x84) given to Gambril or Osterog; reward received",
+   "group": "Quest flags, L8: Dragon's Flame",
+   "offset": 334,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "rewarded by one dragon"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x58; L8: Dragon's Flame; map21 f0xd3f e40@b04f:16 (Gambril) and f0xfa2 e42@b04f:9d (Osterog): if HasItem 0x84 set 1, exp/gold/items, 'nemesis is finally dead'; if 1 dragon 'lumbers away'. One shared flag for both"
+  },
+  {
+   "name": "flame_debris_door",
+   "label": "Stubborn-door debris trap triggered once",
+   "group": "Quest flags, L8: Dragon's Flame",
+   "offset": 390,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "triggered"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x90; L8: Dragon's Flame; map21 f0x1497 e47@cell:10: if 0 'debris falls and injures you', Str check, set 1"
+  },
+  {
+   "name": "flame_pickpocket",
+   "label": "Pickpocket thief event done",
+   "group": "Quest flags, L8: Dragon's Flame",
+   "offset": 391,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x91; L8: Dragon's Flame; map21 f0x15a3 e49@dir3:bc: if 0 thief picks pocket unless Initiative check, set 1; then 'elude a thief'"
+  },
+  {
+   "name": "flame_mana_drain",
+   "label": "Mana-drain chamber triggered",
+   "group": "Quest flags, L8: Dragon's Flame",
+   "offset": 392,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x92; L8: Dragon's Flame; map21 f0x161b e50@cell:f6: if 0 drain mana unless Agility check, set 1"
+  },
+  {
+   "name": "flame_amnesia_walls",
+   "label": "Collapsing-walls amnesia trap (exp loss) triggered",
+   "group": "Quest flags, L8: Dragon's Flame",
+   "offset": 393,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x93; L8: Dragon's Flame; map21 f0x152b e48@cell:0f: if 0 walls collapse, exp loss unless Defense check, set 1; then 'walls fortified'"
+  },
+  {
+   "name": "chessboard_piece_mode",
+   "label": "Dragon's Ire chessboard: current piece/move mode",
+   "group": "Quest flags, L8: Dragon's Ire",
+   "offset": 357,
+   "type": "u8",
+   "enum": {
+    "0": "reset on entering board",
+    "1": "after a square fight",
+    "2": "move mode 2",
+    "3": "move mode 3"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x6f; L8: Dragon's Ire; map20 e6 entering board sets 0; e21@67, e23@68, e50 set 2; e22@66/69 set 3; e48 board squares fight if <=3 then set 1; e18/e20 board-edge exits allowed when 2"
+  },
+  {
+   "name": "dragons_ire_trial_a",
+   "label": "Dragon's Ire trial: 1 = passed portal square, 2 = prowess acknowledged",
+   "group": "Quest flags, L8: Dragon's Ire",
+   "offset": 369,
+   "type": "u8",
+   "enum": {
+    "0": "not started",
+    "1": "entered",
+    "2": "prowess acknowledged (exp)"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x7b; L8: Dragon's Ire; map20 f0x1764 e50@77/78: if 0 set 1, set 0x6f=2, teleport to board; f0x1de e7 fight unless kind3 flags; f0x18af e55@87/88: if 1 set 2 + exp 'Your prowess is acknowledged'; f0x186f e54 solo door needs 2"
+  },
+  {
+   "name": "dragons_ire_trial_b",
+   "label": "Dragon's Ire second solo-door trial state (set elsewhere)",
+   "group": "Quest flags, L8: Dragon's Ire",
+   "offset": 370,
+   "type": "u8",
+   "enum": {
+    "2": "door passable"
+   },
    "confidence": "unknown",
-   "evidence": "224-byte block copied to a global flag array (CGENN ds:9863, DARKSTRT ds:d8bf, FATES ds:3827); accessors FUN_1d88_0721/06ce/0754 index it with kind 2; no named flag found; all zero in samples except the two mode bytes (flag index 0..0x86)"
+   "evidence": "flag 0x7c; L8: Dragon's Ire; map20 f0x1928 e56@dir0:97,dir3:98: alone and flag==2 -> sub_14ec (pass), else blocked; no setter in this range"
+  },
+  {
+   "name": "mage_lesson_watched",
+   "label": "Watched wise old mage's lesson (exp gain)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 335,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x59; L9: Hocus Pocus; map22 f0xee e7@cell:41,45: if 0 AddExp 20000, set 1"
+  },
+  {
+   "name": "hocus_shop1_bought",
+   "label": "Shop purchase made (items 0xce, 0xb8 for gold)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 336,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "bought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5a; L9: Hocus Pocus; map22 f0x45d e29@cell:b8: if 0 set 1, AddGold negative, GiveItem 0xce,0xb8, 'shopkeeper is happy to take your gold'"
+  },
+  {
+   "name": "hocus_weapon_shop_bought",
+   "label": "Weapons bought (items 0x4c, 0x3c, 0x47)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 337,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "bought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5b; L9: Hocus Pocus; map22 f0x4d6 e30@cell:ba: if 0 set 1, pay gold, give weapons"
+  },
+  {
+   "name": "hocus_item_shop_bought",
+   "label": "Helpful items bought (0x9b, 0x99, 0x8e)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 338,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "bought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5c; L9: Hocus Pocus; map22 f0x55b e31@cell:d8: if 0 set 1, pay gold, give items"
+  },
+  {
+   "name": "hocus_scroll_shop_bought",
+   "label": "Scrolls bought (0xad, 0xaa)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 339,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "bought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5d; L9: Hocus Pocus; map22 f0x5e0 e32@cell:da: if 0 set 1, pay gold, give scrolls"
+  },
+  {
+   "name": "hocus_lost_quest_bag",
+   "label": "Lost quest bag of gold found (25000)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 340,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5e; L9: Hocus Pocus; map22 f0x659 e33@cell:94: if 0 set 1, AddGold 25000"
+  },
+  {
+   "name": "hocus_scroll_cache",
+   "label": "Scroll cache searched (0xb1, 0xaf, 0xac)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 341,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5f; L9: Hocus Pocus; map22 f0x6ac e34@cell:03: if 0 set 1, give 3 scrolls"
+  },
+  {
+   "name": "taemen_spell_taught",
+   "label": "Taemen taught spell (Dissipate; spell id by class)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 342,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taught"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x60; L9: Hocus Pocus; map22 f0xcc5 e43@b04f:1a: if 0 set 1, TeachSpell 0x10/0x7/0x5 by class"
+  },
+  {
+   "name": "saronel_gift",
+   "label": "Saronel's gift received (Agility +2, Defense +1)",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 343,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x61; L9: Hocus Pocus; map22 f0xd94 e44@b04f:3a: if 0 set 1, AddAttr(2,+2), AddAttr(1,+1)"
+  },
+  {
+   "name": "geadiax_challenge_reward",
+   "label": "Geadiax challenge completed, class reward received",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 344,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "rewarded"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x62; L9: Hocus Pocus; map22 f0xe1b e45@b04f:67: if 0 set 1, class-specific spell/skill/items + exp 'completing your challenge'"
+  },
+  {
+   "name": "faerlun_ingredients",
+   "label": "Faerlun's bat wing / eye of newt errand done; opens his passage",
+   "group": "Quest flags, L9: Hocus Pocus",
+   "offset": 366,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "ingredients delivered",
+    "2": "set at cell 0x0f (passage state)"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x78; L9: Hocus Pocus; map22 f0x7dd e39@b04f:fe: Faerlun opens the wall if 1 or 2, else trades dragon skin 0x84 or asks for items; e41 Morai and e42 Keoana set 1 when kind3 errand flags complete; e56@cell:0f sets 2 and clears kind3 errand flags"
+  },
+  {
+   "name": "unity_ring_lamp_door",
+   "label": "Told of Unity Ring; lamp-lit hidden door in Hopeless Hallways usable",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 395,
+   "type": "u8",
+   "enum": {
+    "0": "not told / ring used",
+    "1": "told, hidden door active"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x95; L9: Hopeless Hallways; L10: Concordia; map25 f0xb13 e30@dir3:67 without ring 0xfe sets 1 (and clears 0xcf); map23 f0x166 e14@dir2:78: if 1, lamp puzzle (items/spell) opens secret entrance; map25 f0xfbd e35 using the ring sets 0x36=1 and this to 0"
+  },
+  {
+   "name": "better_end_fountain",
+   "label": "Drank Fountain of the Better End (cleric quest done)",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 396,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "drunk"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x96; L9: Hopeless Hallways; L10: Concordia; map23 f0x891 e35@dir1:0f: if 0 set 1, +attrs, exp, sets 0x97/0x99/0x9a/0x9b=2; clerics e28..e31 react to it; e61 door blocks once 1; map25 f0x172 e9 door opens if set"
+  },
+  {
+   "name": "star_door_key",
+   "label": "Star-hole door key from Elf Cleric; 2 after fountain",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 397,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "key given, door opens",
+    "2": "quest done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x97; L9: Hopeless Hallways; map23 f0x6f6 e30@b04f:3d Elf Cleric sets 1; f0x5b3 e27@dir2:d0 star door opens if 1 (or 0x36 set); f0x891 sets 2"
+  },
+  {
+   "name": "first_door_open",
+   "label": "Elf Cleric opened the first door",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 398,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "open"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x98; L9: Hopeless Hallways; map23 f0x775 e31@b04f:b2 sets 1 'first door will now open'; f0x350 e22@dir0:f3 door unlocks if 1"
+  },
+  {
+   "name": "hallways_door_stage1",
+   "label": "Cleric door chain stage 1 active (door/pits)",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 399,
+   "type": "u8",
+   "enum": {
+    "0": "inactive",
+    "1": "stage 1 active",
+    "2": "chain completed"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x99; L9: Hopeless Hallways; map23 f0x7f4 e32@dir0:03 sets 1 'next door is now open'; f0x81b e33 clears it; f0x3b3/f0x194e doors open if 1; pits e51/e55 behave per value; f0x891 sets 2"
+  },
+  {
+   "name": "hallways_door_stage2",
+   "label": "Cleric door chain stage 2 active",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 400,
+   "type": "u8",
+   "enum": {
+    "0": "inactive",
+    "1": "stage 2 active",
+    "2": "chain completed"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x9a; L9: Hopeless Hallways; map23 f0x81b e33@dir0:07 sets 1 (clears 0x99); f0x856 e34 clears it; f0x444 e24 lock opens if 1; pits e50/e53/e54 depend on it; f0x891 sets 2"
+  },
+  {
+   "name": "hallways_door_stage3",
+   "label": "Cleric door chain stage 3 active",
+   "group": "Quest flags, L9: Hopeless Hallways",
+   "offset": 401,
+   "type": "u8",
+   "enum": {
+    "0": "inactive",
+    "1": "stage 3 active",
+    "2": "chain completed"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x9b; L9: Hopeless Hallways; map23 f0x856 e34@dir0:0b sets 1 (clears 0x9a); f0x4a7 e25 door opens if 1; pits e49/e52/e54/e55 depend on it; f0x891 sets 2"
+  },
+  {
+   "name": "concordia_chaos_reward_taken",
+   "label": "Concordia: Chaos-aligned reward room looted",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 295,
+   "type": "u8",
+   "enum": {
+    "0": "not taken",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x31; L10: Concordia; map25 f0x1b8e e55@cell:07: if 0, lacking items 0x39/0xc, alignment Chaos(1): 'Well done, child of Chaos', gives 0x39, 0xc, 0x3b, sets 1"
+  },
+  {
+   "name": "concordia_chaotic_harmony_penalty",
+   "label": "Concordia: Chaotic character punished on the Harmony path (strength loss once)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 296,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "penalized (next time lethal)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x32; L10: Concordia; map25 f0x11e4 e37@cell:29,2a,39,49,59: Chaos align, Concordia not done (0x36): first time strength -2 and set 1; afterwards killed"
+  },
+  {
+   "name": "concordia_harmony_reward_taken",
+   "label": "Concordia: Harmony-aligned reward room looted",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 297,
+   "type": "u8",
+   "enum": {
+    "0": "not taken",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x33; L10: Concordia; map25 f0x1ae5 e54@cell:09: if 0, Harmony align: 'Well done, child of Harmony', gives 0x21, 0x89, 0x46, sets 1"
+  },
+  {
+   "name": "concordia_harmonic_chaos_penalty",
+   "label": "Concordia: Harmonic character punished on the Chaos path (strength loss once)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 298,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "penalized (next time lethal)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x34; L10: Concordia; map25 f0x10f9 e36@cell:18..58: Harmony align, 0x36 clear: first time strength -2 and set 1; afterwards killed"
+  },
+  {
+   "name": "concordia_door_of_harmony_entered",
+   "label": "Concordia: Harmony character passed the Door of Harmony with the Unity Ring",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 299,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "Harmony path begun"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x35; L10: Concordia; map25 f0xdeb e33@dir0:69: Harmony align with ring 0xfe: sets 1 ('Door of Harmony, suffer much'); f0xc13 e32 bars it from the Chaos door; f0x530 e17 ring-branded door; f0xfbd e35 union needs 0x35 or 0x37; f0x13b5 e45 hint skipped"
+  },
+  {
+   "name": "concordia_complete_unity",
+   "label": "Concordia complete: Harmony and Chaos united (Unity Ring consumed)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 300,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "complete"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x36; L10: Concordia; L9: Hopeless Hallways; map25 f0xfbd e35@cell:08: with ring 0xfe and 0x35/0x37: heals brand, takes 0xfe, big exp, stats, sets 1 (also flag 0x95=0); opens many Concordia doors (e2 to Pandemonium, e15, e17, e56) and disables penalties; map23 f0x1334 e47 gives the Unity Ring 0xfe while 0; map23 e26 'Finish Concordia and you may pass', e27 star door"
+  },
+  {
+   "name": "concordia_door_of_chaos_entered",
+   "label": "Concordia: Chaos character passed the Door of Chaos with the Unity Ring",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 301,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "Chaos path begun"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x37; L10: Concordia; map25 f0xc13 e32@dir0:68: Chaos align with ring 0xfe: sets 1 ('Door of Chaos'); f0xdeb e33 bars it from the Harmony door; f0x41b e15 brand door; f0xfbd e35, f0x13b5 e45"
+  },
+  {
+   "name": "concordia_ring_brand_door_opened",
+   "label": "Concordia: Unity Ring branded your hand to unlock a locked door",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 302,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "branded, door open"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x38; L10: Concordia; map25 f0x41b e15@dir1:05 (brand 'Chaos') and f0x530 e17@dir0:29 (brand 'Harmony'): using ring 0xfe with 0x37/0x35 set and 0x38 clear: exp, -2 str/-2 attr1, sets 1; later passes open"
+  },
+  {
+   "name": "unity_step1",
+   "label": "Concordia: first step toward Unity (opens door at a8)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 449,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xcb; L10: Concordia; map25 f0xa9f e29@dir3:ee sets 1 if 0xcb/0xcc/0xcd clear, 'first step toward Unity'; f0x1cc e10@dir0:a8 door opens if 1; cleared by e31 when step 2 is done"
+  },
+  {
+   "name": "unity_step2",
+   "label": "Concordia: second step toward Unity (opens door at aa)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 450,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xcc; L10: Concordia; map25 f0xba1 e31@dir1:6a sets 1, clears 0xcb and 0xcd, 'second step complete, third three rooms west'; f0x21d e11@dir0:aa door ajar if 1; blocks e29"
+  },
+  {
+   "name": "unity_ring_door_a7",
+   "label": "Concordia door at a7 unlocked with the Unity Ring (0xfe)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 451,
+   "type": "u8",
+   "enum": {
+    "0": "locked",
+    "1": "unlocked"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xcd; L10: Concordia; map25 f0x26e e12@dir0:a7: if 1 'already open', else UsedItemIn(0xfe) 'Unity Ring unlocks the door' + SetFlag (args elided); cleared by e31; blocks e29"
+  },
+  {
+   "name": "concordia_route_88",
+   "label": "Concordia one-hot route selector: door at 88 opened last",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 452,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "selected"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xce; L10: Concordia; map25 f0x640 e18@88 sets 1, clears 0xcf/0xd0 (others do the reverse: e19@8a, e20@87); opens walls at 78 (e24), 79 (e26), 7a (e27)"
+  },
+  {
+   "name": "concordia_route_8a",
+   "label": "Concordia one-hot route selector: door at 8a opened last",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 453,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "selected"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xcf; L10: Concordia; map25 f0x6a0 e19@8a sets 1, clears 0xce/0xd0; opens walls at 77 (e21), 78 (e24), 79 (e26), 7a (e28); cleared by e30@67 (Unity Ring hint, which sets 0x95)"
+  },
+  {
+   "name": "concordia_route_87",
+   "label": "Concordia one-hot route selector: door at 87 opened last (Chaos/Harmony doors)",
+   "group": "Quest flags, L10: Concordia",
+   "offset": 454,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "selected"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xd0; L10: Concordia; map25 f0x700 e20@87 sets 1, clears 0xce/0xcf; opens 77 (e22), the Chaos door 78 (e23, align 1) and Harmony door 79 (e25, align 0); cleared at Door of Chaos e32@68"
+  },
+  {
+   "name": "babble_word_puzzle_unlocked",
+   "label": "Halls of Babble: knew enough languages to start the final word puzzle",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 284,
+   "type": "u8",
+   "enum": {
+    "0": "not yet",
+    "1": "puzzle room open"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x26; L10: Halls of Babble; map24 f0x119f e39@cell:07: solo; if 0xc8==1 already solved; reads the 8 language flags 0x27..0x2e, if they qualify sets 0x26=1; else 'need to learn more about languages'"
+  },
+  {
+   "name": "babble_lang_elemental_island",
+   "label": "Halls of Babble language state for one race tongue (switch word ELEMENTAL/ISLAND)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 285,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x27; L10: Halls of Babble; map24 f0x93a e31@dir2:19: word switch shows ELEMENTAL/ISLAND (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved"
+  },
+  {
+   "name": "babble_lang_wizard_palace",
+   "label": "Halls of Babble language state for one race tongue (switch word WIZARD/PALACE)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 286,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x28; L10: Halls of Babble; map24 f0xd4c e36@dir2:1f: word switch shows WIZARD/PALACE (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved; also f0x574 e20 'ELF' gateway works only when 0x28==1 (told by the babblers), f0x16bb e46@cell:9b 'something is different' when 1; likely the Elf tongue"
+  },
+  {
+   "name": "babble_lang_harmony_guild",
+   "label": "Halls of Babble language state for one race tongue (switch word HARMONY/GUILD)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 287,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x29; L10: Halls of Babble; map24 f0xa0b e32@dir2:1a: word switch shows HARMONY/GUILD (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved; gnome f0x2ad tests IsSet(0x29)"
+  },
+  {
+   "name": "babble_lang_volcano_abyss",
+   "label": "Halls of Babble language state for one race tongue (switch word VOLCANO/ABYSS)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 288,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x2a; L10: Halls of Babble; map24 f0xbad e34@dir2:1d: word switch shows VOLCANO/ABYSS (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved"
+  },
+  {
+   "name": "babble_lang_twinion_legend",
+   "label": "Halls of Babble language state for one race tongue (switch word TWINION/LEGEND)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 289,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x2b; L10: Halls of Babble; map24 f0xc7e e35@dir2:1e: word switch shows TWINION/LEGEND (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved"
+  },
+  {
+   "name": "babble_lang_asp_longbow",
+   "label": "Halls of Babble language state for one race tongue (switch word ASP/LONGBOW)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 290,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x2c; L10: Halls of Babble; map24 f0x869 e30@dir2:18: word switch shows ASP/LONGBOW (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved; f0x44 e1@b04f:4a..7b Gremlin speaker ('You now speak Gremlin') sets 1->2; likely the Gremlin tongue"
+  },
+  {
+   "name": "babble_lang_chaotic_myth",
+   "label": "Halls of Babble language state for one race tongue (switch word CHAOTIC/MYTH)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 291,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x2d; L10: Halls of Babble; map24 f0xadc e33@dir2:1c: word switch shows CHAOTIC/MYTH (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved; set 1 by f0x44 e1 (when 0x2c==1) and by f0x1c91 e58@dir0:48 race-keyed door"
+  },
+  {
+   "name": "babble_lang_erebus_magma",
+   "label": "Halls of Babble language state for one race tongue (switch word EREBUS/MAGMA)",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 292,
+   "type": "u8",
+   "enum": {
+    "0": "unknown tongue",
+    "1": "heard from its speakers",
+    "2": "speaks it (switch usable)",
+    "4": "word puzzle solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x2e; L10: Halls of Babble; map24 f0x793 e29@dir2:17: word switch shows EREBUS/MAGMA (kind-3 word state) only when ==2, else a Latin tag; read by the gnome translator f0x2ad e12 and puzzle gate f0x119f e39; f0xe2f e37 sets all of 0x27..0x2e to 4 when the puzzle is solved"
+  },
+  {
+   "name": "babble_word_puzzle_stage",
+   "label": "Halls of Babble word puzzle stage",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 445,
+   "type": "u8",
+   "enum": {
+    "0": "start",
+    "1": "first word pending",
+    "2": "first word set",
+    "3": "second word set, solved"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xc7; L10: Halls of Babble; map24 f0xe2f e37@dir1:0f: first word checks kind3 1..8 -> reward, set 2; stage 2 checks kind3 9..0x10 -> gold/str/exp, set 3, set 0xc8=1, opens exit; skipped once 0xc8 set"
+  },
+  {
+   "name": "babble_puzzle_solved",
+   "label": "Halls of Babble puzzle solved; magic winds drop you into Concordia",
+   "group": "Quest flags, L10: Halls of Babble",
+   "offset": 446,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "solved"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xc8; L10: Halls of Babble; map24 e37 sets 1 with 0xc7=3; f0x112e e38@cell:0b alone -> Teleport(0xa02 cell e1) into Concordia; f0x119f e39@cell:07 'already solved this puzzle'"
+  },
+  {
+   "name": "pandemonium_dead_adventurer_loot",
+   "label": "Took items from dead adventurer's remains in Pandemonium (05)",
+   "group": "Quest flags, L10: Pandemonium",
+   "offset": 425,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb3; L10: Pandemonium; map26 f0x307 e14@cell:05: if clear set 1, GiveItem 0xb8 x2, 0xaf"
+  },
+  {
+   "name": "pandemonium_scroll_wizard",
+   "label": "Bought scrolls from the wizard in Pandemonium (10000 gold)",
+   "group": "Quest flags, L10: Pandemonium",
+   "offset": 426,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "bought"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb4; L10: Pandemonium; map26 f0x3da e18@b04f:18: if clear set 1, GiveItem 0xab,0xaa,0xb3, AddGold(-10000), wizard selling scrolls"
+  },
+  {
+   "name": "pandemonium_water_item",
+   "label": "Grabbed item bobbing in the water in Pandemonium (39)",
+   "group": "Quest flags, L10: Pandemonium",
+   "offset": 428,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb6; L10: Pandemonium; map26 f0x5d5 e25@cell:39: if clear set 1, GiveItem(0xce)"
+  },
+  {
+   "name": "pandemonium_lava_bag",
+   "label": "Freed bag from hardened lava in Pandemonium (5a)",
+   "group": "Quest flags, L10: Pandemonium",
+   "offset": 429,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb7; L10: Pandemonium; map26 f0x7c3 e30@cell:5a: if clear set 1, GiveItem 0xe,0x98,0xbc,0x90"
+  },
+  {
+   "name": "pandemonium_ledge_items",
+   "label": "Took forgotten items on wall ledge in Pandemonium (c4)",
+   "group": "Quest flags, L10: Pandemonium",
+   "offset": 430,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb8; L10: Pandemonium; map26 f0xb99 e41@cell:c4: if clear set 1, GiveItem 0xad,0x5c,0xa7,0xc3"
+  },
+  {
+   "name": "pandemonium_alcove_treasure",
+   "label": "Found treasure under a rock in alcove in Pandemonium (fd)",
+   "group": "Quest flags, L10: Pandemonium",
+   "offset": 431,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb9; L10: Pandemonium; map26 f0x1018 e47@cell:fd: if clear set 1, GiveItem 0x88,0xbc,0x97,0xa4"
+  },
+  {
+   "name": "thorzil_fountain_flowing",
+   "label": "Thorzil fountain puzzle: hidden fountain water flowing",
+   "group": "Quest flags, L11: Trials",
+   "offset": 404,
+   "type": "u8",
+   "enum": {
+    "0": "not flowing / reset",
+    "1": "flowing"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x9e; L11: Trials; L11: Tribulations; map27 f0x11fc e58 and map28 f0xa7f e42: poisoned fountain, if flags 0xa7/0xa4/0xa5 all 1 set 1 'flowing water where none was before'; map27 e60/e73 and map28 e37/e39/e44/e46 need 1; destroyed fountains (map27 e64, map28 e45) and map28 e1 entry reset it to 0"
+  },
+  {
+   "name": "thorzil_fountain_choice_a",
+   "label": "Thorzil fountain path choice A (first of 0x9f/0xa0/0xa1)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 405,
+   "type": "u8",
+   "enum": {
+    "0": "not chosen",
+    "1": "chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x9f; L11: Trials; L11: Tribulations; map27 f0xcee e48@cell:f0 sets 1 if none of 0x9f/0xa0/0xa1 set (e47@e1 sets 0xa0, e49@f2 sets 0xa1); with 1 Paradise fountain heals and Lingolf is a trap; needed for nabbing Thorzil (e60); reset by map28 e1"
+  },
+  {
+   "name": "thorzil_hides_trib_fountain_8c",
+   "label": "Thorzil hideout choice A: he hides in Tribulations fountain at 8c",
+   "group": "Quest flags, L11: Trials",
+   "offset": 406,
+   "type": "u8",
+   "enum": {
+    "0": "not chosen",
+    "1": "chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xa0; L11: Trials; L11: Tribulations; map27 f0xc95 e47@cell:e1 sets 1 only if 0x9f/0xa0/0xa1 all clear (3-way one-hot with e48->0x9f, e49->0xa1); map28 f0x90f e40@8c: catch Thorzil there if a0 and a3..a6 set; map28 f0xa13 e41@7e fountain heals if a0 else Juvalad throws you off; reset by map28 e1@dir2:14"
+  },
+  {
+   "name": "thorzil_hides_trib_fountain_9c",
+   "label": "Thorzil hideout choice C: he hides in Tribulations dry fountain at 9c",
+   "group": "Quest flags, L11: Trials",
+   "offset": 407,
+   "type": "u8",
+   "enum": {
+    "0": "not chosen",
+    "1": "chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xa1; L11: Trials; L11: Tribulations; map27 f0xd47 e49@cell:f2 sets 1 if 0x9f/0xa0/0xa1 all clear; map28 f0xb26 e43@9c: catch Thorzil if a1 and a3,a5,a6,a7 set (sets 0xa8); map27 e55/e56/e73 and map28 e39 pick heal vs Thorzil trap by a1/0x9f; reset by map28 e1"
+  },
+  {
+   "name": "thorzil_dwarf_hint",
+   "label": "Injured dwarf's hint about hidden fountains; later Thorzil ambush",
+   "group": "Quest flags, L11: Trials",
+   "offset": 408,
+   "type": "u8",
+   "enum": {
+    "0": "not met",
+    "1": "helped dwarf, got hint",
+    "2": "Thorzil ambushed you in Tribulations"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa2; L11: Trials; L11: Tribulations; map27 f0x1e4a e80@b04f:4f,dd,ec: needs a5,a7,a4=1 and a2=0, dwarf tells of hidden fountains, set 1; map28 f0x1b3c e69@b04f:70,7d,96,ae: if 1 Thorzil appears, drains HP, set 2; reset by map28 e1"
+  },
+  {
+   "name": "fountain_trials_a2_visited",
+   "label": "Drank poisoned caustic fountain at Trials a2 (Thorzil fountain circuit)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 411,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "visited"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa5; L11: Trials; L11: Tribulations; map27 f0x11a7 e57@cell:a2 sets 1, 'caustic waters poisoned'; with a4,a7 triggers 0x9e (map27 e58, map28 e42); required by dwarf hint and Thorzil capture checks; reset by map28 e1"
+  },
+  {
+   "name": "fountain_trials_ce_visited",
+   "label": "Visited reappeared fountain at Trials ce (Thorzil fountain circuit)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 412,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "visited"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa6; L11: Trials; L11: Tribulations; map27 f0x12c2 e60@cell:ce: needs 0x9e, sets 1; Thorzil caught here if a3,a4,a5,a6,a7 and 0x9f set (sets 0xa8); also required by map28 e40/e43; reset by map28 e1"
+  },
+  {
+   "name": "thorzil_captured",
+   "label": "Thorzil caught; he opens the portal to his poison stash",
+   "group": "Quest flags, L11: Trials",
+   "offset": 414,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "captured"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa8; L11: Trials; L11: Tribulations; set 1 by map27 e60@ce and map28 e43@9c when Thorzil is nabbed; map28 f0x1038 e53@b04f:07 Thorzil leads you to stash (sets 0xa9); map28 e68@04 alone+a8: 'proceed south to meet your fate'; map27 e18@dir0:a9 portal check; reset by map28 e1"
+  },
+  {
+   "name": "celestia_path_b",
+   "label": "Celestia switch puzzle: entered via portal e2 (selects switch order)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 416,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "this path chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xaa; L11: Trials; L11: Tribulations; map27 f0x9e e2@dir0:08 sets 1 only if 0xab/0xac/0xad clear, then teleports; one-hot with 0xab(e1),0xac(e3),0xad(e4); guard-room switch funcs (map27 e51/e53/e65, map28 e48/e56/e58) advance 0xae/0xb0 only for specific path flags; cleared by map27 e42@38 (Pluthros intro)"
+  },
+  {
+   "name": "celestia_path_a",
+   "label": "Celestia switch puzzle: entered via portal e1 (selects switch order)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 417,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "this path chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xab; L11: Trials; L11: Tribulations; map27 f0x25 e1@dir0:07,dir1:9c sets 1 if 0xaa/0xac/0xad clear, teleports; one-hot path selector checked by the six guard-room switch funcs; cleared by map27 e42@38"
+  },
+  {
+   "name": "celestia_path_c",
+   "label": "Celestia switch puzzle: entered via portal e3 (selects switch order)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 418,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "this path chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xac; L11: Trials; L11: Tribulations; map27 f0x117 e3@dir0:0b sets 1 if 0xaa/0xab/0xad clear, teleports; one-hot path selector; also map27 e37 passes only once a path is chosen; cleared by map27 e42@38"
+  },
+  {
+   "name": "celestia_path_d",
+   "label": "Celestia switch puzzle: entered via portal e4 (selects switch order)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 419,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "this path chosen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xad; L11: Trials; L11: Tribulations; map27 f0x18f e4@dir0:0c,dir1:57 sets 1 if 0xaa/0xab/0xac clear, teleports; one-hot path selector; cleared by map27 e42@38"
+  },
+  {
+   "name": "celestia_switches_harmony",
+   "label": "Harmony (align 0) lock-switch sequence progress for Celestia's cell",
+   "group": "Quest flags, L11: Trials",
+   "offset": 420,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "1": "first switch",
+    "2": "second switch",
+    "3": "all three set (cell route open)",
+    "5": "wrong order, Pluthros foiled it"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xae; L11: Trials; L11: Tribulations; align-0 guard rooms map27 e51@b04f:66 (1->2), e53@b04f:5a (2->3), map28 e48@b04f:31 (2->3) advance only for the right path flag 0xaa..0xad; 3 lets map27 e5@dir2:10/e10@dir0:30 teleport to the cell; 5 triggers Pluthros taunt (map27 e81, map28 e70); cleared by map27 e42@38"
+  },
+  {
+   "name": "demonia_fountain_blessing",
+   "label": "Harmony character drank Demonia Fountain; weapon glow distracts kaalroth guard",
+   "group": "Quest flags, L11: Trials",
+   "offset": 421,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "blessed"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xaf; L11: Trials; L11: Tribulations; map27 f0x1071 e54@cell:13 sets 1 for align 0 (heal/mana); map28 f0xe04 e49@b04f:0d align 0: if set guard watches rainbow-glowing weapon, else guard kills you; cleared by map27 e42@38"
+  },
+  {
+   "name": "celestia_switches_chaos",
+   "label": "Chaos (align 1) lock-switch sequence progress for Celestia's cell",
+   "group": "Quest flags, L11: Trials",
+   "offset": 422,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "1": "first switch",
+    "2": "second switch",
+    "3": "all three set (cell route open)",
+    "5": "wrong order, Pluthros foiled it"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xb0; L11: Trials; L11: Tribulations; align-1 guard fights map28 e56@b04f:35 (1->2), e58@b04f:49 (2->3), map27 e65@b04f:06 (2->3), gated by path flags 0xaa..0xad; 3 opens teleport in map27 e5/e10; 5 = Pluthros taunt (map27 e81, map28 e70); cleared by map27 e42@38"
+  },
+  {
+   "name": "elemental_weapon_found",
+   "label": "Found the class-specific elemental weapon (Ice Flame, item 0xc9)",
+   "group": "Quest flags, L11: Trials",
+   "offset": 424,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "found"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb2; L11: Trials; L11: Tribulations; map27 f0xec6 e52@cell:cd (class 5/2) sets 1, AddExp, GiveItem(0xc9) 'Ice Flame'; map28 e51@ed (class 1/3) and e52@2a (class 4/0) via sub 0x1cb4 same; re-gives if lost; map28 e36@b04f:57 hint shown while clear"
+  },
+  {
+   "name": "fountain_trib_d1_visited",
+   "label": "Visited reappeared dry fountain at Tribulations d1 (Thorzil fountain circuit)",
+   "group": "Quest flags, L11: Tribulations",
+   "offset": 409,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "visited"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa3; L11: Tribulations; L11: Trials; map28 f0xc9c e46@cell:d1: if 0x9e (hidden fountains reappeared) set 1, 'dry basin'; required by map28 e40/e43 and map27 e60 to catch Thorzil; reset by map28 e1"
+  },
+  {
+   "name": "fountain_trib_9c_visited",
+   "label": "Visited dry fountain at Tribulations 9c (Thorzil fountain circuit)",
+   "group": "Quest flags, L11: Tribulations",
+   "offset": 410,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "visited"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa4; L11: Tribulations; L11: Trials; map28 f0xb26 e43@cell:9c sets 1 on entry; with a5,a7 makes hidden fountains reappear (map27 e58, map28 e42 set 0x9e); prerequisite for dwarf hint (map27 e80) and Thorzil capture; reset by map28 e1"
+  },
+  {
+   "name": "fountain_trib_8c_visited",
+   "label": "Visited Tribulations fountain at 8c (Thorzil fountain circuit)",
+   "group": "Quest flags, L11: Tribulations",
+   "offset": 413,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "visited"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa7; L11: Tribulations; L11: Trials; map28 f0x90f e40@cell:8c sets 1; map27 f0xc42 e45@b04f:d1 herald announcing the Thorzil hunt shows only while clear; needed for 0x9e trigger (map27 e58, map28 e42), dwarf hint, capture; reset by map28 e1"
+  },
+  {
+   "name": "thorzil_stash_won",
+   "label": "Defeated poison-stash guards and got the stash item (0xca)",
+   "group": "Quest flags, L11: Tribulations",
+   "offset": 415,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "won"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xa9; L11: Tribulations; map28 f0x1038 e53@b04f:07: with 0xa8 set, Thorzil shows the stash, set 1, AddExp, SetLoot(0xca,...); if already 1 and item 0xca lost, guards and flask again"
+  },
+  {
+   "name": "celestia_resolved_hopes_fury",
+   "label": "Celestia freed (Harmony) or locked in (Chaos); got Hope's Fury medallion (0xc6)",
+   "group": "Quest flags, L11: Tribulations",
+   "offset": 423,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xb1; L11: Tribulations; map28 f0xe73 e50@b04f:e4: align 0 frees Celestia, align 1 locks her in; both set 1, AddExp, GiveItem(0xc6) Hope's Fury; if already 1 and item lost, re-gives 0xc6"
+  },
+  {
+   "name": "final_portal_unlocked",
+   "label": "Took Dissemination jeweled teleport; Main Entrance portal to final challenge opens",
+   "group": "Quest flags, L12: Dissemination",
+   "offset": 440,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "unlocked"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xc2; L12: Dissemination; L1: Main Entrance; map31 f0xa1d e19@dir0:89 sets 1 then Teleport(0xc02 cell ff) 'final confrontation, the Queen awaits'; map1 f0x775 e19@cell:04 alone+set -> portal into the final challenge, else teleported back"
+  },
+  {
+   "name": "dissemination_rod_first_loot",
+   "label": "First Erebus-fiend fight loot with the Rod (0xfd) taken",
+   "group": "Quest flags, L12: Dissemination",
+   "offset": 441,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xc3; L12: Dissemination; map31 f0x377 e9@b04f:cb: without item 0xfd, if clear SetLoot(0xfd,0xce,0xab,10000 gold) and set 1; later only SetLoot(0xfd, 5000); fight with Erebus fiends"
+  },
+  {
+   "name": "rod_of_dissemination_charge",
+   "label": "Rod of Dissemination active; counts walls/statues dispelled (fades at 12)",
+   "group": "Quest flags, L12: Dissemination",
+   "offset": 442,
+   "type": "u8",
+   "enum": {
+    "0": "rod inactive",
+    "1": "rod ignited/restored",
+    "n": "active, n-1 dispels used (limit 12)"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xc4; L12: Dissemination; map31 f0x12b1 e45@dir0:cb sets 1 when holding 0xfd ('Rod ignites'); f0x2f0 e6@cell:48 sets 1 (rod restored at its source); e2 walls / e10 statues: if set and item 0xfd used, value<12 -> dispel, set flag to GetFlag-derived value (increment); else 'powers faded', back to source"
+  },
+  {
+   "name": "ieoa_verse_heard",
+   "label": "Heard twin Ieoa's half of the chant for the secret wall",
+   "group": "Quest flags, L12: Dissemination",
+   "offset": 443,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "heard"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xc5; L12: Dissemination; map31 f0x5ec e12@b04f:a1: after meeting Aoei (kind3 0x2 or 0xc6), Ieoa gives his rhyme, set 1; f0x20f e4@dir2:ac opens secret wall if 0xc5 and 0xc6 both 1, one alone -> 'missing part of the ritual'"
+  },
+  {
+   "name": "aoei_verse_heard",
+   "label": "Heard twin Aoei's half of the chant (read only; no setter found)",
+   "group": "Quest flags, L12: Dissemination",
+   "offset": 444,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "heard"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xc6; L12: Dissemination; map31 e4@dir2:ac needs 0xc5 and 0xc6; e12 (Ieoa) and f0x6e1 e13@b04f:ae (Aoei) test it, but Aoei's verse sets only kind3 flags 1/2; no kind-2 SetFlag of 0xc6 found (possible script bug)"
+  },
+  {
+   "name": "dissemination_sword_fight",
+   "label": "Won the beasts' sword (item 0x11) fight in Dissemination (54)",
+   "group": "Quest flags, L12: Dissemination",
+   "offset": 455,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xd1; L12: Dissemination; map31 f0xe91 e32@b04f:54: if clear SetLoot(0x11,0xb8,0xb8,0x18,0x7f,25000 gold), set 1; fight always"
+  },
+  {
+   "name": "gateway_reached",
+   "label": "Reached the Gateway portal at the end of the first chapter",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 278,
+   "type": "u8",
+   "enum": {
+    "0": "not reached",
+    "1": "Gateway reached"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x20; L12: The Gateway; L3: Queen's Palace; L1: Main Entrance; map32 f0x1504 e54@dir2:88: if 0 sets 1 and prints the Gateway / Shaddax text; else 'future is not yours to see yet', teleport to main entrance; map8 f0xf96 e45 nameplate shows the Queen's name when 1 ('Reserved for' otherwise); map1 f0x4bd e12 prints 'northward, onward to destiny' only while 0; map8 f0x3 e0@b04f:8e checks ==1"
+  },
+  {
+   "name": "queen_defeated_game_won",
+   "label": "Game won: mad Queen Aeowyn defeated at the Gateway (same hook index as Yserbius hero flag)",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 352,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "won"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6a; L12: The Gateway; map32 f0x692 e13@cell:88: while 0xbf==0 sets 0xdf=2, prints the victory text, sets 0xbf=1 and 0x6a=1, big exp/gold, +3 attrs 0-3, TeachSpell(4,6). FATES flag setter (4E32:000E file seg 0e32) calls 1F71:0039 when index 0x6a is written, as DARKSTRT does"
+  },
+  {
+   "name": "gateway_final_path_open",
+   "label": "Gateway statue walls lead to last pathway of challenge (no setter in scripts)",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 436,
+   "type": "u8",
+   "enum": {
+    "0": "images of unfinished future history",
+    "1": "statue wall teleports to final path"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xbe; L12: The Gateway; map32 f0x1431 e51@dir3:be,ce,de,ee: IsSet -> Teleport(0xc02 cell 96) 'last pathway... meet your Fate', else 'future history yet to be completed'; also read by map32 e22@cell:67 (listing absent); no SetFlag found in any map script | map32 f0xaa2 e22@cell:67 (checked): if set \"You have already defeated the Queen\", else a leader is chosen (kind 3 flag 5) and teleport 0xc02 cell 77 alone; no script sets 0xbe, so it is probably meant to be set with 0xbf (script bug or set by unscripted code)"
+  },
+  {
+   "name": "queen_defeat_reward_taken",
+   "label": "Gateway: Queen-defeated reward granted (one-shot)",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 437,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xbf; L12: The Gateway; map32 f0x692 e13@cell:88 tests 0xbf==0, then grants exp/gold/attributes/spell and sets 0xbf=1, 0x6a=1, 0xdf=2"
+  },
+  {
+   "name": "gateway_storm_giant_fight",
+   "label": "Won Gateway statue (Storm Giant) fight reward; cleared on entering Gateway heart",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 438,
+   "type": "u8",
+   "enum": {
+    "0": "available",
+    "1": "taken"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xc0; L12: The Gateway; map32 f0x818 e17@b04f:3d,5c: alone with statue 0xf9 and clear -> turn into Storm Giant, set 1, AddGold 10000, GiveItem 0x11,0xb8,0xab; map32 f0x13f0 e50 sets 0 when entering the heart of The Gateway"
+  },
+  {
+   "name": "gateway_great_hall_seen",
+   "label": "Saw the Gateway's jeweled great hall; enables crystal portal to the heart",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 462,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "seen"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xd8; L12: The Gateway; map32 f0xd54 e36@cell:f7,f8 sets 1 with hall description once; f0x131e e49@dir3:fd alone: if set and holding crystals 0xf3..0xf6 -> teleport to Gateway heart (0xc02 cell cd)"
+  },
+  {
+   "name": "celestial_portal_stage",
+   "label": "Celestial Boundary physical-path portal progress",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 358,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "1": "portals stage 1"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x70; Celestial Boundary; map29 f0x136b e46: portal opens if flag >= cell's required value, then teleport alone; f0x1748 Gratok guide sets 1; f0x23b3 e69 sets 1 after torch-switch check, portal back to start"
+  },
+  {
+   "name": "celestial_pool_treasure",
+   "label": "Clear-pool treasure: 1 = stale-air area visited, 5 = treasure taken",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 359,
+   "type": "u8",
+   "enum": {
+    "0": "not visited",
+    "1": "stale pools seen",
+    "5": "pool treasure taken"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x71; Celestial Boundary; map29 f0xead e31@cell:24 sets 1 if 0; f0x73 e4@cell:02/03/06/16: if flag == per-cell value, treasure + mana, set 5, else 'waters are cloudy'"
+  },
+  {
+   "name": "nimbus_guardians_beaten",
+   "label": "Nimbus of the Fates guardians defeated (set elsewhere)",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 360,
+   "type": "u8",
+   "enum": {
+    "0": "guardians present",
+    "1": "defeated"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x72; Celestial Boundary; map29 f0x252 e9@b04f:9e: if 0 and no Nimbus 0xee, fight guardians; f0x2e4 e10@dir2:9e: if set, take Nimbus 0xee; no setter in this range"
+  },
+  {
+   "name": "eye_and_nimbus_progress",
+   "label": "Eye (compass) guardians fought, then Nimbus of the Fates taken",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 362,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "1": "Eye guardians fought",
+    "2": "Nimbus taken, exp given"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x74; Celestial Boundary; map29 f0x956 e19@b04f:be: Guardians of the Winds defend the Eye (0xf7), set 1; f0x2e4 e10: take Nimbus, if 1 exp, set 2; maze teleports e11..e15/e61 use >1 or Nimbus"
+  },
+  {
+   "name": "celestial_hall_conquered",
+   "label": "Hall conquered (exp reward) and its wall opened",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 363,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "conquered"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x75; Celestial Boundary; map29 f0x252d e70@dir0:1b: if 0 exp, set 1; f0x257b e71: if set open wall, else teleport to start; f0x10d6 e37 fight for item 0xef if 0; Gratok (f0x1748) checks 1/2 for next-phase lines"
+  },
+  {
+   "name": "gratok_guide_stage",
+   "label": "Gratok guide stage counter on the Physical path",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 365,
+   "type": "u8",
+   "enum": {
+    "0": "not met"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x77; Celestial Boundary; map29 f0x1748 e53 (8 cells): compares flag with per-cell stage, speaks next hint, advances (set value shown as 8, likely register); f0x25f5 e74: Torch Room door opens when >=4"
+  },
+  {
+   "name": "celestial_guardian_passed",
+   "label": "'You shall not pass' guardian beaten (cells beyond reached)",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 372,
+   "type": "u8",
+   "enum": {
+    "0": "guardian present",
+    "1": "passed"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x7e; Celestial Boundary; map29 f0x8dd e17@b04f:ca: if 0, loot + fight; f0x1f8b e62@cell:cb,da sets 1"
+  },
+  {
+   "name": "amphora_arena_state",
+   "label": "Amphora beast arena encounter state",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 373,
+   "type": "u8",
+   "enum": {
+    "0": "not started",
+    "1": "first visit",
+    "2": "beasts announced/fought"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x7f; Celestial Boundary; map29 f0xcc9 e28 (6 cells): sets 1 if 0, then 2 with 'Powerful beasts battle here for amphoras!!', random loot + monsters"
+  },
+  {
+   "name": "fountain_corpeus_bonus",
+   "label": "Got Fountain of Corpeus attribute bonus (Celestial Boundary)",
+   "group": "Quest flags, Celestial Boundary",
+   "offset": 439,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "received"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0xc1; Celestial Boundary; map29 f0x14a2 e48@cell:51,6f: if clear AddAttr(0,+1),AddAttr(2,+2), set 1; afterwards only heals"
+  },
+  {
+   "name": "naomi_quest_state",
+   "label": "Naomi (captive in Choronzar's Demesne) trust state; >=3 opens secret passage",
+   "group": "Quest flags, Choronzar's Demesne",
+   "offset": 353,
+   "type": "u8",
+   "enum": {
+    "0": "not met",
+    "3": "Naomi helped (Spirit Bottle given), passage known"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x6b; Choronzar's Demesne; map33 f0xf98 e51@cell:e6: first meeting in cell, sets value (args unresolved), also bumps flag 0x3a; f0x135b e102@cell:d3 island: state 1 gives item 0xfa, state 2 takes Spirit Bottle 0xe7 and she reveals passage to throne room, sets next state; f0x7b8 e17 and f0xd04 e25 require >=3 ('You are not worthy' otherwise); f0x385 jetty hint"
+  },
+  {
+   "name": "choronzar_treasure_pile",
+   "label": "Treasure pile on one of six cells taken",
+   "group": "Quest flags, Choronzar's Demesne",
+   "offset": 354,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 0x6c; Choronzar's Demesne; map33 f0xad7 e21@cell:39..5b: reads flag, compares Pos, 'There is a pile of treasure here!', 3 GiveItem, sets flag (value unresolved, likely cell-coded)"
+  },
+  {
+   "name": "choronzar_throne_progress",
+   "label": "Choronzar throne-room progress (throne drained, secret passage, ambush)",
+   "group": "Quest flags, Choronzar's Demesne",
+   "offset": 356,
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "flag 0x6e; Choronzar's Demesne; map33 f0x6f0 e14@cell:27 throne gives exp and sets; f0x7b8 e17 secret passage sets (needs 0x6b>=3); f0xe44 e32 sets when kind3 flag 6==4; f0x1771 e113 reads with flag 0x39 to surprise Choronzar and start fight; values unresolved, possibly bit mask"
+  },
+  {
+   "name": "choronzar_quest_bits",
+   "label": "Choronzar's Demesne quest progress (bit field; Choronzar defeated etc.)",
+   "group": "Quest flags, Choronzar's Demesne (map33)",
+   "offset": 303,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 0x39; Choronzar's Demesne (map33); The Funhouse (map34); L1: Main Entrance; L8: Dragon's Ire; L10: Halls of Babble; written as GetFlag|bit in map33 f0x1842 e115, f0x187a e116, f0xdc0 e29 (Choronzar's body dissolves); gates map33 e3 teleport, e14 throne exp, e20 jester chamber, e50 gaoler password door, e100 Shadax rift, e111, e113 surprise Choronzar (loot item 0x71); map34 f0x107e e32 Choronzar taunts; map1 f0x3a4, map20 f0x16ae, map24 f0x1c91: carrying item 0x71 with a 0x39 bit set strips all 0x71, gold, kills (cursed item)"
+  },
+  {
+   "name": "choronzar_clues_bits",
+   "label": "Choronzar's Demesne clues/scenes seen (bit field: tomes, scrolls, princess, Shadax)",
+   "group": "Quest flags, Choronzar's Demesne (map33)",
+   "offset": 304,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 0x3a; Choronzar's Demesne (map33); OR-ed bits set in map33 f0x85b e19 cauldron bench, f0xd77 e28 secret scroll (search skill 12), f0xf98 e51 princess's cell, f0x117f e58 Shadax scroll, f0x12d6 e100 Shadax fight; f0x64a e13 bookcases compare it with constants to choose which lore line to print"
+  },
+  {
+   "name": "dralk_corpeus_state",
+   "label": "Corpeus (Dralkarian Lord of the Physical plane) slain / ring returned",
+   "group": "Quest flags, Spheres Asunder",
+   "offset": 386,
+   "type": "u8",
+   "enum": {
+    "0": "alive"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x8c; Spheres Asunder; map30 f0xbc7 e23@b04f:0f: fight Corpeus if 0, else 'not here'; read by Queen's ring-return f0xdf2 e25; setter not in this range (cf. 0x9c: 1 slain, 2 ring returned) | map30 f0xdf2 e25 (checked): reads 0x8c..0x8f and 0x9c (sums the returned rings), takes ring 0xe9, AddExp; the fifth ring triggers Aeowyn's betrayal (attribute loss, sets 0xdf=1). No constant SetFlag for 0x8c..0x8f exists in any script; the setter is either computed or missing"
+  },
+  {
+   "name": "dralk_astelligus_state",
+   "label": "Astelligus (Dralkarian Lord of the Astral plane) slain / ring returned",
+   "group": "Quest flags, Spheres Asunder",
+   "offset": 387,
+   "type": "u8",
+   "enum": {
+    "0": "alive"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x8d; Spheres Asunder; map30 f0x72f e16@b04f:68: fight if 0, else 'not here'; read by f0xdf2 e25; requires Nimbus 0xee (f0x835) | map30 f0xdf2 e25 (checked): reads 0x8c..0x8f and 0x9c (sums the returned rings), takes ring 0xe9, AddExp; the fifth ring triggers Aeowyn's betrayal (attribute loss, sets 0xdf=1). No constant SetFlag for 0x8c..0x8f exists in any script; the setter is either computed or missing"
+  },
+  {
+   "name": "dralk_juvalad_state",
+   "label": "Juvalad (Dralkarian Lord of Enakkar) slain / ring returned",
+   "group": "Quest flags, Spheres Asunder",
+   "offset": 388,
+   "type": "u8",
+   "enum": {
+    "0": "alive"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x8e; Spheres Asunder; map30 f0x4aa e14@b04f:00: fight if 0, else 'not here'; read by f0xdf2 e25 | map30 f0xdf2 e25 (checked): reads 0x8c..0x8f and 0x9c (sums the returned rings), takes ring 0xe9, AddExp; the fifth ring triggers Aeowyn's betrayal (attribute loss, sets 0xdf=1). No constant SetFlag for 0x8c..0x8f exists in any script; the setter is either computed or missing"
+  },
+  {
+   "name": "dralk_malos_state",
+   "label": "Malos (Dralkarian Lord of the Elements) slain / ring returned",
+   "group": "Quest flags, Spheres Asunder",
+   "offset": 389,
+   "type": "u8",
+   "enum": {
+    "0": "alive"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x8f; Spheres Asunder; map30 f0x3be e13@b04f:a1: fight if 0, else 'not here'; f0x835 e19 portals allowed only at 0 or 2; read by f0xdf2 e25 | map30 f0xdf2 e25 (checked): reads 0x8c..0x8f and 0x9c (sums the returned rings), takes ring 0xe9, AddExp; the fifth ring triggers Aeowyn's betrayal (attribute loss, sets 0xdf=1). No constant SetFlag for 0x8c..0x8f exists in any script; the setter is either computed or missing"
+  },
+  {
+   "name": "dralk_pluthros_state",
+   "label": "Pluthros (Dralkarian Lord of Ashakkar): 1 slain, 2 ring returned",
+   "group": "Quest flags, Spheres Asunder",
+   "offset": 402,
+   "type": "u8",
+   "enum": {
+    "0": "alive",
+    "1": "slain, ring taken",
+    "2": "ring returned"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x9c; Spheres Asunder; map30 f0x5e0 e15@b04f:ee fight if 0; f0xcf9 e24: with ring 0xe9 and 0 take device 0xc6, exp, set 1; 2 = 'ring and embodiment are gone'; f0xdf2 e25 Queen reads all five lord flags, 5th ring triggers Aeowyn's betrayal (flag 0xdf)"
+  },
+  {
+   "name": "funhouse_ingots_taken",
+   "label": "Funhouse ingot stack: count of ingot hauls taken",
+   "group": "Quest flags, The Funhouse",
+   "offset": 456,
+   "type": "u8",
+   "enum": {
+    "0": "none"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0xd2; The Funhouse; map34 f0x1b7b e63@cell:d7,d8,e7,f7,f8: once per visit (kind0 0x1), if value below a limit gives 5 ingots and stores a new value (counter); 'vast stack of ingots seems inexhaustible'"
+  },
+  {
+   "name": "unused_flags_0xfb",
+   "label": "Never referenced (flag 0x05)",
+   "group": "Quest flags, never referenced",
+   "offset": 251,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x10c",
+   "label": "Never referenced (flag 0x16)",
+   "group": "Quest flags, never referenced",
+   "offset": 268,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x115",
+   "label": "Never referenced (flag 0x1f)",
+   "group": "Quest flags, never referenced",
+   "offset": 277,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x118",
+   "label": "Never referenced (flags 0x22 to 0x24)",
+   "group": "Quest flags, never referenced",
+   "offset": 280,
+   "type": "bytes",
+   "len": 3,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x131",
+   "label": "Never referenced (flag 0x3b)",
+   "group": "Quest flags, never referenced",
+   "offset": 305,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x141",
+   "label": "Never referenced (flags 0x4b to 0x4e)",
+   "group": "Quest flags, never referenced",
+   "offset": 321,
+   "type": "bytes",
+   "len": 4,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x15a",
+   "label": "Never referenced (flags 0x64 to 0x66)",
+   "group": "Quest flags, never referenced",
+   "offset": 346,
+   "type": "bytes",
+   "len": 3,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x15e",
+   "label": "Never referenced (flags 0x68 to 0x69)",
+   "group": "Quest flags, never referenced",
+   "offset": 350,
+   "type": "bytes",
+   "len": 2,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x163",
+   "label": "Never referenced (flag 0x6d)",
+   "group": "Quest flags, never referenced",
+   "offset": 355,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x169",
+   "label": "Never referenced (flag 0x73)",
+   "group": "Quest flags, never referenced",
+   "offset": 361,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x16c",
+   "label": "Never referenced (flag 0x76)",
+   "group": "Quest flags, never referenced",
+   "offset": 364,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x173",
+   "label": "Never referenced (flag 0x7d)",
+   "group": "Quest flags, never referenced",
+   "offset": 371,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x177",
+   "label": "Never referenced (flag 0x81)",
+   "group": "Quest flags, never referenced",
+   "offset": 375,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x18a",
+   "label": "Never referenced (flag 0x94)",
+   "group": "Quest flags, never referenced",
+   "offset": 394,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1b0",
+   "label": "Never referenced (flags 0xba to 0xbc)",
+   "group": "Quest flags, never referenced",
+   "offset": 432,
+   "type": "bytes",
+   "len": 3,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1bf",
+   "label": "Never referenced (flags 0xc9 to 0xca)",
+   "group": "Quest flags, never referenced",
+   "offset": 447,
+   "type": "bytes",
+   "len": 2,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1cf",
+   "label": "Never referenced (flag 0xd9)",
+   "group": "Quest flags, never referenced",
+   "offset": 463,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1d1",
+   "label": "Never referenced (flags 0xdb to 0xde)",
+   "group": "Quest flags, never referenced",
+   "offset": 465,
+   "type": "bytes",
+   "len": 4,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
   },
   {
    "name": "mode_flag_a",
@@ -570,15 +3245,6 @@
    "evidence": "flag index 0x87; FATES load (4918:0053) validates (this, mode_flag_b): (4,4) and (0,4) -> off-line character flag; otherwise it must have mode_flag_b == 3 and this != 1; (3,3) is rewritten to (0,3). Stock files ship (3,3); a played file ships (0,3). Twinion's TWGENN/FATES save never overwrite these"
   },
   {
-   "name": "unknown_0x17e",
-   "group": "Game flags",
-   "offset": 382,
-   "type": "bytes",
-   "len": 45,
-   "confidence": "unknown",
-   "evidence": "224-byte block copied to a global flag array (CGENN ds:9863, DARKSTRT ds:d8bf, FATES ds:3827); accessors FUN_1d88_0721/06ce/0754 index it with kind 2; no named flag found; all zero in samples except the two mode bytes (flag index 0x88..0xb4)"
-  },
-  {
    "name": "mode_flag_b",
    "group": "Game flags",
    "offset": 427,
@@ -591,15 +3257,6 @@
    },
    "confidence": "confirmed",
    "evidence": "flag index 0xb5; must be 3 (normal) or 4 (with mode_flag_a 4 or 0 = off-line character); any other value with mode_flag_a != 4/0 makes FATES print 'Your characters are invalid. You must create new ones.' and exit"
-  },
-  {
-   "name": "unknown_0x1ac",
-   "group": "Game flags",
-   "offset": 428,
-   "type": "bytes",
-   "len": 42,
-   "confidence": "unknown",
-   "evidence": "224-byte block copied to a global flag array (CGENN ds:9863, DARKSTRT ds:d8bf, FATES ds:3827); accessors FUN_1d88_0721/06ce/0754 index it with kind 2; no named flag found; all zero in samples except the two mode bytes (flag index 0xb6..0xdf)"
   },
   {
    "name": "item_charges",

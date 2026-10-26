@@ -402,9 +402,44 @@
    "count": 32,
    "stride": 2,
    "min": 0,
-   "max": 65535,
+   "max": 255,
    "confidence": "confirmed",
-   "evidence": "mem+0x7B[32] words; 0 = empty slot. Item NAMES are not in the client: no name table exists in RUINS/TWGENN or the RESOURCE files (searched), so ids stay numeric. New-character default list (TWGENN 14D2:02E0): 0x46,0x57,0x6B,0xA3,0xB8,0xC4,0xCB (70,87,107,163,184,196,203). The pregens carry 0xC4,0xCB,0xB8,0xA3 in slots 0-3 and 0x57,0x6B,<weapon>,0x46 in slots 15-18 (<weapon> 25/37/1/57 per guild). The UI has two item lists, INVENTORY ITEMS and QUEST ITEMS (RUINS strings), the split between slots is not decoded ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
+   "evidence": "32 item ids -> mem+0x7B; names from RESOURCE.038 (256 records of 0x2e bytes, each word rotated; RUINS 1E46:0326 mode 7 decodes by rol 6). Slots (constructor 0B1A:000F): 0-9 backpack, 10-14 unused (wiped, 0B1A:0100), 15-20 worn (head, body, weapon, shield/gauntlets, two accessories; 1005:087C), 21-30 quest items, 31 incoming traded item",
+   "catalog": true,
+   "items": [
+    "Backpack 1",
+    "Backpack 2",
+    "Backpack 3",
+    "Backpack 4",
+    "Backpack 5",
+    "Backpack 6",
+    "Backpack 7",
+    "Backpack 8",
+    "Backpack 9",
+    "Backpack 10",
+    "Unused 1",
+    "Unused 2",
+    "Unused 3",
+    "Unused 4",
+    "Unused 5",
+    "Head",
+    "Body",
+    "Weapon",
+    "Shield / gauntlets",
+    "Accessory 1",
+    "Accessory 2",
+    "Quest items 1",
+    "Quest items 2",
+    "Quest items 3",
+    "Quest items 4",
+    "Quest items 5",
+    "Quest items 6",
+    "Quest items 7",
+    "Quest items 8",
+    "Quest items 9",
+    "Quest items 10",
+    "Incoming trade item"
+   ]
   },
   {
    "name": "health_current",
@@ -507,13 +542,1453 @@
    "evidence": "mem+0x7A = obj+0x1C, used as a 0..3 index into the direction tables (obj[0x1C]*0x24 in ovl_210F_0704). New character 3 ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
   },
   {
-   "name": "flags_a",
-   "group": "Progress flags",
-   "offset": 246,
-   "type": "bytes",
-   "len": 135,
+   "name": "runed_fountain_count",
+   "label": "Foyer fountain: computed counter of entries; on the third the face grants Rune Reading, after that it punishes",
+   "group": "Quest flags, L1: Foyer of Cawdor",
+   "offset": 263,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 17 (0x11); set in {'R001 L1: Foyer of Cawdor': ['event 9']}; read in {'R001 L1: Foyer of Cawdor': ['event 9']}; seen set to None;  setF/getF(type 2, 17) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "drunk_wizard_met",
+   "label": "Tipsy wizard met in the Foyer (he leaves for the upper levels)",
+   "group": "Quest flags, L1: Foyer of Cawdor",
+   "offset": 264,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 18 (0x12); set in {'R001 L1: Foyer of Cawdor': ['event 9']}; read in {'R001 L1: Foyer of Cawdor': ['event 9']}; seen set to 1;  setF/getF(type 2, 18) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "stables_soaked",
+   "label": "Set when soaked in The Stables; the Foyer door sniffs and clears it",
+   "group": "Quest flags, L1: Foyer of Cawdor",
+   "offset": 337,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 91 (0x5b); set in {'R001 L1: Foyer of Cawdor': ['event 38'], 'R031 L1: The Stables': ['event 8']}; read in {'R001 L1: Foyer of Cawdor': ['event 38']}; seen set to 0, 1;  setF/getF(type 2, 91) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "cabinet_route_open",
+   "label": "Set by the Banquo ambushes in The Cabinet and an event in The Runed Room; Kitchen/Conservatory doors open and Galatea comments on the fountain clue",
+   "group": "Quest flags, L1: The Runed Room",
+   "offset": 277,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 31 (0x1f); set in {'R002 L1: The Runed Room': ['event 57'], 'R019 L5: The Cabinet': ['event 10', 'event 11', 'event 13', 'event 9']}; read in {'R009 L3: The Gallery': ['event 6'], 'R013 L4: The Ballroom': ['event 6'], 'R018 L5: The Kitchen': ['event 46'], 'R020 L5: The Conservatory': ['event 15']}; seen set to 1;  setF/getF(type 2, 31) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "alcuin_cap_runes",
+   "label": "Runed Room: counter 0-6 of runes read with Alcuin's Cap (wraps to 0)",
+   "group": "Quest flags, L1: The Runed Room",
+   "offset": 312,
+   "type": "u8",
+   "confidence": "confirmed",
+   "evidence": "flag 66 (0x42); set in {'R002 L1: The Runed Room': ['event 45', 'event 46', 'event 47', 'event 48', 'event 49', 'event 50', 'event 51', 'event 52', 'event 54']}; read in {'R002 L1: The Runed Room': ['event 45', 'event 46', 'event 47', 'event 48', 'event 49', 'event 50', 'event 51', 'event 52']}; seen set to 0, None;  setF/getF(type 2, 66) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "aldhelm_met",
+   "label": "Aldhelm met (Runed Room, The Crypt); gives a Lantern",
+   "group": "Quest flags, L1: The Runed Room",
+   "offset": 313,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 67 (0x43); set in {'R002 L1: The Runed Room': ['event 55'], 'R026 The Crypt': ['event 21']}; read in {'R002 L1: The Runed Room': ['event 55']}; seen set to 1;  setF/getF(type 2, 67) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "red_dragon_joke_runed_room",
+   "label": "Red dragon's joke heard in The Runed Room (one of 73/74/75/84)",
+   "group": "Quest flags, L1: The Runed Room",
+   "offset": 319,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 73 (0x49); set in {'R002 L1: The Runed Room': ['event 63']}; read in {'R002 L1: The Runed Room': ['event 63'], 'R003 L2: The Skulkatorium': ['event 25'], 'R004 L2: The Trophy Room': ['event 14'], 'R008 L2: Uncivilization': ['event 18']}; seen set to 1;  setF/getF(type 2, 73) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "braddock_smith",
+   "label": "Stables blacksmith (Braddock Smith) errand state 1-10",
+   "group": "Quest flags, L1: The Stables",
+   "offset": 336,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 90 (0x5a); set in {'R031 L1: The Stables': ['event 0']}; read in {'R031 L1: The Stables': ['event 0', 'event 2']}; seen set to 1, None;  setF/getF(type 2, 90) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "stables_rubble",
+   "label": "Stables rubble-charging counter (reward at the end)",
+   "group": "Quest flags, L1: The Stables",
+   "offset": 338,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 92 (0x5c); set in {'R031 L1: The Stables': ['event 32']}; read in {'R031 L1: The Stables': ['event 32']}; seen set to None;  setF/getF(type 2, 92) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_sanctum",
+   "label": "Galatea's L2 visit done in Sanctum Sanctorum (cleric room)",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 247,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 1 (0x01); set in {'R007 L2: Sanctum Sanctorum': ['event 7']}; read in {'R001 L1: Foyer of Cawdor': ['event 23', 'event 36'], 'R003 L2: The Skulkatorium': ['event 1'], 'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 1', 'event 3', 'event 7'], 'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 1) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "sanctum_chanting_elf",
+   "label": "Read by the chanting-elf event in Sanctum Sanctorum; no module sets it (pregen Norman has it)",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 258,
+   "type": "u8",
    "confidence": "unknown",
-   "evidence": "first part of the 224-byte block DS:97B7 (TWGENN)/DS:C9F1 (RUINS) copied verbatim (mem not in the 0xDB struct). Tosk and Norman have 0/1 bytes in 0xF7..0x12A (about 20 each), the other pregens none: looks like a set of per-character booleans (quest/rune progress); meaning not decoded ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)"
+   "evidence": "flag 12 (0x0c); set in {}; read in {'R007 L2: Sanctum Sanctorum': ['event 1']}; seen set to nothing;  setF/getF(type 2, 12) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_cleric_reward",
+   "label": "Galatea's private reward for the party's clerics (Sanctum Sanctorum)",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 260,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 14 (0x0e); set in {'R007 L2: Sanctum Sanctorum': ['event 7']}; read in {'R007 L2: Sanctum Sanctorum': ['event 7']}; seen set to 1;  setF/getF(type 2, 14) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "sanctum_altar_hoard",
+   "label": "Kobold hoard under the vandalised altar found (Detect, True Seeing or seeing items)",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 261,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 15 (0x0f); set in {'R007 L2: Sanctum Sanctorum': ['event 28']}; read in {'R007 L2: Sanctum Sanctorum': ['event 28']}; seen set to 1;  setF/getF(type 2, 15) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gaelic_garlic_found",
+   "label": "Gaelic Garlic found in the Sanctum herb patch; the Conservatory dragon asks about it",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 262,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 16 (0x10); set in {'R007 L2: Sanctum Sanctorum': ['event 32']}; read in {'R007 L2: Sanctum Sanctorum': ['event 32'], 'R020 L5: The Conservatory': ['event 4']}; seen set to 1;  setF/getF(type 2, 16) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "sanctum_entered",
+   "label": "Sanctum Sanctorum entered; Foyer door then opens",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 327,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 81 (0x51); set in {'R007 L2: Sanctum Sanctorum': ['event 0']}; read in {'R001 L1: Foyer of Cawdor': ['event 23', 'event 36']}; seen set to 1;  setF/getF(type 2, 81) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "halfling_thief_meetings",
+   "label": "Counter of meetings with the roaming halfling thief (Sanctum, Alchemia, Aerie, Astrologia, Maze, Ruined Room), wraps near 24-30",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 329,
+   "type": "u8",
+   "confidence": "confirmed",
+   "evidence": "flag 83 (0x53); set in {'R007 L2: Sanctum Sanctorum': ['event 5'], 'R022 L7: Alchemia': ['event 4'], 'R023 L7: The Aerie': ['event 13', 'event 4'], 'R024 L6: Astrologia': ['event 4'], 'R027 L6: Nasty Little Maze': ['event 4'], 'R030 L7: The Ruined Room': ['event 12', 'event 4']}; read in {'R007 L2: Sanctum Sanctorum': ['event 5'], 'R022 L7: Alchemia': ['event 4'], 'R023 L7: The Aerie': ['event 13', 'event 4'], 'R024 L6: Astrologia': ['event 4'], 'R027 L6: Nasty Little Maze': ['event 36', 'event 37', 'event 38', 'event 39', 'event 4', 'event 40'], 'R030 L7: The Ruined Room': ['event 12', 'event 34', 'event 35', 'event 36', 'event 37', 'event 38', 'event 39', 'event 4']}; seen set to None;  setF/getF(type 2, 83) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_item_clerics",
+   "label": "Galatea's item for clerics (Sanctum Sanctorum)",
+   "group": "Quest flags, L2: Sanctum Sanctorum",
+   "offset": 360,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 114 (0x72); set in {'R007 L2: Sanctum Sanctorum': ['event 7']}; read in {'R007 L2: Sanctum Sanctorum': ['event 7']}; seen set to 1;  setF/getF(type 2, 114) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_chivalrous",
+   "label": "Galatea's L2 visit done in The Chivalrous Room (knight room)",
+   "group": "Quest flags, L2: The Chivalrous Room",
+   "offset": 248,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 2 (0x02); set in {'R006 L2: The Chivalrous Room': ['event 7']}; read in {'R001 L1: Foyer of Cawdor': ['event 39'], 'R003 L2: The Skulkatorium': ['event 1'], 'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 1', 'event 3', 'event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7'], 'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 2) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_knight_reward",
+   "label": "Galatea's private reward for the party's knights (Chivalrous Room)",
+   "group": "Quest flags, L2: The Chivalrous Room",
+   "offset": 259,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 13 (0x0d); set in {'R006 L2: The Chivalrous Room': ['event 7']}; read in {'R006 L2: The Chivalrous Room': ['event 7']}; seen set to 1;  setF/getF(type 2, 13) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "chivalrous_loose_tile",
+   "label": "Loose floor tile in The Chivalrous Room searched",
+   "group": "Quest flags, L2: The Chivalrous Room",
+   "offset": 265,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 19 (0x13); set in {'R006 L2: The Chivalrous Room': ['event 28']}; read in {'R006 L2: The Chivalrous Room': ['event 28']}; seen set to 1;  setF/getF(type 2, 19) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "chivalrous_room_entered",
+   "label": "Chivalrous Room entered; Foyer door then opens",
+   "group": "Quest flags, L2: The Chivalrous Room",
+   "offset": 326,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 80 (0x50); set in {'R006 L2: The Chivalrous Room': ['event 0']}; read in {'R001 L1: Foyer of Cawdor': ['event 39']}; seen set to 1;  setF/getF(type 2, 80) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "chivalrous_bathtub",
+   "label": "Chivalrous Room bathtub/fountain picture counter (up to 6)",
+   "group": "Quest flags, L2: The Chivalrous Room",
+   "offset": 341,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 95 (0x5f); set in {'R006 L2: The Chivalrous Room': ['event 23']}; read in {'R006 L2: The Chivalrous Room': ['event 23']}; seen set to None;  setF/getF(type 2, 95) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_item_knights",
+   "label": "Galatea's item for knights (Chivalrous Room)",
+   "group": "Quest flags, L2: The Chivalrous Room",
+   "offset": 359,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 113 (0x71); set in {'R006 L2: The Chivalrous Room': ['event 7']}; read in {'R006 L2: The Chivalrous Room': ['event 7']}; seen set to 1;  setF/getF(type 2, 113) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_skulkatorium",
+   "label": "Galatea's L2 visit done in The Skulkatorium (thief room)",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 250,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 4 (0x04); set in {'R003 L2: The Skulkatorium': ['event 1']}; read in {'R001 L1: Foyer of Cawdor': ['event 41'], 'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7'], 'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 4) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_complete",
+   "label": "All six L2 rooms visited: Galatea grants a spell; read by the Foyer stairs and doors to let the party upstairs",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 252,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 6 (0x06); set in {'R003 L2: The Skulkatorium': ['event 1'], 'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7'], 'R008 L2: Uncivilization': ['event 7']}; read in {'R001 L1: Foyer of Cawdor': ['event 11', 'event 23', 'event 36', 'event 37', 'event 38', 'event 39', 'event 40', 'event 41', 'event 5', 'event 51'], 'R003 L2: The Skulkatorium': ['event 1'], 'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7'], 'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 6) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "choronzar_bits",
+   "label": "Bit mask: 0x01 Skulkatorium collapsed-stair bonus (1,000 xp) and a Demesne event, 0x04 and 0x08 more events in Choronzar's Demesne",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 303,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 57 (0x39); set in {'R003 L2: The Skulkatorium': ['event 4'], \"R033 Choronzar's Demesne\": ['event 115', 'event 116', 'event 29']}; read in {'R003 L2: The Skulkatorium': ['event 4'], \"R033 Choronzar's Demesne\": ['event 100', 'event 111', 'event 113', 'event 115', 'event 116', 'event 14', 'event 20', 'event 29', 'event 3', 'event 50'], 'R034 The Funhouse': ['event 32']}; seen set to 1, None;  setF/getF(type 2, 57) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "red_dragon_joke_skulkatorium",
+   "label": "Red dragon's joke heard in The Skulkatorium",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 320,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 74 (0x4a); set in {'R003 L2: The Skulkatorium': ['event 25']}; read in {'R002 L1: The Runed Room': ['event 63'], 'R003 L2: The Skulkatorium': ['event 25'], 'R004 L2: The Trophy Room': ['event 14'], 'R008 L2: Uncivilization': ['event 18']}; seen set to 1;  setF/getF(type 2, 74) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "skulkatorium_entered",
+   "label": "Skulkatorium entered; Foyer door to it then opens for anyone",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 323,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 77 (0x4d); set in {'R003 L2: The Skulkatorium': ['event 26']}; read in {'R001 L1: Foyer of Cawdor': ['event 41']}; seen set to 1;  setF/getF(type 2, 77) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "skulkatorium_reward",
+   "label": "Skulkatorium master's rewards all given",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 339,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 93 (0x5d); set in {'R003 L2: The Skulkatorium': ['event 13']}; read in {'R003 L2: The Skulkatorium': ['event 13']}; seen set to 1;  setF/getF(type 2, 93) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_item_thieves",
+   "label": "Galatea's item for thieves (Skulkatorium)",
+   "group": "Quest flags, L2: The Skulkatorium",
+   "offset": 362,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 116 (0x74); set in {'R003 L2: The Skulkatorium': ['event 1']}; read in {'R003 L2: The Skulkatorium': ['event 1']}; seen set to 1;  setF/getF(type 2, 116) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_thaumaturgium",
+   "label": "Galatea's L2 visit done in The Thaumaturgium (wizard room)",
+   "group": "Quest flags, L2: The Thaumaturgium",
+   "offset": 251,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 5 (0x05); set in {'R005 L2: The Thaumaturgium': ['event 7']}; read in {'R001 L1: Foyer of Cawdor': ['event 37'], 'R003 L2: The Skulkatorium': ['event 1'], 'R004 L2: The Trophy Room': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7'], 'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 5) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "thaumaturgium_wizard_reward",
+   "label": "Old wizard's reward taken (Small Letter of Credit plus spell)",
+   "group": "Quest flags, L2: The Thaumaturgium",
+   "offset": 254,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 8 (0x08); set in {'R005 L2: The Thaumaturgium': ['event 1']}; read in {'R005 L2: The Thaumaturgium': ['event 1']}; seen set to 1;  setF/getF(type 2, 8) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "quest_rumours_heard",
+   "label": "Hint NPC conversation heard (Thaumaturgium, Chivalrous Room); never read",
+   "group": "Quest flags, L2: The Thaumaturgium",
+   "offset": 255,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 9 (0x09); set in {'R005 L2: The Thaumaturgium': ['event 8'], 'R006 L2: The Chivalrous Room': ['event 8']}; read in {}; seen set to 1;  setF/getF(type 2, 9) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "thaumaturgium_duel",
+   "label": "Duel (\"En garde!\") in The Thaumaturgium fought",
+   "group": "Quest flags, L2: The Thaumaturgium",
+   "offset": 311,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 65 (0x41); set in {'R005 L2: The Thaumaturgium': ['event 2']}; read in {'R005 L2: The Thaumaturgium': ['event 2']}; seen set to 1;  setF/getF(type 2, 65) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "thaumaturgium_entered",
+   "label": "Thaumaturgium entered; Foyer door (\"only a wizard and that wizard's party\") then opens",
+   "group": "Quest flags, L2: The Thaumaturgium",
+   "offset": 325,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 79 (0x4f); set in {'R005 L2: The Thaumaturgium': ['event 0']}; read in {'R001 L1: Foyer of Cawdor': ['event 37']}; seen set to 1;  setF/getF(type 2, 79) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_trophy_room",
+   "label": "Galatea's L2 visit done in The Trophy Room (ranger room)",
+   "group": "Quest flags, L2: The Trophy Room",
+   "offset": 249,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 3 (0x03); set in {'R004 L2: The Trophy Room': ['event 7']}; read in {'R001 L1: Foyer of Cawdor': ['event 40'], 'R003 L2: The Skulkatorium': ['event 1'], 'R005 L2: The Thaumaturgium': ['event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7'], 'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 3) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "trophy_room_entered",
+   "label": "Trophy Room entered; Foyer door then opens",
+   "group": "Quest flags, L2: The Trophy Room",
+   "offset": 324,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 78 (0x4e); set in {'R004 L2: The Trophy Room': ['event 0']}; read in {'R001 L1: Foyer of Cawdor': ['event 40']}; seen set to 1;  setF/getF(type 2, 78) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "red_dragon_joke_trophy_room",
+   "label": "Red dragon's joke heard in The Trophy Room",
+   "group": "Quest flags, L2: The Trophy Room",
+   "offset": 330,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 84 (0x54); set in {'R004 L2: The Trophy Room': ['event 14']}; read in {'R002 L1: The Runed Room': ['event 63'], 'R003 L2: The Skulkatorium': ['event 25'], 'R004 L2: The Trophy Room': ['event 14'], 'R008 L2: Uncivilization': ['event 18']}; seen set to 1;  setF/getF(type 2, 84) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_item_ranger_wizard",
+   "label": "Galatea's item for rangers (Trophy Room) and for wizards (Thaumaturgium): both rooms use this one index",
+   "group": "Quest flags, L2: The Trophy Room",
+   "offset": 358,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 112 (0x70); set in {'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7']}; read in {'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 7']}; seen set to 1;  setF/getF(type 2, 112) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l2_uncivilization",
+   "label": "Galatea's L2 guild-room visit done in Uncivilization (barbarian room); one of six (0-5) that together unlock reward 6",
+   "group": "Quest flags, L2: Uncivilization",
+   "offset": 246,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0 (0x00); set in {'R008 L2: Uncivilization': ['event 7']}; read in {'R001 L1: Foyer of Cawdor': ['event 38'], 'R003 L2: The Skulkatorium': ['event 1'], 'R004 L2: The Trophy Room': ['event 7'], 'R005 L2: The Thaumaturgium': ['event 5', 'event 7'], 'R006 L2: The Chivalrous Room': ['event 7'], 'R007 L2: Sanctum Sanctorum': ['event 7']}; seen set to 1;  setF/getF(type 2, 0) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "doormat_quest",
+   "label": "Doormat errand in Uncivilization: 2 = doormat picked up from the rubbish, 1 = returned to the grateful rock (Volley Scroll given); the Nasty Little Maze NPC thanks you when set",
+   "group": "Quest flags, L2: Uncivilization",
+   "offset": 253,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 7 (0x07); set in {'R008 L2: Uncivilization': ['event 15', 'event 22', 'event 23']}; read in {'R008 L2: Uncivilization': ['event 1', 'event 14', 'event 15'], 'R027 L6: Nasty Little Maze': ['event 9']}; seen set to 1, 2;  setF/getF(type 2, 7) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "red_dragon_joke_uncivilization",
+   "label": "Red dragon's joke heard in Uncivilization",
+   "group": "Quest flags, L2: Uncivilization",
+   "offset": 321,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 75 (0x4b); set in {'R008 L2: Uncivilization': ['event 18']}; read in {'R002 L1: The Runed Room': ['event 63'], 'R003 L2: The Skulkatorium': ['event 25'], 'R004 L2: The Trophy Room': ['event 14'], 'R008 L2: Uncivilization': ['event 18']}; seen set to 1;  setF/getF(type 2, 75) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "halfling_mob_seen",
+   "label": "Uncivilization footsteps/halfling event; The Trophy Room dragon checks it",
+   "group": "Quest flags, L2: Uncivilization",
+   "offset": 322,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 76 (0x4c); set in {'R008 L2: Uncivilization': ['event 5']}; read in {'R004 L2: The Trophy Room': ['event 5']}; seen set to 1;  setF/getF(type 2, 76) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "uncivilization_entered",
+   "label": "Uncivilization entered; Foyer door then opens",
+   "group": "Quest flags, L2: Uncivilization",
+   "offset": 328,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 82 (0x52); set in {'R008 L2: Uncivilization': ['event 0', 'event 21']}; read in {'R001 L1: Foyer of Cawdor': ['event 38']}; seen set to 1;  setF/getF(type 2, 82) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_item_barbarians",
+   "label": "Galatea's item for barbarians (Uncivilization)",
+   "group": "Quest flags, L2: Uncivilization",
+   "offset": 361,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 115 (0x73); set in {'R008 L2: Uncivilization': ['event 7']}; read in {'R008 L2: Uncivilization': ['event 7']}; seen set to 1;  setF/getF(type 2, 115) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "brewery_reached",
+   "label": "The Brewery entered; opens the Gallery door to the Brewery",
+   "group": "Quest flags, L3: The Brewery",
+   "offset": 269,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 23 (0x17); set in {'R011 L3: The Brewery': ['event 1', 'event 16', 'event 37', 'event 5']}; read in {'R009 L3: The Gallery': ['event 11']}; seen set to 1;  setF/getF(type 2, 23) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "brewery_check_24",
+   "label": "Read by a Brewery event; never set by any module (pregens have it)",
+   "group": "Quest flags, L3: The Brewery",
+   "offset": 270,
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "flag 24 (0x18); set in {}; read in {'R011 L3: The Brewery': ['event 15']}; seen set to nothing;  setF/getF(type 2, 24) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "brewery_secret_door",
+   "label": "Secret door in The Brewery pried open (Alcuin's Sticks); The Ruined Room hole checks it",
+   "group": "Quest flags, L3: The Brewery",
+   "offset": 281,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 35 (0x23); set in {'R011 L3: The Brewery': ['event 11'], 'R023 L7: The Aerie': ['event 7']}; read in {'R011 L3: The Brewery': ['event 11'], 'R030 L7: The Ruined Room': ['event 13', 'event 15']}; seen set to 1;  setF/getF(type 2, 35) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gallery_corridor_squeezed",
+   "label": "Gallery narrow corridor event; never read",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 267,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 21 (0x15); set in {'R009 L3: The Gallery': ['event 25', 'event 7']}; read in {}; seen set to 1;  setF/getF(type 2, 21) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "l3_l5_corridor_galatea",
+   "label": "Narrow-corridor/Galatea event in The Gallery and The Chambers",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 275,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 29 (0x1d); set in {'R009 L3: The Gallery': ['event 6'], 'R017 L5: The Chambers': ['event 6']}; read in {'R009 L3: The Gallery': ['event 6']}; seen set to 1;  setF/getF(type 2, 29) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l3_met",
+   "label": "Galatea met on L3 (Gallery; also set in The Kitchen); halflings hold the Chambers/Cabinet doors when set",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 276,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 30 (0x1e); set in {'R009 L3: The Gallery': ['event 6'], 'R018 L5: The Kitchen': ['event 35', 'event 50']}; read in {'R009 L3: The Gallery': ['event 6'], 'R017 L5: The Chambers': ['event 11'], 'R019 L5: The Cabinet': ['event 14']}; seen set to 1;  setF/getF(type 2, 30) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gallery_door_a",
+   "label": "Gallery door state, 0/1, toggled with 33 by the Gallery door events; Pantry Crack of Doom events test it",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 278,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 32 (0x20); set in {'R009 L3: The Gallery': ['event 11', 'event 7', 'event 9'], 'R011 L3: The Brewery': ['event 33'], 'R032 L12: The Gateway': ['event 54']}; read in {'R010 L3: The Pantry': ['event 13', 'event 14', 'event 15', 'event 16', 'event 17', 'event 18', 'event 19'], 'R032 L12: The Gateway': ['event 54']}; seen set to 0, 1;  setF/getF(type 2, 32) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gallery_door_b",
+   "label": "Gallery door state, 0/1, pair of 32; Brewery Crack of Doom events and The Great Hall test it",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 279,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 33 (0x21); set in {'R009 L3: The Gallery': ['event 11', 'event 7', 'event 9'], 'R011 L3: The Brewery': ['event 15', 'event 33'], 'R021 L6: The Great Hall': ['event 7']}; read in {'R011 L3: The Brewery': ['event 15', 'event 19', 'event 20', 'event 21', 'event 22', 'event 23', 'event 24', 'event 25'], 'R021 L6: The Great Hall': ['event 7']}; seen set to 0, 1;  setF/getF(type 2, 33) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "fleance_defeated",
+   "label": "Fleance beaten in The Gallery (boss); Galatea warns not to go up before",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 284,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 38 (0x26); set in {'R009 L3: The Gallery': ['event 31', 'event 32', 'event 33', 'event 35', 'event 8']}; read in {'R009 L3: The Gallery': ['event 7', 'event 8']}; seen set to 1;  setF/getF(type 2, 38) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gallery_notes",
+   "label": "Gallery: computed counter of the gallery-notes event",
+   "group": "Quest flags, L3: The Gallery",
+   "offset": 334,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 88 (0x58); set in {'R009 L3: The Gallery': ['event 26']}; read in {'R009 L3: The Gallery': ['event 26']}; seen set to None;  setF/getF(type 2, 88) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "lesser_hall_reached",
+   "label": "The Lesser Hall entered; read by a Brewery event",
+   "group": "Quest flags, L3: The Lesser Hall",
+   "offset": 282,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 36 (0x24); set in {'R012 L3: The Lesser Hall': ['event 6'], 'R024 L6: Astrologia': ['event 7']}; read in {'R011 L3: The Brewery': ['event 1'], 'R012 L3: The Lesser Hall': ['event 6']}; seen set to 1;  setF/getF(type 2, 36) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "pantry_reached",
+   "label": "The Pantry entered; lets the party back through the Gallery door to the Pantry",
+   "group": "Quest flags, L3: The Pantry",
+   "offset": 268,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 22 (0x16); set in {'R010 L3: The Pantry': ['event 12']}; read in {'R009 L3: The Gallery': ['event 9']}; seen set to 1;  setF/getF(type 2, 22) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "pantry_secret_found",
+   "label": "Something hidden in The Pantry uncovered (Detect, True Seeing, Crystal Ball...); also set in Alchemia",
+   "group": "Quest flags, L3: The Pantry",
+   "offset": 280,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 34 (0x22); set in {'R010 L3: The Pantry': ['event 26'], 'R022 L7: Alchemia': ['event 7', 'event 8']}; read in {'R010 L3: The Pantry': ['event 26']}; seen set to 1;  setF/getF(type 2, 34) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l4_briefing",
+   "label": "Galatea's L4 briefing in The Ballroom given",
+   "group": "Quest flags, L4: The Ballroom",
+   "offset": 256,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 10 (0x0a); set in {'R013 L4: The Ballroom': ['event 6']}; read in {'R013 L4: The Ballroom': ['event 6']}; seen set to 1;  setF/getF(type 2, 10) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l4_revisit",
+   "label": "Ballroom: Galatea meeting already investigated (second message)",
+   "group": "Quest flags, L4: The Ballroom",
+   "offset": 289,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 43 (0x2b); set in {'R013 L4: The Ballroom': ['event 6']}; read in {'R013 L4: The Ballroom': ['event 6']}; seen set to 1;  setF/getF(type 2, 43) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l4_greeting",
+   "label": "Ballroom: Galatea's greeting given",
+   "group": "Quest flags, L4: The Ballroom",
+   "offset": 290,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 44 (0x2c); set in {'R013 L4: The Ballroom': ['event 6']}; read in {'R013 L4: The Ballroom': ['event 6']}; seen set to 1;  setF/getF(type 2, 44) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "ballroom_door_a",
+   "label": "Ballroom door state 0/1 (pair with 46); never read",
+   "group": "Quest flags, L4: The Ballroom",
+   "offset": 291,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 45 (0x2d); set in {'R013 L4: The Ballroom': ['event 11', 'event 7', 'event 9']}; read in {}; seen set to 0, 1;  setF/getF(type 2, 45) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "ballroom_door_b",
+   "label": "Ballroom door state 0/1 (pair with 45); never read",
+   "group": "Quest flags, L4: The Ballroom",
+   "offset": 292,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 46 (0x2e); set in {'R013 L4: The Ballroom': ['event 11', 'event 7', 'event 9']}; read in {}; seen set to 0, 1;  setF/getF(type 2, 46) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "cloak_room_reached",
+   "label": "The Cloak Room entered; opens the Music Room/Library door to it",
+   "group": "Quest flags, L4: The Cloak Room",
+   "offset": 273,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 27 (0x1b); set in {'R015 L4: The Cloak Room': ['event 8']}; read in {'R014 L4: The Music Room': ['event 6'], 'R016 L4: The Library': ['event 6']}; seen set to 1;  setF/getF(type 2, 27) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "library_reached",
+   "label": "The Library entered; opens the Ballroom/Cloak Room door to it",
+   "group": "Quest flags, L4: The Library",
+   "offset": 274,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 28 (0x1c); set in {'R016 L4: The Library': ['event 8']}; read in {'R013 L4: The Ballroom': ['event 9'], 'R015 L4: The Cloak Room': ['event 7']}; seen set to 1;  setF/getF(type 2, 28) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "library_welcome",
+   "label": "Library welcome given",
+   "group": "Quest flags, L4: The Library",
+   "offset": 297,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 51 (0x33); set in {'R016 L4: The Library': ['event 8']}; read in {'R016 L4: The Library': ['event 8']}; seen set to 1;  setF/getF(type 2, 51) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "music_room_reached",
+   "label": "The Music Room entered; opens the Ballroom/Cloak Room door to it",
+   "group": "Quest flags, L4: The Music Room",
+   "offset": 272,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 26 (0x1a); set in {'R014 L4: The Music Room': ['event 30']}; read in {'R013 L4: The Ballroom': ['event 11'], 'R015 L4: The Cloak Room': ['event 6']}; seen set to 1;  setF/getF(type 2, 26) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "malcolm_ghost_defeated",
+   "label": "Malcolm's Ghost beaten (set in The Music Room); The Ballroom stairs refuse until set",
+   "group": "Quest flags, L4: The Music Room",
+   "offset": 288,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 42 (0x2a); set in {'R014 L4: The Music Room': ['event 1']}; read in {'R013 L4: The Ballroom': ['event 7', 'event 8']}; seen set to 1;  setF/getF(type 2, 42) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "mannanan_summoned",
+   "label": "Mannanan Mac Lir summoned with Mannanan's Ring in The Music Room; read in The Library",
+   "group": "Quest flags, L4: The Music Room",
+   "offset": 293,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 47 (0x2f); set in {'R014 L4: The Music Room': ['event 7']}; read in {'R014 L4: The Music Room': ['event 7'], 'R016 L4: The Library': ['event 60']}; seen set to 1;  setF/getF(type 2, 47) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "mannanan_second_summon",
+   "label": "Mannanan summoned a second time; never read",
+   "group": "Quest flags, L4: The Music Room",
+   "offset": 294,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 48 (0x30); set in {'R014 L4: The Music Room': ['event 7']}; read in {}; seen set to 1;  setF/getF(type 2, 48) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "music_room_organ_secret",
+   "label": "Organ secret in The Music Room found",
+   "group": "Quest flags, L4: The Music Room",
+   "offset": 295,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 49 (0x31); set in {'R014 L4: The Music Room': ['event 24']}; read in {'R014 L4: The Music Room': ['event 24']}; seen set to 1;  setF/getF(type 2, 49) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "banquo_ghost_defeated",
+   "label": "Banquo's Ghost beaten in The Cabinet (boss); The Chambers stairs check it",
+   "group": "Quest flags, L5: The Cabinet",
+   "offset": 287,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 41 (0x29); set in {'R019 L5: The Cabinet': ['event 10', 'event 11', 'event 9']}; read in {'R017 L5: The Chambers': ['event 5', 'event 6', 'event 7', 'event 8', 'event ?'], 'R019 L5: The Cabinet': ['event 4']}; seen set to 1;  setF/getF(type 2, 41) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "cabinet_check_54",
+   "label": "Read by a Cabinet secret event; never set",
+   "group": "Quest flags, L5: The Cabinet",
+   "offset": 300,
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "flag 54 (0x36); set in {}; read in {'R019 L5: The Cabinet': ['event 0']}; seen set to nothing;  setF/getF(type 2, 54) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "cabinet_rift_treasure",
+   "label": "Rift treasure in The Cabinet taken",
+   "group": "Quest flags, L5: The Cabinet",
+   "offset": 301,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 55 (0x37); set in {'R019 L5: The Cabinet': ['event 33']}; read in {'R019 L5: The Cabinet': ['event 33']}; seen set to 1;  setF/getF(type 2, 55) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l5_reward",
+   "label": "Galatea's reward for clearing the minotaur's lair (The Chambers): her mightiest spell",
+   "group": "Quest flags, L5: The Chambers",
+   "offset": 257,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 11 (0x0b); set in {'R017 L5: The Chambers': ['event 25']}; read in {'R017 L5: The Chambers': ['event 25']}; seen set to 1;  setF/getF(type 2, 11) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_l5_greeting",
+   "label": "Galatea's greeting in The Chambers",
+   "group": "Quest flags, L5: The Chambers",
+   "offset": 298,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 52 (0x34); set in {'R017 L5: The Chambers': ['event 6']}; read in {'R017 L5: The Chambers': ['event 6']}; seen set to 1;  setF/getF(type 2, 52) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "conservatory_visits",
+   "label": "Conservatory docent: computed visit counter",
+   "group": "Quest flags, L5: The Conservatory",
+   "offset": 296,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 50 (0x32); set in {'R020 L5: The Conservatory': ['event 13']}; read in {'R020 L5: The Conservatory': ['event 13']}; seen set to None;  setF/getF(type 2, 50) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "conservatory_gardener",
+   "label": "Read by the Conservatory gardener; never set",
+   "group": "Quest flags, L5: The Conservatory",
+   "offset": 302,
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "flag 56 (0x38); set in {}; read in {'R020 L5: The Conservatory': ['event 46']}; seen set to nothing;  setF/getF(type 2, 56) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "conservatory_visited",
+   "label": "Conservatory entered; halflings hold the Chambers/Cabinet doors",
+   "group": "Quest flags, L5: The Conservatory",
+   "offset": 357,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 111 (0x6f); set in {'R020 L5: The Conservatory': ['event 13']}; read in {'R017 L5: The Chambers': ['event 9'], 'R019 L5: The Cabinet': ['event 15'], 'R020 L5: The Conservatory': ['event 13']}; seen set to 1;  setF/getF(type 2, 111) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "kitchen_cabinet_door_hint",
+   "label": "Kitchen: locked Cabinet door hint shown",
+   "group": "Quest flags, L5: The Kitchen",
+   "offset": 299,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 53 (0x35); set in {'R018 L5: The Kitchen': ['event 46']}; read in {'R018 L5: The Kitchen': ['event 46']}; seen set to 1;  setF/getF(type 2, 53) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "astrologia_cleric_blessing",
+   "label": "Troll cleric's blessing in Astrologia; Aldhelm in The Runed Room checks it",
+   "group": "Quest flags, L6: Astrologia",
+   "offset": 308,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 62 (0x3e); set in {'R024 L6: Astrologia': ['event 19']}; read in {'R002 L1: The Runed Room': ['event 55']}; seen set to 1;  setF/getF(type 2, 62) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "astrologia_gremlin_wizard",
+   "label": "Gremlin wizard met in Astrologia; never read",
+   "group": "Quest flags, L6: Astrologia",
+   "offset": 309,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 63 (0x3f); set in {'R024 L6: Astrologia': ['event 21']}; read in {}; seen set to 1;  setF/getF(type 2, 63) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "astrologia_overheard",
+   "label": "Conversation overheard in Astrologia; never read",
+   "group": "Quest flags, L6: Astrologia",
+   "offset": 310,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 64 (0x40); set in {'R024 L6: Astrologia': ['event 20']}; read in {}; seen set to 1;  setF/getF(type 2, 64) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "green_dragon_joke_maze",
+   "label": "Green dragon laughed at your joke in the Nasty Little Maze (one of 85/86/101)",
+   "group": "Quest flags, L6: Nasty Little Maze",
+   "offset": 331,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 85 (0x55); set in {'R027 L6: Nasty Little Maze': ['event 4']}; read in {'R027 L6: Nasty Little Maze': ['event 4']}; seen set to 1;  setF/getF(type 2, 85) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "macduff_ghost_defeated",
+   "label": "Macduff's Ghost beaten in The Great Hall (boss)",
+   "group": "Quest flags, L6: The Great Hall",
+   "offset": 285,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 39 (0x27); set in {'R021 L6: The Great Hall': ['event 10', 'event 11', 'event 12', 'event 9']}; read in {'R021 L6: The Great Hall': ['event 7', 'event 9']}; seen set to 1;  setF/getF(type 2, 39) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "green_dragon_joke_parapets",
+   "label": "Green dragon joke in The Parapets",
+   "group": "Quest flags, L6: The Parapets",
+   "offset": 347,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 101 (0x65); set in {'R028 L6: The Parapets': ['event 4']}; read in {'R028 L6: The Parapets': ['event 4']}; seen set to 1;  setF/getF(type 2, 101) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "aerie_lever_state",
+   "label": "Lever/click state 0-3 (Alchemia sets 0-2, The Aerie 1-3); Choronzar's Demesne tomes read it",
+   "group": "Quest flags, L7: Alchemia",
+   "offset": 304,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 58 (0x3a); set in {'R022 L7: Alchemia': ['event 11', 'event 12', 'event 13', 'event 7', 'event 8'], 'R023 L7: The Aerie': ['event 16', 'event 33', 'event 34', 'event 4'], \"R033 Choronzar's Demesne\": ['event 100', 'event 19', 'event 28', 'event 51', 'event 58']}; read in {'R023 L7: The Aerie': ['event 33', 'event 34', 'event 4'], \"R033 Choronzar's Demesne\": ['event 100', 'event 13', 'event 19', 'event 28', 'event 51', 'event 58']}; seen set to 0, 1, 2, 3, None;  setF/getF(type 2, 58) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "macbeth_ghost_defeated",
+   "label": "Macbeth's Ghost beaten in The Aerie (boss); never read",
+   "group": "Quest flags, L7: The Aerie",
+   "offset": 286,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 40 (0x28); set in {'R023 L7: The Aerie': ['event 19', 'event 20', 'event 21']}; read in {}; seen set to 1;  setF/getF(type 2, 40) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "aerie_lever_touched",
+   "label": "Aerie lever event done",
+   "group": "Quest flags, L7: The Aerie",
+   "offset": 305,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 59 (0x3b); set in {'R023 L7: The Aerie': ['event 33', 'event 34', 'event 4']}; read in {'R023 L7: The Aerie': ['event 33', 'event 34', 'event 4']}; seen set to 1;  setF/getF(type 2, 59) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "aerie_summit",
+   "label": "Top of The Aerie reached (Galatea leaves the secret door ajar); opens the Runed Room doors",
+   "group": "Quest flags, L7: The Aerie",
+   "offset": 306,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 60 (0x3c); set in {'R023 L7: The Aerie': ['event 7']}; read in {'R002 L1: The Runed Room': ['event 55'], 'R023 L7: The Aerie': ['event 7']}; seen set to 1;  setF/getF(type 2, 60) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "aerie_wall_marks",
+   "label": "Aerie wall inscriptions read; never read",
+   "group": "Quest flags, L7: The Aerie",
+   "offset": 307,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 61 (0x3d); set in {'R023 L7: The Aerie': ['event 4']}; read in {}; seen set to 1;  setF/getF(type 2, 61) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "rory_in_attic",
+   "label": "Rory met in The Attic",
+   "group": "Quest flags, L7: The Attic",
+   "offset": 345,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 99 (0x63); set in {'R029 L7: The Attic': ['event 8']}; read in {'R029 L7: The Attic': ['event 8']}; seen set to 1;  setF/getF(type 2, 99) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "green_dragon_joke_ruined_room",
+   "label": "Green dragon joke in The Ruined Room",
+   "group": "Quest flags, L7: The Ruined Room",
+   "offset": 332,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 86 (0x56); set in {'R030 L7: The Ruined Room': ['event 4']}; read in {'R030 L7: The Ruined Room': ['event 4']}; seen set to 1;  setF/getF(type 2, 86) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "bestiary_candle",
+   "label": "Bestiary Brief Candle burn counter 0-10, 0 when the candle is used up",
+   "group": "Quest flags, L8: The Bestiary",
+   "offset": 314,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 68 (0x44); set in {'R025 L8: The Bestiary': ['event 7', 'event ?']}; read in {'R025 L8: The Bestiary': ['event 7', 'event ?']}; seen set to 0, None;  setF/getF(type 2, 68) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "bestiary_lantern_bonus",
+   "label": "Bestiary: reward for bringing a Lantern",
+   "group": "Quest flags, L8: The Bestiary",
+   "offset": 315,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 69 (0x45); set in {'R025 L8: The Bestiary': ['event 7', 'event ?']}; read in {'R025 L8: The Bestiary': ['event 7', 'event ?']}; seen set to 1;  setF/getF(type 2, 69) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "bestiary_lit_section",
+   "label": "Bestiary torch-lit section reached",
+   "group": "Quest flags, L8: The Bestiary",
+   "offset": 316,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 70 (0x46); set in {'R025 L8: The Bestiary': ['event 40']}; read in {'R025 L8: The Bestiary': ['event 16', 'event 45', 'event 47']}; seen set to 1;  setF/getF(type 2, 70) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "rory_entombed",
+   "label": "Rory found sealed in stone in The Bestiary; read in 20 maps where Rory or his mob would appear",
+   "group": "Quest flags, L8: The Bestiary",
+   "offset": 317,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 71 (0x47); set in {'R025 L8: The Bestiary': ['event 48']}; read in {'R004 L2: The Trophy Room': ['event 5'], 'R006 L2: The Chivalrous Room': ['event 8'], 'R009 L3: The Gallery': ['event 20'], 'R010 L3: The Pantry': ['event 20'], 'R011 L3: The Brewery': ['event 4'], 'R012 L3: The Lesser Hall': ['event 20'], 'R013 L4: The Ballroom': ['event 20'], 'R014 L4: The Music Room': ['event 4'], 'R015 L4: The Cloak Room': ['event 4'], 'R017 L5: The Chambers': ['event 20'], 'R018 L5: The Kitchen': ['event 4'], 'R019 L5: The Cabinet': ['event 4'], 'R020 L5: The Conservatory': ['event 4'], 'R021 L6: The Great Hall': ['event 4'], 'R023 L7: The Aerie': ['event 4'], 'R025 L8: The Bestiary': ['event 48'], 'R027 L6: Nasty Little Maze': ['event 22'], 'R028 L6: The Parapets': ['event 8'], 'R029 L7: The Attic': ['event 8'], 'R030 L7: The Ruined Room': ['event 22']}; seen set to 1;  setF/getF(type 2, 71) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "rory_burial_quest",
+   "label": "Bestiary: counter for the free-Rory's-corpse request",
+   "group": "Quest flags, L8: The Bestiary",
+   "offset": 318,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 72 (0x48); set in {'R025 L8: The Bestiary': ['event 49']}; read in {'R025 L8: The Bestiary': ['event 49']}; seen set to None;  setF/getF(type 2, 72) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "bestiary_flag_87",
+   "label": "Bestiary: read and cleared to 0 by four events; nothing sets it nonzero",
+   "group": "Quest flags, L8: The Bestiary",
+   "offset": 333,
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "flag 87 (0x57); set in {'R025 L8: The Bestiary': ['event 10', 'event 11', 'event 12', 'event 13', 'event 14', 'event 15', 'event 16', 'event 25', 'event 34', 'event 35', 'event 8', 'event 9']}; read in {'R025 L8: The Bestiary': ['event 10', 'event 11', 'event 12', 'event 13', 'event 14', 'event 15', 'event 16', 'event 35', 'event 8', 'event 9']}; seen set to 0;  setF/getF(type 2, 87) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gateway_queen_check",
+   "label": "Read in The Gateway (\"You have already defeated the Queen\"); never set: the Queen-defeat event sets 191 instead",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 436,
+   "type": "u8",
+   "confidence": "unknown",
+   "evidence": "flag 190 (0xbe); set in {}; read in {'R032 L12: The Gateway': ['event 20', 'event 51']}; seen set to nothing;  setF/getF(type 2, 190) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gateway_queen_defeated",
+   "label": "Queen defeated in The Gateway (stat and knowledge boosts given); sets 106 and 223 at the same time",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 437,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 191 (0xbf); set in {'R032 L12: The Gateway': ['event 12']}; read in {'R032 L12: The Gateway': ['event 12']}; seen set to 1;  setF/getF(type 2, 191) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gateway_storm_giant",
+   "label": "Gateway: storm-giant statue used (1), reset to 0 at the heart of The Gateway",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 438,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 192 (0xc0); set in {'R032 L12: The Gateway': ['event 17', 'event 50']}; read in {'R032 L12: The Gateway': ['event 17']}; seen set to 0, 1;  setF/getF(type 2, 192) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gateway_hall_entered",
+   "label": "Gateway jewelled hallway entered; the portal-crystal event checks it",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 462,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 216 (0xd8); set in {'R032 L12: The Gateway': ['event 36']}; read in {'R032 L12: The Gateway': ['event 36', 'event 49']}; seen set to 1; record bytes 0x1CC.. are outside the cipher range (plain text in the file) setF/getF(type 2, 216) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "gateway_complete",
+   "label": "Set to 2 by the Queen-defeat event; never read by the client (maybe for another land or the host)",
+   "group": "Quest flags, L12: The Gateway",
+   "offset": 469,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 223 (0xdf); set in {'R032 L12: The Gateway': ['event 12']}; read in {}; seen set to 2; record bytes 0x1CC.. are outside the cipher range (plain text in the file) setF/getF(type 2, 223) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "naomi_spirit_bottle",
+   "label": "Choronzar's Demesne: Naomi / Spirit Bottle (Witches Mummy) quest state counter",
+   "group": "Quest flags, Choronzar's Demesne",
+   "offset": 353,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 107 (0x6b); set in {\"R033 Choronzar's Demesne\": ['event 102', 'event 51']}; read in {\"R033 Choronzar's Demesne\": ['event 102', 'event 17', 'event 25', 'event 51', 'event 8']}; seen set to None;  setF/getF(type 2, 107) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "choronzar_treasure",
+   "label": "Choronzar's Demesne treasure pile taken (value computed)",
+   "group": "Quest flags, Choronzar's Demesne",
+   "offset": 354,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 108 (0x6c); set in {\"R033 Choronzar's Demesne\": ['event 21']}; read in {\"R033 Choronzar's Demesne\": ['event 21']}; seen set to None;  setF/getF(type 2, 108) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "choronzar_throne_bits",
+   "label": "Bit mask: 0x01 throne life-force, 0x02, 0x10 secret passage in Choronzar's Demesne",
+   "group": "Quest flags, Choronzar's Demesne",
+   "offset": 356,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 110 (0x6e); set in {\"R033 Choronzar's Demesne\": ['event 14', 'event 17', 'event 32']}; read in {\"R033 Choronzar's Demesne\": ['event 113', 'event 14', 'event 17', 'event 32']}; seen set to None;  setF/getF(type 2, 110) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "galatea_quest_complete",
+   "label": "Galatea's final message in The Crypt (main quest won); read in 15 maps, NPCs then hold one-way doors open",
+   "group": "Quest flags, The Crypt",
+   "offset": 266,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 20 (0x14); set in {'R026 The Crypt': ['event 8']}; read in {'R002 L1: The Runed Room': ['event 55'], 'R009 L3: The Gallery': ['event 11', 'event 29', 'event 30', 'event 9'], 'R010 L3: The Pantry': ['event 22'], 'R011 L3: The Brewery': ['event 1', 'event 16', 'event 37'], 'R013 L4: The Ballroom': ['event 11', 'event 9'], 'R014 L4: The Music Room': ['event 6'], 'R015 L4: The Cloak Room': ['event 6', 'event 7'], 'R016 L4: The Library': ['event 6'], 'R017 L5: The Chambers': ['event 11', 'event 9'], 'R018 L5: The Kitchen': ['event 46'], 'R019 L5: The Cabinet': ['event 14', 'event 15'], 'R020 L5: The Conservatory': ['event 15'], 'R022 L7: Alchemia': ['event 0', 'event 2'], 'R025 L8: The Bestiary': ['event 47'], 'R026 The Crypt': ['event 8']}; seen set to 1;  setF/getF(type 2, 20) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "crypt_journal",
+   "label": "Crypt: Wyrd Sisters' journal event, computed value",
+   "group": "Quest flags, The Crypt",
+   "offset": 335,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 89 (0x59); set in {'R026 The Crypt': ['event 0']}; read in {'R026 The Crypt': ['event 0']}; seen set to None;  setF/getF(type 2, 89) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "hall_of_heroes",
+   "label": "Setting it calls RUINS 5144:00CD (\"Opening Hall of Heroes...\", adds the character). Set at the end of The Crypt and in The Gateway",
+   "group": "Quest flags, The Crypt",
+   "offset": 352,
+   "type": "u8",
+   "enum": {
+    "0": "no",
+    "1": "yes"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 106 (0x6a); set in {'R026 The Crypt': ['event 8'], 'R032 L12: The Gateway': ['event 12']}; read in {'R026 The Crypt': ['event 8']}; seen set to 1;  setF/getF(type 2, 106) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "funhouse_ingots",
+   "label": "Funhouse ingot stack: counter raised by 5 per visit",
+   "group": "Quest flags, The Funhouse",
+   "offset": 456,
+   "type": "u8",
+   "confidence": "inferred",
+   "evidence": "flag 210 (0xd2); set in {'R034 The Funhouse': ['event 63']}; read in {'R034 The Funhouse': ['event 63']}; seen set to None;  setF/getF(type 2, 210) calls through the map API table DS:117C (RUINS 0C2E:000C set, 006C get, 00A9 nonzero, 00F5 zero); see set_in/read_in"
+  },
+  {
+   "name": "unused_flags_0x10f",
+   "label": "Never referenced (flag 25)",
+   "group": "Quest flags, never referenced",
+   "offset": 271,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x11b",
+   "label": "Never referenced (flag 37)",
+   "group": "Quest flags, never referenced",
+   "offset": 283,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x154",
+   "label": "Never referenced (flag 94)",
+   "group": "Quest flags, never referenced",
+   "offset": 340,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x156",
+   "label": "Never referenced (flags 96 to 98)",
+   "group": "Quest flags, never referenced",
+   "offset": 342,
+   "type": "bytes",
+   "len": 3,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x15a",
+   "label": "Never referenced (flag 100)",
+   "group": "Quest flags, never referenced",
+   "offset": 346,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x15c",
+   "label": "Never referenced (flags 102 to 105)",
+   "group": "Quest flags, never referenced",
+   "offset": 348,
+   "type": "bytes",
+   "len": 4,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x163",
+   "label": "Never referenced (flag 109)",
+   "group": "Quest flags, never referenced",
+   "offset": 355,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x16b",
+   "label": "Never referenced (flags 117 to 134)",
+   "group": "Quest flags, never referenced",
+   "offset": 363,
+   "type": "bytes",
+   "len": 18,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x17e",
+   "label": "Never referenced (flags 136 to 180)",
+   "group": "Quest flags, never referenced",
+   "offset": 382,
+   "type": "bytes",
+   "len": 45,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1ac",
+   "label": "Never referenced (flags 182 to 189)",
+   "group": "Quest flags, never referenced",
+   "offset": 428,
+   "type": "bytes",
+   "len": 8,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1b7",
+   "label": "Never referenced (flags 193 to 209)",
+   "group": "Quest flags, never referenced",
+   "offset": 439,
+   "type": "bytes",
+   "len": 17,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1c9",
+   "label": "Never referenced (flags 211 to 215)",
+   "group": "Quest flags, never referenced",
+   "offset": 457,
+   "type": "bytes",
+   "len": 5,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1cf",
+   "label": "Never referenced (flags 217 to 222)",
+   "group": "Quest flags, never referenced",
+   "offset": 463,
+   "type": "bytes",
+   "len": 6,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) reads or writes these indices"
   },
   {
    "name": "mode_flag_a",
@@ -530,15 +2005,6 @@
    }
   },
   {
-   "name": "flags_b",
-   "group": "Progress flags",
-   "offset": 382,
-   "type": "bytes",
-   "len": 45,
-   "confidence": "unknown",
-   "evidence": "middle part of the 224-byte block, zero in all samples"
-  },
-  {
    "name": "mode_flag_b",
    "group": "Validation",
    "offset": 427,
@@ -553,24 +2019,50 @@
    }
   },
   {
-   "name": "flags_c",
-   "group": "Progress flags",
-   "offset": 428,
-   "type": "bytes",
-   "len": 42,
-   "confidence": "unknown",
-   "evidence": "tail of the 224-byte block (0x1AC..0x1D5); bytes from 0x1CC on are outside the cipher range (see ItemState note)"
-  },
-  {
    "name": "item_charges",
    "group": "Inventory",
    "offset": 470,
    "type": "u8",
    "count": 32,
    "stride": 1,
-   "confidence": "inferred",
-   "evidence": "mem+0xBB[32] bytes, parallel to ItemIds (new characters initialise all to 0xFF and the pregens have 0xFF for empty slots; the starting items have 08,0A,0A,00). Probably charges/condition or an equipped/identified state; not strictly zero where the id is 0 in Tosk (slots 25,26). NOT ENCRYPTED: 0x1CC..0x1F5 are plain bytes ; TWGENN 0846:03B5 (Ghidra FUN_1846_03b5, mem->record) and RUINS ovl_20F6_03FE (flat 4222:03FE = 4257:00AE) ; TWGENN 0846:0060 (FUN_1846_0060, record->mem) and RUINS ovl_20F6_0053 (flat 4222:0053)",
-   "encrypted": false
+   "confidence": "confirmed",
+   "evidence": "32 bytes -> mem+0xBB, remaining uses of each slot's item. 0xFF = not set: building the inventory (RUINS 0B1A:07AA) fills in the item's default (record +0x1C); empty slots hold 0xFF; a use takes one off and the last use removes a consumable (0B1A:01A8, 0B1A:049A); items with default 0 ignore the byte",
+   "encrypted": false,
+   "beside": "items",
+   "items": [
+    "Backpack 1",
+    "Backpack 2",
+    "Backpack 3",
+    "Backpack 4",
+    "Backpack 5",
+    "Backpack 6",
+    "Backpack 7",
+    "Backpack 8",
+    "Backpack 9",
+    "Backpack 10",
+    "Unused 1",
+    "Unused 2",
+    "Unused 3",
+    "Unused 4",
+    "Unused 5",
+    "Head",
+    "Body",
+    "Weapon",
+    "Shield / gauntlets",
+    "Accessory 1",
+    "Accessory 2",
+    "Quest items 1",
+    "Quest items 2",
+    "Quest items 3",
+    "Quest items 4",
+    "Quest items 5",
+    "Quest items 6",
+    "Quest items 7",
+    "Quest items 8",
+    "Quest items 9",
+    "Quest items 10",
+    "Incoming trade item"
+   ]
   }
  ],
  "automap": {
@@ -714,6 +2206,268 @@
   ],
   "names_confidence": "inferred",
   "evidence": "RUINS overlay 210F: ovl_210F_02D4 (flat 4969:02D4, load), ovl_210F_0390 (4969:0390, save), ovl_210F_0704 (49C0:0194, draw/update), ovl_210F_0D31 (49C0:07C1, map id -> index through the word table at DS:0B3A, error \"Illegal Map Number!\"); TWGENN 14D2:000A/02E0 for the reset. Stock AUTOMAPS.DAT has 17 non-0xFF bytes: cells (6..10,5) and column 8 rows 6..13 plus (9,11) = the walk north from the start cell (8,13) (matches LastPosition 0xD8), and three plane-B bytes at B[60],B[76],B[92]."
+ },
+ "catalog": {
+  "items": [
+   {"id": 0, "name": "Empty"},
+   {"id": 1, "name": "Short Sword"},
+   {"id": 2, "name": "Broadsword"},
+   {"id": 3, "name": "Longsword"},
+   {"id": 4, "name": "Martel's Blade", "charges": 6},
+   {"id": 5, "name": "Hengist's Sword", "charges": 5},
+   {"id": 6, "name": "Talorcan's Claymore", "charges": 3},
+   {"id": 7, "name": "Edwin's Peacegiver", "charges": 5},
+   {"id": 8, "name": "Lowland Stabber"},
+   {"id": 9, "name": "Thor's Bane"},
+   {"id": 10, "name": "Lodbrok's Blade"},
+   {"id": 11, "name": "Oswald's Bane", "charges": 5},
+   {"id": 12, "name": "Ecgfrith's Sword", "charges": 5},
+   {"id": 13, "name": "Athelstan's Sword", "charges": 8},
+   {"id": 14, "name": "Seax"},
+   {"id": 15, "name": "Scramasax", "charges": 3},
+   {"id": 16, "name": "Claymore"},
+   {"id": 17, "name": "Axe"},
+   {"id": 18, "name": "Battle Axe"},
+   {"id": 19, "name": "Woodsman's Axe"},
+   {"id": 20, "name": "Duncan's Axe", "charges": 10},
+   {"id": 21, "name": "Malcolm's Chopper"},
+   {"id": 22, "name": "Donalbain's Axe", "charges": 10},
+   {"id": 23, "name": "Banquo's Axe", "charges": 5},
+   {"id": 24, "name": "The Axe of Angus", "charges": 10},
+   {"id": 25, "name": "Club"},
+   {"id": 26, "name": "Mace"},
+   {"id": 27, "name": "Cathness's Club", "charges": 5},
+   {"id": 28, "name": "Morningstar"},
+   {"id": 29, "name": "Strathclyde's Club", "charges": 5},
+   {"id": 30, "name": "Hecate's Hammer", "charges": 8},
+   {"id": 31, "name": "Flail"},
+   {"id": 32, "name": "Fleance's Flail", "charges": 2},
+   {"id": 33, "name": "War Hammer"},
+   {"id": 34, "name": "Hilda's Hammer"},
+   {"id": 35, "name": "Horsa's Hammer", "charges": 8},
+   {"id": 36, "name": "Macduff's Maul", "charges": 5},
+   {"id": 37, "name": "Quarterstaff"},
+   {"id": 38, "name": "Spear"},
+   {"id": 39, "name": "Ascomanni Spear", "charges": 8},
+   {"id": 40, "name": "Halberd"},
+   {"id": 41, "name": "Long Spear"},
+   {"id": 42, "name": "Tapering Spear", "charges": 5},
+   {"id": 43, "name": "Bayonet Spear", "charges": 8},
+   {"id": 44, "name": "Lozenge Spear"},
+   {"id": 45, "name": "Leaf Spear", "charges": 5},
+   {"id": 46, "name": "Polearm"},
+   {"id": 47, "name": "Bardiche"},
+   {"id": 48, "name": "Elchere's Staff", "charges": 5},
+   {"id": 49, "name": "Coerl's Staff", "charges": 8},
+   {"id": 50, "name": "Lance"},
+   {"id": 51, "name": "Oswy's Javelin", "charges": 8},
+   {"id": 52, "name": "Lugh's Spear", "charges": 250},
+   {"id": 53, "name": "Osric's Staff", "charges": 5},
+   {"id": 54, "name": "Wulfherd's Staff"},
+   {"id": 55, "name": "Swithun's Staff", "charges": 5},
+   {"id": 56, "name": "Aldhelm's Staff", "charges": 10},
+   {"id": 57, "name": "Short Bow"},
+   {"id": 58, "name": "Longbow"},
+   {"id": 59, "name": "Hunting Bow", "charges": 8},
+   {"id": 60, "name": "Crossbow"},
+   {"id": 61, "name": "Composite Bow"},
+   {"id": 62, "name": "Welsh Longbow", "charges": 8},
+   {"id": 63, "name": "Bernician Bow", "charges": 5},
+   {"id": 64, "name": "Deiran Bow", "charges": 8},
+   {"id": 65, "name": "Bow of Badonicus", "charges": 5},
+   {"id": 66, "name": "Camlunn Crossbow"},
+   {"id": 67, "name": "Yew Bow of York", "charges": 8},
+   {"id": 68, "name": "Brunanburh Bow"},
+   {"id": 69, "name": "Dalriadan Bow", "charges": 5},
+   {"id": 70, "name": "Buckler"},
+   {"id": 71, "name": "Round Shield"},
+   {"id": 72, "name": "Linden Shield", "charges": 10},
+   {"id": 73, "name": "Iron Bossed Shield", "charges": 5},
+   {"id": 74, "name": "Convex Shield"},
+   {"id": 75, "name": "Flat Shield"},
+   {"id": 76, "name": "Pointed Shield", "charges": 25},
+   {"id": 77, "name": "Kite Shield"},
+   {"id": 78, "name": "Shield Wall", "charges": 5},
+   {"id": 79, "name": "Edwin's Defender", "charges": 5},
+   {"id": 80, "name": "Guardian of Wessex", "charges": 10},
+   {"id": 81, "name": "Ethelbald's Buckler", "charges": 10},
+   {"id": 82, "name": "Wulfherd's Shield", "charges": 50},
+   {"id": 83, "name": "Ealstan's Absorber", "charges": 22},
+   {"id": 84, "name": "My Lady's Favor", "charges": 5},
+   {"id": 85, "name": "Spiked Shield", "charges": 5},
+   {"id": 86, "name": "Hadrian's Wall", "charges": 100},
+   {"id": 87, "name": "Leather Cap"},
+   {"id": 88, "name": "Head Chainmail"},
+   {"id": 89, "name": "Turkish Hat", "charges": 5},
+   {"id": 90, "name": "Huda's Headgear", "charges": 5},
+   {"id": 91, "name": "Ealstan's Cap", "charges": 8},
+   {"id": 92, "name": "Wulfherd's Helm", "charges": 8},
+   {"id": 93, "name": "Helmet"},
+   {"id": 94, "name": "Iron Crown"},
+   {"id": 95, "name": "Deer Horned Helm", "charges": 8},
+   {"id": 96, "name": "Spiked Helm", "charges": 5},
+   {"id": 97, "name": "Antlered Helm", "charges": 8},
+   {"id": 98, "name": "Reindeer Horn Helm", "charges": 5},
+   {"id": 99, "name": "Slotted Helm", "charges": 5},
+   {"id": 100, "name": "Unicorn Horn Helm", "charges": 5},
+   {"id": 101, "name": "Phrygian Cap"},
+   {"id": 102, "name": "Rhino Horn Helm", "charges": 15},
+   {"id": 103, "name": "Ivar's Helm", "charges": 8},
+   {"id": 104, "name": "Alfred's Hat", "charges": 5},
+   {"id": 105, "name": "Ironside's Headgear", "charges": 5},
+   {"id": 106, "name": "Alcuin's Cap"},
+   {"id": 107, "name": "Cloth Jacket"},
+   {"id": 108, "name": "Leather Jacket"},
+   {"id": 109, "name": "Chainmail"},
+   {"id": 110, "name": "Cuirboillis"},
+   {"id": 111, "name": "Breastplate"},
+   {"id": 112, "name": "Steel Breastplate"},
+   {"id": 113, "name": "Woolen Cloak"},
+   {"id": 114, "name": "Red Tartan Cloak"},
+   {"id": 115, "name": "Blue Tartan Cloak"},
+   {"id": 116, "name": "Field Plate"},
+   {"id": 117, "name": "Full Plate"},
+   {"id": 118, "name": "Half Plate"},
+   {"id": 119, "name": "Adamantine Plate"},
+   {"id": 120, "name": "Holy Vestments", "charges": 5},
+   {"id": 121, "name": "Wizard's Tabard", "charges": 5},
+   {"id": 122, "name": "Thief's Tabard", "charges": 10},
+   {"id": 123, "name": "Ranger's Tabard", "charges": 10},
+   {"id": 124, "name": "Cleric's Tabard"},
+   {"id": 125, "name": "Knight's Tabard"},
+   {"id": 126, "name": "Barbarian's Tabard"},
+   {"id": 127, "name": "Disbelieving Tunic"},
+   {"id": 128, "name": "Mendicant's Tunic", "charges": 5},
+   {"id": 129, "name": "Beggar's Robes"},
+   {"id": 130, "name": "Alfred's Robes"},
+   {"id": 131, "name": "Turgeis's Tripper"},
+   {"id": 132, "name": "Saxon Sticks"},
+   {"id": 133, "name": "Ethelfleda's Flail"},
+   {"id": 134, "name": "Alcuin's Sticks", "charges": 25},
+   {"id": 135, "name": "Menteth's Maul", "charges": 8},
+   {"id": 136, "name": "Aldhelm's Gauntlets", "charges": 10},
+   {"id": 137, "name": "Alfred's Gloves", "charges": 10},
+   {"id": 138, "name": "Gorgon's Gauntlets", "charges": 5},
+   {"id": 139, "name": "Adamantine Glove", "charges": 5},
+   {"id": 140, "name": "Ivar's Gauntlets", "charges": 5},
+   {"id": 141, "name": "Berserker Talisman", "charges": 5},
+   {"id": 142, "name": "Binding Talisman", "charges": 5},
+   {"id": 143, "name": "Tracking Talisman", "charges": 5},
+   {"id": 144, "name": "Trance Talisman", "charges": 5},
+   {"id": 145, "name": "Perseus's Ring", "charges": 15},
+   {"id": 146, "name": "Hippocrates's Ring", "charges": 15},
+   {"id": 147, "name": "Alcuin's Ring", "charges": 20},
+   {"id": 148, "name": "Gauze Ring", "charges": 15},
+   {"id": 149, "name": "Aldhelm's Harp", "charges": 25},
+   {"id": 150, "name": "The Dagda's Harp", "charges": 20},
+   {"id": 151, "name": "Merlin's Ease", "charges": 15},
+   {"id": 152, "name": "Merlin's Support", "charges": 15},
+   {"id": 153, "name": "Merlin's Will", "charges": 15},
+   {"id": 154, "name": "Holy  Relic", "charges": 5},
+   {"id": 155, "name": "Drakesbane", "charges": 5},
+   {"id": 156, "name": "Succubus Pipes", "charges": 5},
+   {"id": 157, "name": "Gaelic Garlic", "charges": 4},
+   {"id": 158, "name": "Reversing Amulet", "charges": 15},
+   {"id": 159, "name": "Halo Scroll", "charges": 5},
+   {"id": 160, "name": "Scroll of Protection", "charges": 5},
+   {"id": 161, "name": "Refresh Scroll", "charges": 5},
+   {"id": 162, "name": "Scroll of the Sun", "charges": 5},
+   {"id": 163, "name": "Lantern"},
+   {"id": 164, "name": "Basalt Scroll", "charges": 5},
+   {"id": 165, "name": "Rune Chart", "charges": 5},
+   {"id": 166, "name": "Hawk's Eye", "charges": 5},
+   {"id": 167, "name": "Crystal Ball", "charges": 5},
+   {"id": 168, "name": "Shaman Scroll", "charges": 5},
+   {"id": 169, "name": "Volley Scroll", "charges": 5},
+   {"id": 170, "name": "Methuselah's Scroll", "charges": 5},
+   {"id": 171, "name": "Aura Scroll", "charges": 5},
+   {"id": 172, "name": "Boomerang Scroll", "charges": 5},
+   {"id": 173, "name": "Pummel Scroll", "charges": 8},
+   {"id": 174, "name": "Lady's Scroll", "charges": 8},
+   {"id": 175, "name": "Sovereign Scroll", "charges": 5},
+   {"id": 176, "name": "Deadly Scroll", "charges": 8},
+   {"id": 177, "name": "Defending  Scroll", "charges": 5},
+   {"id": 178, "name": "Oxymoron Scroll", "charges": 5},
+   {"id": 179, "name": "Viking's Scroll", "charges": 5},
+   {"id": 180, "name": "Hippocratic Scroll", "charges": 5},
+   {"id": 181, "name": "Emanating Scroll", "charges": 5},
+   {"id": 182, "name": "Left Arm Scroll", "charges": 5},
+   {"id": 183, "name": "Thor's Scroll", "charges": 5},
+   {"id": 184, "name": "Begonia Balm", "charges": 10},
+   {"id": 185, "name": "Petunia Poultice", "charges": 12},
+   {"id": 186, "name": "Lavender Lotion", "charges": 10},
+   {"id": 187, "name": "Dragon Flagon", "charges": 15},
+   {"id": 188, "name": "Teleport Pass", "charges": 5},
+   {"id": 189, "name": "Small Letter of Credit"},
+   {"id": 190, "name": "Large Letter of Credit"},
+   {"id": 191, "name": "Great Letter of Credit"},
+   {"id": 192, "name": "Skeleton Keyring", "charges": 2},
+   {"id": 193, "name": "Wooden Lockpick"},
+   {"id": 194, "name": "Brass Lockpick"},
+   {"id": 195, "name": "Iron Lockpick"},
+   {"id": 196, "name": "Mugwort Mead", "charges": 8},
+   {"id": 197, "name": "Willowbark Wine", "charges": 10},
+   {"id": 198, "name": "Juniper Juice", "charges": 15},
+   {"id": 199, "name": "Bless Potion", "charges": 8},
+   {"id": 200, "name": "Brief Candle", "charges": 2},
+   {"id": 201, "name": "Streoneshalh's Aid"},
+   {"id": 202, "name": "Beorhtric's Bane", "charges": 20},
+   {"id": 203, "name": "Blueberry Brew", "charges": 10},
+   {"id": 204, "name": "Elderberry Elixir", "charges": 8},
+   {"id": 205, "name": "Woad Wine", "charges": 5},
+   {"id": 206, "name": "Palace Chalice", "charges": 10},
+   {"id": 207, "name": "Doormat"},
+   {"id": 208, "name": "UnusedKey", "charges": 3},
+   {"id": 209, "name": "Cursed Scroll", "charges": 5},
+   {"id": 210, "name": "Horseshoe"},
+   {"id": 211, "name": "Grappling Hook", "charges": 255},
+   {"id": 212, "name": "Sharp Grappling Hook", "charges": 255},
+   {"id": 213, "name": "A Shrubbery"},
+   {"id": 214, "name": "Rasp File"},
+   {"id": 215, "name": "Hand Saw"},
+   {"id": 216, "name": "Ohthere's Dagger"},
+   {"id": 217, "name": "Mannanan's Ring", "charges": 3},
+   {"id": 218, "name": "Silver Lockpick"},
+   {"id": 219, "name": "Steel Lockpick"},
+   {"id": 220, "name": "Cold Steel Lockpick"},
+   {"id": 221, "name": "Adamantine Lockpick"},
+   {"id": 222, "name": "Hole Punch"},
+   {"id": 223, "name": "Carding Brush"},
+   {"id": 224, "name": "Rope"},
+   {"id": 225, "name": "Unused12 Life Jacket"},
+   {"id": 226, "name": "The Prunes of Cawdor", "charges": 2},
+   {"id": 227, "name": "Tongs"},
+   {"id": 228, "name": "Mallet"},
+   {"id": 229, "name": "Unused16 Ebony"},
+   {"id": 230, "name": "Unused17 Opal"},
+   {"id": 231, "name": "Leaden Dagger", "charges": 1},
+   {"id": 232, "name": "Blue Banner", "charges": 1},
+   {"id": 233, "name": "Orange Banner", "charges": 1},
+   {"id": 234, "name": "Cup of Drowning", "charges": 1},
+   {"id": 235, "name": "Crown of Crimson", "charges": 1},
+   {"id": 236, "name": "Healing Locket", "charges": 255},
+   {"id": 237, "name": "Hurly Burly", "charges": 1},
+   {"id": 238, "name": "Milk of Human Kindness", "charges": 5},
+   {"id": 239, "name": "Fillet of a Fenny Snake", "charges": 1},
+   {"id": 240, "name": "Eye of Newt", "charges": 1},
+   {"id": 241, "name": "Toe of Frog", "charges": 1},
+   {"id": 242, "name": "Wool of Bat", "charges": 1},
+   {"id": 243, "name": "Tongue of Dog", "charges": 1},
+   {"id": 244, "name": "Adder Fork", "charges": 1},
+   {"id": 245, "name": "Blindworm Sting", "charges": 1},
+   {"id": 246, "name": "Lizard Leg", "charges": 1},
+   {"id": 247, "name": "Howlet Wing", "charges": 1},
+   {"id": 248, "name": "Scale of Dragon", "charges": 1},
+   {"id": 249, "name": "Tooth of Wolf", "charges": 1},
+   {"id": 250, "name": "Witches Mummy", "charges": 1},
+   {"id": 251, "name": "Gall of Goat", "charges": 1},
+   {"id": 252, "name": "Witches Thumb", "charges": 1},
+   {"id": 253, "name": "Crack of Doom", "charges": 3},
+   {"id": 254, "name": "Unity Ring"},
+   {"id": 255, "name": "Not to be Assigned"}
+  ],
+  "no_charges": 255,
+  "evidence": "RESOURCE.038 decoded (rol 6 per word); charges = record +0x1C when above 0; research/cawdor"
  },
  "invariants": [
   "Write CAWCHAR.DAT with the cipher  (for bytes 8..0x1CB of each slot). There is no checksum anywhere (the cipher is a bijection over the 0x1C4 bytes; both programs decode any bytes).",

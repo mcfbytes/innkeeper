@@ -546,13 +546,1708 @@
    "evidence": "char+0x7a <- player obj +0x1c; automap draws arrow tile facing+1 (tiles 1-4); new character: 2"
   },
   {
-   "name": "unknown_0xf6",
-   "group": "Game flags",
+   "name": "hero_of_yserbius",
+   "label": "Game won: En-Li-Kil defeated at the Fountain of Life (\"HERO OF YSERBIUS\")",
+   "group": "Quest flags, L1: Dungeon Entrance",
+   "offset": 352,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6a; L1: Dungeon Entrance; L12: The Unknown; set by map34 e7; map1 exit gateway e7 hails the hero; the engine flag setter (DARKSTRT 1D88:06CE) calls 1EEE:0039 when index 0x6a is written (party/combatant table refresh). Uses: map1 f0xae e7@cell:30 test [bool]; map34 f0x4dd e7@cell:78,cell:87,cell:88 test [bool]; map34 f0x4dd e7@cell:78,cell:87,cell:88 set 0x1"
+  },
+  {
+   "name": "labyrinth_gate_unlocked",
+   "label": "Dungeon Entrance: Thieves' Key used on the Labyrinth gateway door (level 20+)",
+   "group": "Quest flags, L1: Dungeon Entrance",
+   "offset": 366,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x78; L1: Dungeon Entrance; takes keys 0xfb,0xd2,0xd3,0xd9,0xe1,0xe2,0xf8 and sets 1; later the door just opens. Uses: map1 f0x120 e10@dir3:02 test [0x1]; map1 f0x120 e10@dir3:02 set 0x1"
+  },
+  {
+   "name": "hall_of_doors_sword_rogues_fight",
+   "label": "Hall Of Doors: Rogues with two swords",
+   "group": "Quest flags, L1: Hall Of Doors",
+   "offset": 252,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x06; L1: Hall Of Doors; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map4 f0x860 e27@b04f:28 test [0x1]; map4 f0x860 e27@b04f:28 set 0x1"
+  },
+  {
+   "name": "hall_of_doors_goblin_fight",
+   "label": "Hall Of Doors: Goblins pitching gold",
+   "group": "Quest flags, L1: Hall Of Doors",
+   "offset": 253,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x07; L1: Hall Of Doors; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map4 f0x9e0 e28@b04f:2a test [0x1]; map4 f0x9e0 e28@b04f:2a set 0x1"
+  },
+  {
+   "name": "hall_of_doors_ogre_items_fight",
+   "label": "Hall Of Doors: Ogres with ring, insignia and wand",
+   "group": "Quest flags, L1: Hall Of Doors",
+   "offset": 254,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x08; L1: Hall Of Doors; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map4 f0xaf3 e29@b04f:2b test [0x1]; map4 f0xaf3 e29@b04f:2b set 0x1"
+  },
+  {
+   "name": "soldiers_copper_ogre_fight",
+   "label": "Soldier's Quarters: Copper Ogres with stolen gold",
+   "group": "Quest flags, L1: Soldier's Quarters",
+   "offset": 258,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0c; L1: Soldier's Quarters; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map6 f0x275 e10@b04f:39 test [0x1]; map6 f0x275 e10@b04f:39 set 0x1"
+  },
+  {
+   "name": "soldiers_mountain_lion_fight",
+   "label": "Soldier's Quarters: Mountain Lion lair",
+   "group": "Quest flags, L1: Soldier's Quarters",
+   "offset": 259,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0d; L1: Soldier's Quarters; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map6 f0x3e3 e11@b04f:5b test [0x1]; map6 f0x3e3 e11@b04f:5b set 0x1"
+  },
+  {
+   "name": "soldiers_pincer_fight",
+   "label": "Soldier's Quarters: pincer monsters by gold",
+   "group": "Quest flags, L1: Soldier's Quarters",
+   "offset": 260,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0e; L1: Soldier's Quarters; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map6 f0x574 e12@b04f:85 test [0x1]; map6 f0x574 e12@b04f:85 set 0x1"
+  },
+  {
+   "name": "soldiers_imp_ambush_fight",
+   "label": "Soldier's Quarters: imp ambush",
+   "group": "Quest flags, L1: Soldier's Quarters",
+   "offset": 261,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0f; L1: Soldier's Quarters; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map6 f0x69a e13@b04f:90 test [0x1]; map6 f0x69a e13@b04f:90 set 0x1"
+  },
+  {
+   "name": "soldiers_skeleton_coinbag_fight",
+   "label": "Soldier's Quarters: skeleton with coin bag",
+   "group": "Quest flags, L1: Soldier's Quarters",
+   "offset": 262,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x10; L1: Soldier's Quarters; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map6 f0x816 e14@b04f:ca test [0x1]; map6 f0x816 e14@b04f:ca set 0x1"
+  },
+  {
+   "name": "soldiers_nest_fight",
+   "label": "Soldier's Quarters: hissing nest with gold",
+   "group": "Quest flags, L1: Soldier's Quarters",
+   "offset": 263,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x11; L1: Soldier's Quarters; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map6 f0x9cb e15@b04f:fb test [0x1]; map6 f0x9cb e15@b04f:fb set 0x1"
+  },
+  {
+   "name": "mines_100_gold_taken",
+   "label": "The Mines: 100 gold on the floor taken",
+   "group": "Quest flags, L1: The Mines",
+   "offset": 248,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x02; L1: The Mines; AddGold 100 then set 1; later \"room is bare\". Uses: map2 f0x125 e3@cell:15,cell:16,cell:26,cell:f9 test [0x1]; map2 f0x125 e3@cell:15,cell:16,cell:26,cell:f9 set 0x1"
+  },
+  {
+   "name": "mines_rogue_gold_fight",
+   "label": "The Mines: Rogues counting gold",
+   "group": "Quest flags, L1: The Mines",
+   "offset": 249,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x03; L1: The Mines; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map2 f0x182 e4@b04f:da test [0x1]; map2 f0x182 e4@b04f:da set 0x1"
+  },
+  {
+   "name": "mines_bronze_ogre_fight",
+   "label": "The Mines: axe and vial guarded by Bronze Ogres (tested, never set)",
+   "group": "Quest flags, L1: The Mines",
+   "offset": 250,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x04; L1: The Mines; tested ==1 but no script sets it, so the full-loot fight repeats every visit. Uses: map2 f0xa78 e15@b04f:96 test [0x1]"
+  },
+  {
+   "name": "treasury_ghost_gold_fight",
+   "label": "Treasury: spirits guarding Cleowyn's gold",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 255,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x09; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x1147 e29@b04f:b6 test [0x1]; map5 f0x1147 e29@b04f:b6 set 0x1"
+  },
+  {
+   "name": "treasury_skeleton_guards_fight",
+   "label": "Treasury: skeleton guards and thieves",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 256,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0a; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x1258 e30@b04f:a5 test [0x1]; map5 f0x1258 e30@b04f:a5 set 0x1"
+  },
+  {
+   "name": "treasury_spider_fight",
+   "label": "Treasury: spiders over a gold pile",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 257,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x0b; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x1431 e31@b04f:b4 test [0x1]; map5 f0x1431 e31@b04f:b4 set 0x1"
+  },
+  {
+   "name": "treasury_weapon_pile_fight",
+   "label": "Treasury: monsters by a weapon pile",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 264,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x12; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x120 e6@b04f:d5 test [0x1]; map5 f0x120 e6@b04f:d5 set 0x1"
+  },
+  {
+   "name": "treasury_incubi_fight",
+   "label": "Treasury: incubi guarding a weapon",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 265,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x13; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x267 e8@b04f:c4 test [0x1]; map5 f0x267 e8@b04f:c4 set 0x1"
+  },
+  {
+   "name": "treasury_skeleton_hoard_fight",
+   "label": "Treasury: skeletons guarding a hoard",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 266,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x14; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x3ea e9@b04f:a6 test [0x1]; map5 f0x3ea e9@b04f:a6 set 0x1"
+  },
+  {
+   "name": "treasury_dead_guards_fight",
+   "label": "Treasury: the dead guarding the treasury",
+   "group": "Quest flags, L1: Treasury",
+   "offset": 267,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x15; L1: Treasury; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map5 f0x5c6 e10@b04f:b7 test [0x1]; map5 f0x5c6 e10@b04f:b7 set 0x1"
+  },
+  {
+   "name": "vestibule_door_mode",
+   "label": "Vestibule: which family of locked doors is currently open",
+   "group": "Quest flags, L1: Vestibule",
    "offset": 246,
+   "type": "u8",
+   "enum": {
+    "0": "none (reset by the gateways at cells 0x70/0xf5)",
+    "1": "Cleowyn's Key doors open (item 0xd3)",
+    "2": "Cleowyn's Lockpick doors open (item 0xd2)",
+    "3": "forced doors open (attribute 0 >= 18)",
+    "4": "master door opened ('locks click throughout the dungeon')"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x00; L1: Vestibule; map3: e16/e17 set 0, e19 sets 1, e18 sets 3, e27 (key 0xd3) 1, e28 (lockpick 0xd2) 2, e29 (strength) 3, e30 4; doors e2/e4/e6/e21 open only when it equals 1/2/3/4. Uses: map3 f0x45 e2@dir1:4d,dir1:85,dir1:8a,dir1:93,dir3:8b,dir3:94 test [0x1]; map3 f0xf3 e4@dir0:24,dir0:56,dir0:a9,dir0:ca,dir2:46,dir2:ba test [0x2]; map3 f0x1a1 e6@dir1:5b,dir1:a4,dir2:59,dir3:5c,dir3:a5,dir3:b2 test [0x3]; map3 f0x909 e16@cell:70 set 0x0; map3 f0x92e e17@cell:f5 set 0x0; map3 f0x953 e18@cell:68 set 0x3; map3 f0x979 e19@cell:97 set 0x1; map3 f0x9bf e21@dir0:44,dir1:75,dir1:aa,dir2:34,dir2:db,dir3:ab test [0x4]; (+6 more)"
+  },
+  {
+   "name": "vestibule_rogue_fight",
+   "label": "Vestibule: Rogues dropping gold",
+   "group": "Quest flags, L1: Vestibule",
+   "offset": 251,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x05; L1: Vestibule; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map3 f0x24f e8@b04f:66 test [0x1]; map3 f0x24f e8@b04f:66 set 0x1"
+  },
+  {
+   "name": "basement_rogue_split_fight",
+   "label": "Basement: Rogues splitting gold",
+   "group": "Quest flags, L2: Basement",
+   "offset": 268,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x16; L2: Basement; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map7 f0x12b e5@b04f:09,b04f:59 test [bool]; map7 f0x12b e5@b04f:09,b04f:59 set 0x1"
+  },
+  {
+   "name": "basement_minotaur_fight",
+   "label": "Basement: Minotaur with a bag of gold",
+   "group": "Quest flags, L2: Basement",
+   "offset": 269,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x17; L2: Basement; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map7 f0x8f1 e12@b04f:23,b04f:24,b04f:33 test [0x1]; map7 f0x8f1 e12@b04f:23,b04f:24,b04f:33 set 0x1"
+  },
+  {
+   "name": "basement_healing_fountain_used",
+   "label": "Basement: Healing Fountain drunk (one heal to max HP)",
+   "group": "Quest flags, L2: Basement",
+   "offset": 276,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1e; L2: Basement; Uses: map7 f0x2f6 e6@cell:56 test [0x1]; map7 f0x2f6 e6@cell:56 set 0x1"
+  },
+  {
+   "name": "cleowyn_spirit_quest_given",
+   "label": "Cleowyn's Palace: spirit of King Cleowyn gave his quest (exp once, needs item 0xf8)",
+   "group": "Quest flags, L2: Cleowyn's Palace",
+   "offset": 389,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8f; L2: Cleowyn's Palace; Uses: map12 f0x1c6f e47@cell:f4 test [bool]; map12 f0x1c6f e47@cell:f4 set 0x1"
+  },
+  {
+   "name": "secret_room_203_skeleton_fight",
+   "label": "Secret Room (0x203): skeletons among gold",
+   "group": "Quest flags, L2: Secret Room",
+   "offset": 270,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x18; L2: Secret Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map9 f0xb5 e2@b04f:60 test [0x1]; map9 f0xb5 e2@b04f:60 set 0x1"
+  },
+  {
+   "name": "secret_room_204_spinorpion_fight",
+   "label": "Secret Room (0x204): Spinorpions",
+   "group": "Quest flags, L2: Secret Room",
+   "offset": 271,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x19; L2: Secret Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map10 f0xb4 e2@b04f:6b,b04f:96 test [0x1]; map10 f0xb4 e2@b04f:6b,b04f:96 set 0x1"
+  },
+  {
+   "name": "secret_room_204_ogre_fight",
+   "label": "Secret Room (0x204): Ogres flicking gold",
+   "group": "Quest flags, L2: Secret Room",
+   "offset": 272,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1a; L2: Secret Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map10 f0x1ed e3@b04f:4a,b04f:58 test [0x1]; map10 f0x1ed e3@b04f:4a,b04f:58 set 0x1"
+  },
+  {
+   "name": "secret_room_204_hobgoblin_fight",
+   "label": "Secret Room (0x204): Hobgoblins with items",
+   "group": "Quest flags, L2: Secret Room",
+   "offset": 273,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1b; L2: Secret Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map10 f0x541 e5@b04f:25 test [0x1]; map10 f0x541 e5@b04f:25 set 0x1"
+  },
+  {
+   "name": "secret_room_205_widow_fight",
+   "label": "Secret Room (0x205): Black Widows and coin purse",
+   "group": "Quest flags, L2: Secret Room",
+   "offset": 274,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1c; L2: Secret Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map11 f0x4c9 e5@b04f:fe test [0x1]; map11 f0x4c9 e5@b04f:fe set 0x1"
+  },
+  {
+   "name": "secret_room_205_pets_fight",
+   "label": "Secret Room (0x205): Cleowyn's pets",
+   "group": "Quest flags, L2: Secret Room",
+   "offset": 275,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1d; L2: Secret Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map11 f0x621 e6@b04f:9f,b04f:ae,b04f:df test [0x1]; map11 f0x621 e6@b04f:9f,b04f:ae,b04f:df set 0x1"
+  },
+  {
+   "name": "harmony_trial_reward_taken",
+   "label": "Great Corridor: Trial of Harmony reward fight done (Harmony members; class-based item)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 280,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x22; L3: Great Corridor; e23 sets 1 when alignment==1 and flag clear, class-dependent SetLoot; e6 then says the Trial of Harmony is passed; e32 secret door opens if 0x22 or 0x23. Uses: map15 f0x280 e6@cell:76 test [0x1]; map15 f0xc0b e23@b04f:79 test [0x1]; map15 f0xc0b e23@b04f:79 set 0x1; map15 f0x1347 e32@dir0:66 test [0x1]"
+  },
+  {
+   "name": "chaos_trial_reward_taken",
+   "label": "Great Corridor: Trial of Chaos reward fight done (Chaos members; class-based item)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 281,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x23; L3: Great Corridor; e22 sets 1 when alignment==0 and flag clear; e7 message; e32 secret door. Uses: map15 f0x2d1 e7@cell:86 test [0x1]; map15 f0xa00 e22@b04f:89 test [0x1]; map15 f0xa00 e22@b04f:89 set 0x1; map15 f0x1347 e32@dir0:66 test [0x1]"
+  },
+  {
+   "name": "great_corridor_fight_2a",
+   "label": "Great Corridor: fight at cell 0x2a",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 282,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x24; L3: Great Corridor; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map15 f0x1534 e34@b04f:2a test [bool]; map15 f0x1534 e34@b04f:2a set 0x1"
+  },
+  {
+   "name": "great_corridor_challenge_fight",
+   "label": "Great Corridor: challenged to combat",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 283,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x25; L3: Great Corridor; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map15 f0x16a8 e35@b04f:6a test [bool]; map15 f0x16a8 e35@b04f:6a set 0x1"
+  },
+  {
+   "name": "great_corridor_ferocious_fight",
+   "label": "Great Corridor: ferocious enemies",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 284,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x26; L3: Great Corridor; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map15 f0x1818 e36@b04f:bc test [0x1]; map15 f0x1818 e36@b04f:bc set 0x1"
+  },
+  {
+   "name": "great_corridor_knights_fight",
+   "label": "Great Corridor: proud knights",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 286,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x28; L3: Great Corridor; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map15 f0x1b46 e38@b04f:a3 test [0x1]; map15 f0x1b46 e38@b04f:a3 set 0x1"
+  },
+  {
+   "name": "great_corridor_strong_enemies_fight",
+   "label": "Great Corridor: strong enemies",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 287,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x29; L3: Great Corridor; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map15 f0x1c82 e39@b04f:72 test [0x1]; map15 f0x1c82 e39@b04f:72 set 0x1"
+  },
+  {
+   "name": "great_corridor_fierce_fight",
+   "label": "Great Corridor: fierce opponents",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 288,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2a; L3: Great Corridor; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map15 f0x201e e43@b04f:48 test [0x1]; map15 f0x201e e43@b04f:48 set 0x1"
+  },
+  {
+   "name": "great_corridor_12000_gold_taken",
+   "label": "Great Corridor: 12000 gold taken",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 289,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2b; L3: Great Corridor; Uses: map15 f0x21d6 e44@cell:17 test [0x1]; map15 f0x21d6 e44@cell:17 set 0x1"
+  },
+  {
+   "name": "kings_pass_shown",
+   "label": "Great Corridor: King's Pass handed to the apartment guard; door opens once",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 292,
+   "type": "u8",
+   "enum": {
+    "0": "no pass / used",
+    "1": "pass given, door will open once"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2e; L3: Great Corridor; e5 takes item 0xf9 and sets 1; e3 door opens only if 1 and resets it to 0 (\"need another pass\"). Uses: map15 f0xea e3@ test [0x1]; map15 f0xea e3@ set 0x0; map15 f0x1ae e5@dir2:d0 set 0x1"
+  },
+  {
+   "name": "tapestry_human_thief_read",
+   "label": "Great Corridor tapestry quest: tapestry for Human or Thief read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 293,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2f; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0xe51 e24@dir3:3a test-clear [bool]; map15 f0xe51 e24@dir3:3a set 0x1; map15 f0xe51 e24@dir3:3a set 0x1"
+  },
+  {
+   "name": "tapestry_orc_cleric_read",
+   "label": "Great Corridor tapestry quest: tapestry for Orc or Cleric read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 294,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x30; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0xeeb e25@dir0:6b test-clear [bool]; map15 f0xeeb e25@dir0:6b set 0x1; map15 f0xeeb e25@dir0:6b set 0x1"
+  },
+  {
+   "name": "tapestry_elf_barbarian_read",
+   "label": "Great Corridor tapestry quest: tapestry for Elf or Barbarian read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 295,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x31; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0xf86 e26@dir1:ac test-clear [bool]; map15 f0xf86 e26@dir1:ac set 0x1; map15 f0xf86 e26@dir1:ac set 0x1"
+  },
+  {
+   "name": "tapestry_troll_ranger_read",
+   "label": "Great Corridor tapestry quest: tapestry for Troll or Ranger read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 296,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x32; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0x1020 e27@dir1:a7 test-clear [bool]; map15 f0x1020 e27@dir1:a7 set 0x1; map15 f0x1020 e27@dir1:a7 set 0x1"
+  },
+  {
+   "name": "tapestry_dwarf_knight_read",
+   "label": "Great Corridor tapestry quest: tapestry for Dwarf or Knight read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 297,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x33; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0x10bb e28@dir1:b3 test-clear [bool]; map15 f0x10bb e28@dir1:b3 set 0x1; map15 f0x10bb e28@dir1:b3 set 0x1"
+  },
+  {
+   "name": "tapestry_gnome_wizard_read",
+   "label": "Great Corridor tapestry quest: tapestry for Gnome or Wizard read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 298,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x34; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0x1156 e29@dir3:82 test-clear [bool]; map15 f0x1156 e29@dir3:82 set 0x1; map15 f0x1156 e29@dir3:82 set 0x1"
+  },
+  {
+   "name": "tapestry_halfling_or_key_read",
+   "label": "Great Corridor tapestry quest: tapestry for Halfling, or holder of Cleowyn's Key read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 299,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x35; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0x11f1 e30@dir0:23 test-clear [bool]; map15 f0x11f1 e30@dir0:23 set 0x1; map15 f0x11f1 e30@dir0:23 set 0x1"
+  },
+  {
+   "name": "tapestry_gremlin_or_pick_read",
+   "label": "Great Corridor tapestry quest: tapestry for Gremlin, or holder of Cleowyn's Pick read (blessing +1 attr 0 and 1 if eligible)",
+   "group": "Quest flags, L3: Great Corridor",
+   "offset": 300,
+   "type": "u8",
+   "enum": {
+    "0": "unread",
+    "1": "read (blessing given if the race/class matched)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x36; L3: Great Corridor; IsClear then SetFlag 1 on either branch; eligible characters get AddAttr(0,1)+AddAttr(1,1). Uses: map15 f0x129c e31@dir0:29 test-clear [bool]; map15 f0x129c e31@dir0:29 set 0x1; map15 f0x129c e31@dir0:29 set 0x1"
+  },
+  {
+   "name": "mausoleum_ice_lion_fight",
+   "label": "Mausoleum: Ice Lion over gold",
+   "group": "Quest flags, L3: Mausoleum",
+   "offset": 290,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2c; L3: Mausoleum; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map16 f0x507 e11@b04f:d3 test [0x1]; map16 f0x507 e11@b04f:d3 set 0x1"
+  },
+  {
+   "name": "mausoleum_charging_beast_fight",
+   "label": "Mausoleum: beast kicking gold",
+   "group": "Quest flags, L3: Mausoleum",
+   "offset": 291,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x2d; L3: Mausoleum; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map16 f0x68b e12@b04f:8f test [0x1]; map16 f0x68b e12@b04f:8f set 0x1"
+  },
+  {
+   "name": "cleowyn_crypt_state",
+   "label": "Mausoleum: King Cleowyn's crypt",
+   "group": "Quest flags, L3: Mausoleum",
+   "offset": 301,
+   "type": "u8",
+   "enum": {
+    "0": "unopened",
+    "1": "opened: crypt weapons/armour and exp taken",
+    "2": "Cleowyn's bones (item 0xfa) placed: Netherworld Medallion (0x96) and exp given"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x37; L3: Mausoleum; e16@b04f:18. Uses: map16 f0xb6a e16@b04f:18 test [0x2]; map16 f0xb6a e16@b04f:18 test [0x1]; map16 f0xb6a e16@b04f:18 set 0x2; map16 f0xb6a e16@b04f:18 set 0x1"
+  },
+  {
+   "name": "mausoleum_polar_bear_fight",
+   "label": "Mausoleum: Polar Bear with a pile of items",
+   "group": "Quest flags, L3: Mausoleum",
+   "offset": 349,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x67; L3: Mausoleum; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map16 f0xc89 e17@b04f:53 test [0x1]; map16 f0xc89 e17@b04f:53 set 0x1"
+  },
+  {
+   "name": "rune_room_bugbear_fight",
+   "label": "Rune Room: Bugbears near gold (also set by a King's Domicile fight, see evidence)",
+   "group": "Quest flags, L3: Rune Room",
+   "offset": 277,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x1f; L3: Rune Room; L4: King's Domicile; also SetFlag 1 by map17 King's Domicile e51/e52 (copy-paste bug: those events test 0x38/0x39). Uses: map13 f0xae2 e22@b04f:3b test [0x1]; map13 f0xae2 e22@b04f:3b set 0x1; map17 f0x22c6 e51@b04f:2d set 0x1"
+  },
+  {
+   "name": "rune_room_dire_wolf_fight",
+   "label": "Rune Room: Dire Wolves (also set by a King's Domicile fight, see evidence)",
+   "group": "Quest flags, L3: Rune Room",
+   "offset": 278,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x20; L3: Rune Room; L4: King's Domicile; also SetFlag 1 by map17 King's Domicile e51/e52 (copy-paste bug: those events test 0x38/0x39). Uses: map13 f0xc50 e23@b04f:93 test [0x1]; map13 f0xc50 e23@b04f:93 set 0x1; map17 f0x2405 e52@b04f:b1 set 0x1"
+  },
+  {
+   "name": "rune_room_lion_fight",
+   "label": "Rune Room: hungry lions",
+   "group": "Quest flags, L3: Rune Room",
+   "offset": 279,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x21; L3: Rune Room; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map13 f0xd62 e24@b04f:9e test [0x1]; map13 f0xd62 e24@b04f:9e set 0x1"
+  },
+  {
+   "name": "kings_domicile_banshee_fight",
+   "label": "King's Domicile: Banshee room (tested, never set)",
+   "group": "Quest flags, L4: King's Domicile",
+   "offset": 302,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x38; L4: King's Domicile; map17 e51/e52 test 0x38/0x39 but set 0x1f/0x20 (Rune Room flags) after the big loot: script bug; 0x38/0x39 stay 0 so the full-loot fight repeats. Uses: map17 f0x22c6 e51@b04f:2d test [0x1]"
+  },
+  {
+   "name": "kings_domicile_deinon_chest_fight",
+   "label": "King's Domicile: Deinons and chest (tested, never set)",
+   "group": "Quest flags, L4: King's Domicile",
+   "offset": 303,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x39; L4: King's Domicile; map17 e51/e52 test 0x38/0x39 but set 0x1f/0x20 (Rune Room flags) after the big loot: script bug; 0x38/0x39 stay 0 so the full-loot fight repeats. Uses: map17 f0x2405 e52@b04f:b1 test [0x1]"
+  },
+  {
+   "name": "lava_cellar_sabertooth_fight",
+   "label": "Lava Cellar: Sabertooth lion lair",
+   "group": "Quest flags, L5: Lava Cellar",
+   "offset": 305,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3b; L5: Lava Cellar; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map19 f0x485 e22@b04f:b2 test [0x1]; map19 f0x485 e22@b04f:b2 set 0x1"
+  },
+  {
+   "name": "lava_cellar_wyvern_fight",
+   "label": "Lava Cellar: Wyvern den",
+   "group": "Quest flags, L5: Lava Cellar",
+   "offset": 306,
+   "type": "u8",
+   "enum": {
+    "0": "not yet: first visit gives the full loot fight, then sets 1",
+    "1": "done: later visits give a small repeat fight"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3c; L5: Lava Cellar; one-shot treasure fight pattern: GetFlag==1 -> small SetLoot + fight, else big SetLoot (items + gold) + SetFlag 1 + fight. Uses: map19 f0x5f4 e23@b04f:47 test [0x1]; map19 f0x5f4 e23@b04f:47 set 0x1"
+  },
+  {
+   "name": "pit_bottom_restoration_fountain_used",
+   "label": "Pit Bottom: Fountain of Restoration used",
+   "group": "Quest flags, L5: Pit Bottom",
+   "offset": 307,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3d; L5: Pit Bottom; Uses: map20 f0x3a e2@cell:07 test [0x1]; map20 f0x3a e2@cell:07 set 0x1"
+  },
+  {
+   "name": "thieves_den_cabinet_looted",
+   "label": "Thieves' Den: cabinet (scrolls, potions, 15000 gold) looted",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 308,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3e; L5: Thieves' Den; Uses: map18 f0x4ec e16@cell:08 test [0x1]; map18 f0x4ec e16@cell:08 set 0x1"
+  },
+  {
+   "name": "thieves_den_trapped_treasure_looted",
+   "label": "Thieves' Den: trapped treasure room looted (gives the Thieves' Key 0xfb)",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 309,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x3f; L5: Thieves' Den; written only (both branches set 1); the event tests HasItem(0xfb), not the flag. Uses: map18 f0x617 e18@cell:1c set 0x1; map18 f0x617 e18@cell:1c set 0x1"
+  },
+  {
+   "name": "thieves_den_storage_room_looted",
+   "label": "Thieves' Den: storage room treasure taken",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 311,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x41; L5: Thieves' Den; Uses: map18 f0x46b e15@cell:07 test [0x1]; map18 f0x46b e15@cell:07 set 0x1"
+  },
+  {
+   "name": "thieves_infirmary_used",
+   "label": "Thieves' Den: infirmary heal used",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 312,
+   "type": "u8",
+   "enum": {
+    "0": "unused",
+    "0x43": "used (value written)"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x42; L5: Thieves' Den; sets 0x43 but tests ==5, so the \"supplies used up\" branch never runs: script bug, the heal repeats. Uses: map18 f0x13f e8@cell:27 test [0x5]; map18 f0x13f e8@cell:27 set 0x43"
+  },
+  {
+   "name": "thieves_den_safe_looted",
+   "label": "Thieves' Den: safe (items + 25000 gold) looted",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 313,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x43; L5: Thieves' Den; Uses: map18 f0x585 e17@cell:12 test [0x1]; map18 f0x585 e17@cell:12 set 0x1"
+  },
+  {
+   "name": "old_thief_story_heard",
+   "label": "Thieves' Den: old thief's story (15000 exp) heard",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 314,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x44; L5: Thieves' Den; Uses: map18 f0x769 e19@cell:39 test [0x1]; map18 f0x769 e19@cell:39 set 0x1"
+  },
+  {
+   "name": "bard_training_taken",
+   "label": "Thieves' Den: old thief taught the Bard skill",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 315,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x45; L5: Thieves' Den; Uses: map18 f0x822 e21@cell:68 test-clear [bool]; map18 f0x822 e21@cell:68 set 0x1"
+  },
+  {
+   "name": "detect_training_taken",
+   "label": "Thieves' Den: young thief taught Detection",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 346,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x64; L5: Thieves' Den; Uses: map18 f0x914 e23@cell:b4 test-clear [bool]; map18 f0x914 e23@cell:b4 set 0x1"
+  },
+  {
+   "name": "lockpick_training_taken",
+   "label": "Thieves' Den: old thief taught Lockpicking",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 347,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x65; L5: Thieves' Den; Uses: map18 f0xa13 e25@cell:d4 test-clear [bool]; map18 f0xa13 e25@cell:d4 set 0x1"
+  },
+  {
+   "name": "sinestras_fountain_used",
+   "label": "Thieves' Den: Sinestra's Fountain (heal + 15000 exp) used",
+   "group": "Quest flags, L5: Thieves' Den",
+   "offset": 350,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x68; L5: Thieves' Den; Uses: map18 f0xaa9 e26@cell:f1 test [bool]; map18 f0xaa9 e26@cell:f1 set 0x1"
+  },
+  {
+   "name": "arnakkian_guardians_defeated",
+   "label": "Castle Parapets: Guardians of Arnakkian beaten (exp reward once)",
+   "group": "Quest flags, L6: Castle Parapets",
+   "offset": 382,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x88; L6: Castle Parapets; Uses: map22 f0x2a e1@b04f:2d test [bool]; map22 f0x2a e1@b04f:2d set 0x1"
+  },
+  {
+   "name": "earth_elemental_andreas_defeated",
+   "label": "Castle Parapets: Earth Elemental Andreas beaten (exp reward once)",
+   "group": "Quest flags, L6: Castle Parapets",
+   "offset": 384,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8a; L6: Castle Parapets; Uses: map22 f0xd2 e2@b04f:dd test [bool]; map22 f0xd2 e2@b04f:dd set 0x1"
+  },
+  {
+   "name": "sirocco_door_unlocked",
+   "label": "Labyrinth I: Sirocco Door released (e38), so e39 door opens",
+   "group": "Quest flags, L6: Labyrinth I",
+   "offset": 327,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x51; L6: Labyrinth I; Uses: map21 f0xeb8 e38@dir1:ba set 0x1; map21 f0xedf e39@dir2:a6 test [bool]"
+  },
+  {
+   "name": "castlegate_teleport_enabled",
+   "label": "Labyrinth IV plaque read: Labyrinth I wall teleports to Castlegate (map 0x3601)",
+   "group": "Quest flags, L6: Labyrinth I",
+   "offset": 333,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x57; L6: Labyrinth I; L9: Labyrinth IV; set by map27 e15, tested by map21 e16. Uses: map21 f0x5f9 e16@dir0:46 test [bool]; map27 f0x14d e15@dir3:56 set 0x1"
+  },
+  {
+   "name": "wyns_fountain_used",
+   "label": "Labyrinth I: Wyn's Fountain drunk (+3 attr 3)",
+   "group": "Quest flags, L6: Labyrinth I",
+   "offset": 334,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x58; L6: Labyrinth I; Uses: map21 f0x66d e18@cell:e5 test [bool]; map21 f0x66d e18@cell:e5 set 0x1"
+  },
+  {
+   "name": "thieves_shrine_used",
+   "label": "Labyrinth I: thieves' shrine used (one skill)",
+   "group": "Quest flags, L6: Labyrinth I",
+   "offset": 335,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x59; L6: Labyrinth I; Uses: map21 f0x183b e68@b04f:05 test [bool]; map21 f0x183b e68@b04f:05 set 0x1"
+  },
+  {
+   "name": "wizard_room_rune_wall_state",
+   "label": "Castle Wizard Room: last rune wall read; selects where later rune walls teleport",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 319,
+   "type": "u8",
+   "enum": {
+    "0": "none",
+    "1": "Zzyzx (e37): e39 'Wizard' wall active",
+    "2": "Netherworld (e2): e7 'Archaic' wall active",
+    "3": "Luck (e14): e15 'Illusion' wall active",
+    "4": "Karma (e16): e15 'Invulnerable' wall active",
+    "5": "Dust (e20): no reader"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x49; L7: Castle Wizard Room; all rune walls teleport within map 0x3402. Uses: map24 f0x78 e2@dir1:2a set 0x2; map24 f0x1ae e7@dir1:de test [0x2]; map24 f0x380 e14@dir0:ca set 0x3; map24 f0x3cf e15@dir2:c9 test [0x3]; map24 f0x3cf e15@dir2:c9 test [0x4]; map24 f0x46c e16@dir3:eb set 0x4; map24 f0x59b e20@dir1:db set 0x5; map24 f0xa4a e37@dir1:2d set 0x1; (+1 more)"
+  },
+  {
+   "name": "enlikil_identified",
+   "label": "Castle Wizard Room: clue \"that which powers time\" found after the fight at e9 (En-Li-Kil)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 328,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x52; L7: Castle Wizard Room; set by e9 fight event; e28 ghost needs 0x52 and 0x53 (\"Both Arnakkian and Enlikil have been identified\") then teleports to the Guardians (0x3302). Uses: map24 f0x237 e9@b04f:87,b04f:98 set 0x1; map24 f0x77d e28@cell:75 test [bool]"
+  },
+  {
+   "name": "arnakkian_identified",
+   "label": "Castle Wizard Room: clue \"spell their master\" found after the fight at e18 (Arnakkian)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 329,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "inferred",
+   "evidence": "flag 0x53; L7: Castle Wizard Room; pair of 0x52, see there. Uses: map24 f0x4f5 e18@b04f:5a,b04f:6b set 0x1; map24 f0x77d e28@cell:75 test [bool]"
+  },
+  {
+   "name": "arnakkian_spirit_defeated",
+   "label": "Castle Wizard Room: spirit of Arnakkian beaten (exp reward once)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 383,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x89; L7: Castle Wizard Room; Uses: map24 f0x154a e76@b04f:79 test [bool]; map24 f0x154a e76@b04f:79 set 0x1"
+  },
+  {
+   "name": "wizard_room_guardian_fight_e72",
+   "label": "Castle Wizard Room: guardian fight at e72 won once (items + 10000 exp)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 385,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8b; L7: Castle Wizard Room; Uses: map24 f0x1276 e72@b04f:46 test [bool]; map24 f0x1276 e72@b04f:46 set 0x1"
+  },
+  {
+   "name": "wizard_room_guardian_fight_e73",
+   "label": "Castle Wizard Room: guardian fight at e73 won once (items + 10000 exp)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 386,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8c; L7: Castle Wizard Room; Uses: map24 f0x132b e73@b04f:4c test [bool]; map24 f0x132b e73@b04f:4c set 0x1"
+  },
+  {
+   "name": "wizard_room_guardian_fight_e74",
+   "label": "Castle Wizard Room: guardian fight at e74 won once (items + 10000 exp)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 387,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8d; L7: Castle Wizard Room; Uses: map24 f0x13e0 e74@b04f:ac test [bool]; map24 f0x13e0 e74@b04f:ac set 0x1"
+  },
+  {
+   "name": "wizard_room_guardian_fight_e75",
+   "label": "Castle Wizard Room: guardian fight at e75 won once (items + 10000 exp)",
+   "group": "Quest flags, L7: Castle Wizard Room",
+   "offset": 388,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x8e; L7: Castle Wizard Room; Uses: map24 f0x1495 e75@b04f:a6 test [bool]; map24 f0x1495 e75@b04f:a6 set 0x1"
+  },
+  {
+   "name": "moon_prism_found",
+   "label": "Labyrinth II: Moon Prism (0xf2) found",
+   "group": "Quest flags, L7: Labyrinth II",
+   "offset": 316,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x46; L7: Labyrinth II; written only; the event tests HasItem(0xf2). Uses: map23 f0x164a e71@cell:a0 set 0x1"
+  },
+  {
+   "name": "ranger_spear_found",
+   "label": "Labyrinth II: Ranger Spear taken",
+   "group": "Quest flags, L7: Labyrinth II",
+   "offset": 317,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x47; L7: Labyrinth II; Uses: map23 f0x169c e72@cell:50 test [0x1]; map23 f0x169c e72@cell:50 set 0x1"
+  },
+  {
+   "name": "holy_halberd_found",
+   "label": "Labyrinth II: Holy Halberd taken",
+   "group": "Quest flags, L7: Labyrinth II",
+   "offset": 318,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x48; L7: Labyrinth II; Uses: map23 f0x16f4 e73@cell:21 test [0x1]; map23 f0x16f4 e73@cell:21 set 0x1"
+  },
+  {
+   "name": "torbriars_fountain_used",
+   "label": "Labyrinth II: Torbriar's Fountain drunk (one skill)",
+   "group": "Quest flags, L7: Labyrinth II",
+   "offset": 345,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x63; L7: Labyrinth II; Uses: map23 f0x174c e74@dir1:1d test [bool]; map23 f0x174c e74@dir1:1d set 0x1"
+  },
+  {
+   "name": "harvest_horn_given",
+   "label": "Labyrinth II: Harvest Horn (0xe6) given to the Zephyr Wind (reward vs Wind Elemental)",
+   "group": "Quest flags, L7: Labyrinth II",
+   "offset": 367,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x79; L7: Labyrinth II; Uses: map23 f0x53b e24@b04f:dd test [bool]; map23 f0x53b e24@b04f:dd set 0x1"
+  },
+  {
+   "name": "blackjack_fountain_used",
+   "label": "Castle Great Hall: Blackjack Fountain (Jack card 0xea returned)",
+   "group": "Quest flags, L8: Castle Great Hall",
+   "offset": 372,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x7e; L8: Castle Great Hall; Uses: map26 f0x74b e18@cell:5d test [bool]; map26 f0x74b e18@cell:5d set 0x1"
+  },
+  {
+   "name": "cribbage_fountain_used",
+   "label": "Castle Great Hall: Cribbage Fountain (Ace card 0xed returned)",
+   "group": "Quest flags, L8: Castle Great Hall",
+   "offset": 373,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x7f; L8: Castle Great Hall; Uses: map26 f0x809 e19@cell:ad test [bool]; map26 f0x809 e19@cell:ad set 0x1"
+  },
+  {
+   "name": "troll_fountain_used",
+   "label": "Labyrinth III: Troll Fountain drunk (+2 attr 0 and 1)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 320,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x4a; L8: Labyrinth III; Uses: map25 f0xf70 e55@dir2:1c test [bool]; map25 f0xf70 e55@dir2:1c set 0x1"
+  },
+  {
+   "name": "my_my_fountain_used",
+   "label": "Labyrinth III: My My Fountain drunk (one new skill)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 321,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x4b; L8: Labyrinth III; Uses: map25 f0x1314 e71@cell:02 test [bool]; map25 f0x1314 e71@cell:02 set 0x1; map25 f0x1314 e71@cell:02 set 0x1"
+  },
+  {
+   "name": "lab3_initiative_boost_taken",
+   "label": "Labyrinth III: Human/Halfling initiative boost (+3 attr 3)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 336,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5a; L8: Labyrinth III; Uses: map25 f0xaf0 e41@dir2:ac test [bool]; map25 f0xaf0 e41@dir2:ac set 0x1"
+  },
+  {
+   "name": "lab3_agility_boost_taken",
+   "label": "Labyrinth III: Elf/Gnome agility boost (+3 attr 2)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 337,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5b; L8: Labyrinth III; Uses: map25 f0xb64 e42@dir0:8d test [bool]; map25 f0xb64 e42@dir0:8d set 0x1"
+  },
+  {
+   "name": "lab3_strength_boost_taken",
+   "label": "Labyrinth III: Orc/Troll strength boost (+3 attr 0)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 338,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5c; L8: Labyrinth III; Uses: map25 f0xbd9 e43@dir3:dc test [bool]; map25 f0xbd9 e43@dir3:dc set 0x1"
+  },
+  {
+   "name": "lab3_defense_boost_taken",
+   "label": "Labyrinth III: Dwarf/Gremlin defence boost (+3 attr 1)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 339,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5d; L8: Labyrinth III; Uses: map25 f0xc4d e44@dir1:de test [bool]; map25 f0xc4d e44@dir1:de set 0x1"
+  },
+  {
+   "name": "morgards_fountain_used",
+   "label": "Labyrinth III: Morgard's Fountain drunk (one skill)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 343,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x61; L8: Labyrinth III; Uses: map25 f0x36d e19@dir3:41 test [bool]; map25 f0x36d e19@dir3:41 set 0x1"
+  },
+  {
+   "name": "stonegiant_fountain_used",
+   "label": "Labyrinth III: StoneGiant Fountain drunk (one skill)",
+   "group": "Quest flags, L8: Labyrinth III",
+   "offset": 344,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x62; L8: Labyrinth III; Uses: map25 f0x1097 e58@b04f:f2 test [bool]; map25 f0x1097 e58@b04f:f2 set 0x1"
+  },
+  {
+   "name": "phoenix_blessing_taken",
+   "label": "Labyrinth IV: Phoenix square visited (AddAttr(4,200), \"Dexterity\"); also sets 0x85",
+   "group": "Quest flags, L9: Labyrinth IV",
+   "offset": 340,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5e; L9: Labyrinth IV; Uses: map27 f0x708 e32@cell:de test [bool]; map27 f0x708 e32@cell:de set 0x1"
+  },
+  {
+   "name": "elffoot_fountain_used",
+   "label": "Labyrinth IV: ElfFoot Fountain drunk (one skill)",
+   "group": "Quest flags, L9: Labyrinth IV",
+   "offset": 341,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x5f; L9: Labyrinth IV; Uses: map27 f0x7ca e36@cell:c2 test [bool]; map27 f0x7ca e36@cell:c2 set 0x1"
+  },
+  {
+   "name": "lookout_fountain_used",
+   "label": "Labyrinth IV: Lookout Fountain drunk (one skill)",
+   "group": "Quest flags, L9: Labyrinth IV",
+   "offset": 342,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x60; L9: Labyrinth IV; Uses: map27 f0x992 e42@dir3:e4 test [bool]; map27 f0x992 e42@dir3:e4 set 0x1"
+  },
+  {
+   "name": "phoenix_reborn",
+   "label": "Labyrinth IV: the Phoenix has been reborn; Phoenix area closed",
+   "group": "Quest flags, L9: Labyrinth IV",
+   "offset": 379,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x85; L9: Labyrinth IV; set with 0x5e by e32; e17 and the Gnome Wizard e27 test it. Uses: map27 f0x1e1 e17@dir1:dc test [bool]; map27 f0x5bf e27@b04f:b9 test [bool]; map27 f0x708 e32@cell:de set 0x1"
+  },
+  {
+   "name": "phoenix_guardian_met",
+   "label": "Labyrinth IV: Gnome Wizard (Phoenix guardian) opened the way to the Phoenix",
+   "group": "Quest flags, L9: Labyrinth IV",
+   "offset": 380,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x86; L9: Labyrinth IV; set by e27; e17 opens the river wall when set. Uses: map27 f0x1e1 e17@dir1:dc test [bool]; map27 f0x5bf e27@b04f:b9 set 0x1"
+  },
+  {
+   "name": "dwarf_attribute_fountain_used",
+   "label": "Dwarf Kingdom: Fountain of Attributes drunk",
+   "group": "Quest flags, L11: Dwarf Kingdom",
+   "offset": 332,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x56; L11: Dwarf Kingdom; Uses: map30 f0xe82 e36@dir1:de test [bool]; map30 f0xe82 e36@dir1:de set 0x1"
+  },
+  {
+   "name": "dwarf_miner_rewarded",
+   "label": "Dwarf Kingdom: apprentice miner's reward (3x item 0xba) received",
+   "group": "Quest flags, L11: Dwarf Kingdom",
+   "offset": 353,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6b; L11: Dwarf Kingdom; Uses: map30 f0x788 e19@cell:f1 test [bool]; map30 f0x788 e19@cell:f1 set 0x1"
+  },
+  {
+   "name": "great_dwarven_door_opened",
+   "label": "Dwarf Kingdom: item 0xd4 used on the wall, great dwarven door made",
+   "group": "Quest flags, L11: Dwarf Kingdom",
+   "offset": 354,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6c; L11: Dwarf Kingdom; Uses: map30 f0x66 e2@dir2:ac test [bool]; map30 f0x66 e2@dir2:ac set 0x1"
+  },
+  {
+   "name": "hidden_mine_wall_opened",
+   "label": "Land Of Giants: Hidden Mine Key (0xd7) opened the wall (the miner's cave); enables the miner's reward",
+   "group": "Quest flags, L11: Dwarf Kingdom",
+   "offset": 357,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6f; L11: Dwarf Kingdom; L11: Land Of Giants; set map31 e4; map30 e19 miner checks it. Uses: map30 f0x788 e19@cell:f1 test [bool]; map31 f0x1a6 e4@dir2:b6 test [bool]; map31 f0x1a6 e4@dir2:b6 set 0x1"
+  },
+  {
+   "name": "dwarf_mine_platform_activated",
+   "label": "Land Of Giants: Dwarf Mine Key (0xd5) activated the platform at cell 0x9c",
+   "group": "Quest flags, L11: Land Of Giants",
+   "offset": 355,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6d; L11: Land Of Giants; e0 (runs on most cells) also reads it. Uses: map31 f0x8 e0@cell:0e,cell:0f,cell:10,cell:11,cell:12,cell:13,cell:14,cell:15,cell:16,cell:1e,cell:1f,cell:20,cell:21,cell:24,cell:25,cell:26,cell:2e,cell:2f,cell:35,cell:36,cell:37,cell:38,cell:39,cell:3b,cell:3c,cell:3d,cell:3e,cell:3f,cell:46,cell:47,cell:48,cell:49,cell:4a,cell:4b,cell:4c,cell:4d,cell:4e,cell:4f,cell:56,cell:57,cell:58,cell:59,cell:5a,cell:5b,cell:66,cell:69,cell:6a,cell:6b,cell:6c,cell:75,cell:76,cell:7a,cell:7b,cell:7c,cell:84,cell:85,cell:86,cell:8b,cell:8c,cell:94,cell:95,cell:9b,cell:a0,cell:a1,cell:a2,cell:a3,cell:a4,cell:a5,cell:b0,cell:b1,cell:b2,cell:b3,cell:b4,cell:b5,cell:c4,cell:c5,cell:c7,cell:c8,cell:c9,cell:ca,cell:cb,cell:d4,cell:d5,cell:d6,cell:d7,cell:d8,cell:d9,cell:da,cell:db,cell:dc,cell:dd,cell:de,cell:df,cell:eb,cell:ec,cell:ed,cell:ee,cell:ef,cell:fe,cell:ff test [bool]; map31 f0x12b e3@cell:9c test [bool]; map31 f0x12b e3@cell:9c set 0x1"
+  },
+  {
+   "name": "cyclops_tapestry_opened",
+   "label": "Land Of Giants: Cyclops' Mine Key (0xd6) opened the tapestry passage",
+   "group": "Quest flags, L11: Land Of Giants",
+   "offset": 356,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x6e; L11: Land Of Giants; Uses: map31 f0xab e2@dir3:67 test [bool]; map31 f0xab e2@dir3:67 set 0x1"
+  },
+  {
+   "name": "rainbow_red_gem_placed",
+   "label": "River's End: red gem (0xf4) placed; all four form the rainbow for the Golden Boat (0xf3)",
+   "group": "Quest flags, L11: River's End",
+   "offset": 374,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x80; L11: River's End; Uses: map32 f0x2c8 e20@cell:97 set 0x1; map32 f0x2c8 e20@cell:97 test [bool]; map32 f0x424 e21@cell:87 test [bool]; map32 f0x571 e22@cell:77 test [bool]; map32 f0x6be e23@cell:67 test [bool]"
+  },
+  {
+   "name": "rainbow_yellow_gem_placed",
+   "label": "River's End: yellow gem (0xf5) placed; all four form the rainbow for the Golden Boat (0xf3)",
+   "group": "Quest flags, L11: River's End",
+   "offset": 375,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x81; L11: River's End; Uses: map32 f0x2c8 e20@cell:97 test [bool]; map32 f0x424 e21@cell:87 set 0x1; map32 f0x424 e21@cell:87 test [bool]; map32 f0x571 e22@cell:77 test [bool]; map32 f0x6be e23@cell:67 test [bool]"
+  },
+  {
+   "name": "rainbow_green_gem_placed",
+   "label": "River's End: green gem (0xf6) placed; all four form the rainbow for the Golden Boat (0xf3)",
+   "group": "Quest flags, L11: River's End",
+   "offset": 376,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x82; L11: River's End; Uses: map32 f0x2c8 e20@cell:97 test [bool]; map32 f0x424 e21@cell:87 test [bool]; map32 f0x571 e22@cell:77 set 0x1; map32 f0x571 e22@cell:77 test [bool]; map32 f0x6be e23@cell:67 test [bool]"
+  },
+  {
+   "name": "rainbow_blue_gem_placed",
+   "label": "River's End: blue gem (0xf7) placed; all four form the rainbow for the Golden Boat (0xf3)",
+   "group": "Quest flags, L11: River's End",
+   "offset": 377,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x83; L11: River's End; Uses: map32 f0x2c8 e20@cell:97 test [bool]; map32 f0x424 e21@cell:87 test [bool]; map32 f0x571 e22@cell:77 test [bool]; map32 f0x6be e23@cell:67 set 0x1; map32 f0x6be e23@cell:67 test [bool]"
+  },
+  {
+   "name": "dragonbreath_fountain_used",
+   "label": "River's End: DragonBreath Fountain drunk (+1 to attrs 0-3)",
+   "group": "Quest flags, L11: River's End",
+   "offset": 378,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x84; L11: River's End; Uses: map32 f0xbc e4@cell:9d test [bool]; map32 f0xbc e4@cell:9d set 0x1"
+  },
+  {
+   "name": "fountain_of_life_reward_taken",
+   "label": "The Unknown: endgame experience reward granted (once)",
+   "group": "Quest flags, L12: The Unknown",
+   "offset": 351,
+   "type": "u8",
+   "enum": {
+    "0": "not done",
+    "1": "done"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x69; L12: The Unknown; e7 Fountain of Life: takes the 4 gems and the boat, AddExp once, sets 0x69 and 0x6a. Uses: map34 f0x4dd e7@cell:78,cell:87,cell:88 test [bool]; map34 f0x4dd e7@cell:78,cell:87,cell:88 set 0x1"
+  },
+  {
+   "name": "timeswitch_1_set",
+   "label": "The Unknown: first Timeswitch (e2) set",
+   "group": "Quest flags, L12: The Unknown",
+   "offset": 369,
+   "type": "u8",
+   "enum": {
+    "0": "off (also reset by the En-Li-Kil encounter)",
+    "1": "set"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x7b; L12: The Unknown; e2/e3/e4 set 0x7b/0x7c/0x7d and sum them; three set reveals the platform at cell 0xa8; e5 En-Li-Kil resets all three; e11 tests them as kind 1 (bug). Uses: map34 f0x5a e2@dir3:44 set 0x1; map34 f0x5a e2@dir3:44 test None; map34 f0x150 e3@dir2:b4 test None; map34 f0x246 e4@dir0:4b test None; map34 f0x33c e5@b04f:98 set 0x0; map34 f0x97e e15@cell:b5 test [bool]"
+  },
+  {
+   "name": "timeswitch_2_set",
+   "label": "The Unknown: second Timeswitch (e3) set",
+   "group": "Quest flags, L12: The Unknown",
+   "offset": 370,
+   "type": "u8",
+   "enum": {
+    "0": "off",
+    "1": "set"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x7c; L12: The Unknown; see 0x7b. Uses: map34 f0x5a e2@dir3:44 test None; map34 f0x150 e3@dir2:b4 set 0x1; map34 f0x150 e3@dir2:b4 test None; map34 f0x246 e4@dir0:4b test None; map34 f0x33c e5@b04f:98 set 0x0; map34 f0x97e e15@cell:b5 test [bool]"
+  },
+  {
+   "name": "timeswitch_3_set",
+   "label": "The Unknown: third Timeswitch (e4) set",
+   "group": "Quest flags, L12: The Unknown",
+   "offset": 371,
+   "type": "u8",
+   "enum": {
+    "0": "off",
+    "1": "set"
+   },
+   "confidence": "confirmed",
+   "evidence": "flag 0x7d; L12: The Unknown; see 0x7b. Uses: map34 f0x5a e2@dir3:44 test None; map34 f0x150 e3@dir2:b4 test None; map34 f0x246 e4@dir0:4b set 0x1; map34 f0x246 e4@dir0:4b test None; map34 f0x33c e5@b04f:98 set 0x0; map34 f0x97e e15@cell:b5 test [bool]"
+  },
+  {
+   "name": "unused_flags_0xf7",
+   "label": "Never referenced (flag 0x01)",
+   "group": "Quest flags, never referenced",
+   "offset": 247,
    "type": "bytes",
-   "len": 135,
-   "confidence": "unknown",
-   "evidence": "224-byte block copied to a global flag array (CGENN ds:9863, DARKSTRT ds:d8bf, FATES ds:3827); accessors FUN_1d88_0721/06ce/0754 index it with kind 2; no named flag found; all zero in samples except the two mode bytes (flag index 0..0x86)"
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x11d",
+   "label": "Never referenced (flag 0x27)",
+   "group": "Quest flags, never referenced",
+   "offset": 285,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x130",
+   "label": "Never referenced (flag 0x3a)",
+   "group": "Quest flags, never referenced",
+   "offset": 304,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x136",
+   "label": "Never referenced (flag 0x40)",
+   "group": "Quest flags, never referenced",
+   "offset": 310,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x142",
+   "label": "Never referenced (flags 0x4c to 0x50)",
+   "group": "Quest flags, never referenced",
+   "offset": 322,
+   "type": "bytes",
+   "len": 5,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x14a",
+   "label": "Never referenced (flags 0x54 to 0x55)",
+   "group": "Quest flags, never referenced",
+   "offset": 330,
+   "type": "bytes",
+   "len": 2,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x15c",
+   "label": "Never referenced (flag 0x66)",
+   "group": "Quest flags, never referenced",
+   "offset": 348,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x166",
+   "label": "Never referenced (flags 0x70 to 0x77)",
+   "group": "Quest flags, never referenced",
+   "offset": 358,
+   "type": "bytes",
+   "len": 8,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x170",
+   "label": "Never referenced (flag 0x7a)",
+   "group": "Quest flags, never referenced",
+   "offset": 368,
+   "type": "bytes",
+   "len": 1,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x186",
+   "label": "Never referenced (flags 0x90 to 0xb4)",
+   "group": "Quest flags, never referenced",
+   "offset": 390,
+   "type": "bytes",
+   "len": 37,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
+  },
+  {
+   "name": "unused_flags_0x1ac",
+   "label": "Never referenced (flags 0xb6 to 0xdf)",
+   "group": "Quest flags, never referenced",
+   "offset": 428,
+   "type": "bytes",
+   "len": 42,
+   "confidence": "confirmed",
+   "evidence": "no map script (RESOURCE.001-034) and no engine code reads or writes these indices"
   },
   {
    "name": "mode_flag_a",
@@ -569,15 +2264,6 @@
    "evidence": "flag index 0x87. On save CGENN/DARKSTRT overwrite it AFTER copying the flag block: 1 if the session is on-line, 6 if off-line (CGENN ds:01ae / DARKSTRT ds:0a0c). DARKSTRT load (1E30:0053) accepts only (this,mode_flag_b) = (1,0) on-line or (6,6) off-line, and refuses 0x17d == 0"
   },
   {
-   "name": "unknown_0x17e",
-   "group": "Game flags",
-   "offset": 382,
-   "type": "bytes",
-   "len": 45,
-   "confidence": "unknown",
-   "evidence": "224-byte block copied to a global flag array (CGENN ds:9863, DARKSTRT ds:d8bf, FATES ds:3827); accessors FUN_1d88_0721/06ce/0754 index it with kind 2; no named flag found; all zero in samples except the two mode bytes (flag index 0x88..0xb4)"
-  },
-  {
    "name": "mode_flag_b",
    "group": "Game flags",
    "offset": 427,
@@ -590,15 +2276,6 @@
    },
    "confidence": "confirmed",
    "evidence": "flag index 0xb5; see mode_flag_a: 0 for on-line, 6 for off-line characters"
-  },
-  {
-   "name": "unknown_0x1ac",
-   "group": "Game flags",
-   "offset": 428,
-   "type": "bytes",
-   "len": 42,
-   "confidence": "unknown",
-   "evidence": "224-byte block copied to a global flag array (CGENN ds:9863, DARKSTRT ds:d8bf, FATES ds:3827); accessors FUN_1d88_0721/06ce/0754 index it with kind 2; no named flag found; all zero in samples except the two mode bytes (flag index 0xb6..0xdf)"
   },
   {
    "name": "item_charges",

@@ -73,6 +73,26 @@ exactly one field (the tests check this), so a byte nobody has named is still ed
 `summary` (shown in the slot list), and `confidence` (`confirmed`, `inferred`, `unknown`) with its
 `evidence`, which the form shows on hover. `invariants` lists what the games check or recompute.
 
+Three more keys shape the form. `label` replaces the name as the field's caption (the quest flags use
+it for what the flag records). `catalog: true` marks the item ids: the map's `catalog` lists the
+game's items (`id`, `name` and, for an item that has charges, `charges`, what a new one holds), the
+input takes a name from one shared list filtered as it is typed, and accepts a name, `name (id)` or
+a number. `beside: "items"` puts the charges of each slot next to its item; with the script, they show
+only for an item that has charges, and picking an item puts in its starting charges, or the
+catalog's `no_charges` value (Yserbius 0, Twinion and Cawdor 255) for one without. A number typed past
+a field's bounds is set back to the bound when the box is left; the server still refuses one sent
+without the script.
+
+The item names, charges and slot layout come from each game's item database (`RESOURCE.038`, 256
+records of 46 bytes whose words are stored rotated; the games decode a record by rotating each word
+left by 6) and the inventory code. In all three games slots 0 to 9 are the chest or backpack, 10 to 14
+are unused (cleared whenever the inventory is built), 15 to 20 are worn (head, body, weapon hand,
+shield hand, two accessories), 21 to 30 the quest item bag and 31 the holding box. The quest flags
+(record `0xF6` to `0x1D5`, flag `i` at `0xF6 + i`) are named from the map scripts (`RESOURCE.001` to
+`034`, one compiled module per map) that set and test them, grouped by the map that sets them; flags
+no script references are kept as raw bytes. Most Yserbius and Twinion flags are CONFIRMED; most of
+Cawdor's are INFERRED.
+
 ## 5. The pages
 
 From an account's saved games, a character file links to its editor:

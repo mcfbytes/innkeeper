@@ -55,6 +55,9 @@ impl Kind {
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Field {
     pub(crate) name: String,
+    /// What the form calls it, when the name says too little (a quest flag).
+    #[serde(default)]
+    pub(crate) label: Option<String>,
     #[serde(default)]
     pub(crate) group: Option<String>,
     pub(crate) offset: usize,
@@ -359,6 +362,7 @@ impl Schema {
                 .step_by(16)
                 .map(|offset| Field {
                     name: format!("unknown_{offset:#05x}"),
+                    label: None,
                     group: Some("Raw".to_owned()),
                     offset,
                     kind: Kind::Bytes,
