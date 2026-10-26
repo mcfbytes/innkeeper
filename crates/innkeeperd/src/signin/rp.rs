@@ -5,7 +5,9 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use oauth2::basic::BasicClient;
-use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
+use openidconnect::core::{
+    CoreAuthPrompt, CoreAuthenticationFlow, CoreClient, CoreProviderMetadata,
+};
 use openidconnect::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce,
     OAuth2TokenResponse, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
@@ -243,11 +245,13 @@ impl Rp {
 
     /// Where to send the browser, with PKCE, `state` and (for OIDC) a nonce. Scope is `openid`.
     /// `seal` turns the pending login into the `state` value; `None` from it fails the login.
-    /// The answer is the provider's authorize URL.
+    /// The answer is the provider's authorize URL. `choose_account` asks an OIDC provider to offer
+    /// its account picker (`prompt=select_account`) rather than reuse the account signed in there.
     pub(crate) async fn begin(
         &self,
         provider_id: &str,
         audience: Audience,
+        choose_account: bool,
         seal: impl FnOnce(&PendingRp) -> Option<String>,
     ) -> Result<Url, RpError> {
         let provider = self.provider(provider_id).ok_or(RpError::UnknownProvider)?;
@@ -273,14 +277,17 @@ impl Rp {
                 )
                 .set_redirect_uri(redirect);
                 let nonce = pending.nonce.clone().unwrap_or_else(Nonce::new_random);
-                let (url, _, _) = client
+                let mut request = client
                     .authorize_url(
                         CoreAuthenticationFlow::AuthorizationCode,
                         move || csrf,
                         move || nonce,
                     )
-                    .set_pkce_challenge(challenge)
-                    .url();
+                    .set_pkce_challenge(challenge);
+                if choose_account {
+                    request = request.add_prompt(CoreAuthPrompt::SelectAccount);
+                }
+                let (url, _, _) = request.url();
                 url
             }
             Flavour::OAuth2(endpoints) => {
@@ -500,10 +507,10 @@ client_secret_name = "dev-secret"
             Url::parse("https://inn.example.org").unwrap(),
         )
         .unwrap();
-        for audience in [Audience::Player, Audience::Admin] {
+        for (audience, choose) in [(Audience::Player, true), (Audience::Admin, false)] {
             let mut sealed = None;
             let authorize = rp
-                .begin("dev", audience, |pending| {
+                .begin("dev", audience, choose, |pending| {
                     sealed = Some(pending.to_state(1, None));
                     Some("SEALED".to_owned())
                 })
@@ -519,6 +526,10 @@ client_secret_name = "dev-secret"
             assert_eq!(get("scope").as_deref(), Some("openid"));
             assert_eq!(get("code_challenge_method").as_deref(), Some("S256"));
             assert_eq!(get("state").as_deref(), Some("SEALED"));
+            assert_eq!(get("prompt").is_some(), choose);
+            if choose {
+                assert_eq!(get("prompt").as_deref(), Some("select_account"));
+            }
             let sealed = sealed.unwrap();
             assert_eq!(get("nonce"), sealed.nonce);
             assert_eq!(sealed.audience, audience);
@@ -530,7 +541,7 @@ client_secret_name = "dev-secret"
             assert_eq!(get("redirect_uri"), Some(expected));
         }
         assert!(matches!(
-            rp.begin("nope", Audience::Player, |_| Some(String::new()))
+            rp.begin("nope", Audience::Player, false, |_| Some(String::new()))
                 .await,
             Err(RpError::UnknownProvider)
         ));

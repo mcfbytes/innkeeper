@@ -489,7 +489,7 @@ impl Admin {
         let authorize = match self
             .sign_in
             .rp()
-            .begin(provider, Audience::Admin, seal)
+            .begin(provider, Audience::Admin, false, seal)
             .await
         {
             Ok(authorize) => authorize,

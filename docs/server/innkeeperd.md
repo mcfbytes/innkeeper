@@ -425,7 +425,9 @@ oidc-google = "not-a-real-secret"
   and `-`). Without a vault it is looked up
   in `[dev_secrets]`, then in `INNKEEPERD_SECRET_<NAME>` (upper case, `-` as `_`).
 
-Each login uses PKCE (S256), a `state` and, for OIDC, a `nonce`; the ID token's signature,
+Each login uses PKCE (S256), a `state` and, for OIDC, a `nonce`. A login that links a method asks an
+OIDC provider for its account picker (`prompt=select_account`), since it would otherwise reuse the
+account already linked and the link would fail as `already_linked`. The ID token's signature,
 issuer, audience, expiry and nonce are checked. Discovery metadata and signing keys are cached for an
 hour and fetched again when a token names an unknown key. Redirects are not followed.
 
