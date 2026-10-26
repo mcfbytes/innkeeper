@@ -55,6 +55,9 @@ impl Kind {
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Field {
     pub(crate) name: String,
+    /// What the form calls it, when the name says too little (a quest flag).
+    #[serde(default)]
+    pub(crate) label: Option<String>,
     #[serde(default)]
     pub(crate) group: Option<String>,
     pub(crate) offset: usize,
@@ -88,6 +91,12 @@ pub(crate) struct Field {
     /// Shown in the list of a file's characters.
     #[serde(default)]
     pub(crate) summary: bool,
+    /// The values are the game's items (the map's `catalog`), offered as a list to filter.
+    #[serde(default)]
+    pub(crate) catalog: bool,
+    /// An array whose elements belong to another array's (an item's charges): shown beside them.
+    #[serde(default)]
+    pub(crate) beside: Option<String>,
 }
 
 fn one() -> usize {
@@ -209,10 +218,7 @@ impl Field {
                 target.copy_from_slice(&parsed);
             }
             _ => {
-                let value: i64 = text
-                    .trim()
-                    .parse()
-                    .map_err(|_| "a whole number".to_owned())?;
+                let value = self.number(text.trim())?;
                 let (low, high) = self.bounds();
                 if value < low || value > high {
                     return Err(format!("from {low} to {high}"));
@@ -223,6 +229,47 @@ impl Field {
             }
         }
         Ok(())
+    }
+}
+
+impl Field {
+    /// A number as the form sends it: digits, or for a field with named values a name or a
+    /// `name (number)` entry from its list.
+    fn number(&self, text: &str) -> Result<i64, String> {
+        if let Ok(value) = text.parse() {
+            return Ok(value);
+        }
+        let complaint = if self.catalog {
+            "an item from the list, or its number"
+        } else {
+            "a whole number"
+        };
+        if let Some(inner) = text
+            .strip_suffix(')')
+            .and_then(|rest| rest.rsplit_once('('))
+            .map(|(_, inner)| inner)
+        {
+            return inner.trim().parse().map_err(|_| complaint.to_owned());
+        }
+        let mut named = self
+            .values
+            .iter()
+            .filter(|(_, name)| name.eq_ignore_ascii_case(text));
+        match (named.next(), named.next()) {
+            (Some((value, _)), None) => value.parse().map_err(|_| complaint.to_owned()),
+            _ => Err(complaint.to_owned()),
+        }
+    }
+
+    /// A value as its input shows it: an item as `name (number)`.
+    pub(crate) fn shown(&self, value: &Value) -> String {
+        match value {
+            Value::Number(number) if self.catalog => self
+                .values
+                .get(&number.to_string())
+                .map_or_else(|| number.to_string(), |name| format!("{name} ({number})")),
+            other => other.form_text(),
+        }
     }
 }
 
@@ -263,12 +310,33 @@ pub(crate) struct MapName {
     pub(crate) code: u16,
 }
 
+/// One of a game's items.
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct CatalogItem {
+    pub(crate) id: u16,
+    pub(crate) name: String,
+    /// What a new one holds, for an item that has charges; `None` for one that has none.
+    #[serde(default)]
+    pub(crate) charges: Option<u8>,
+}
+
+/// The game's items, for the fields marked `catalog`.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub(crate) struct Catalog {
+    pub(crate) items: Vec<CatalogItem>,
+    /// What the charge byte holds beside an item without charges.
+    #[serde(default)]
+    pub(crate) no_charges: Option<u8>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Schema {
     pub(crate) header: Vec<Field>,
     pub(crate) record: Vec<Field>,
     #[serde(default)]
     pub(crate) automap: Automap,
+    #[serde(default)]
+    pub(crate) catalog: Catalog,
     #[serde(default)]
     pub(crate) invariants: Vec<String>,
 }
@@ -282,6 +350,8 @@ pub(crate) enum SchemaError {
     Gap(usize),
     Mirror(String),
     Maps(usize),
+    Beside(String),
+    Catalog(u16),
 }
 
 impl Schema {
@@ -292,6 +362,7 @@ impl Schema {
                 .step_by(16)
                 .map(|offset| Field {
                     name: format!("unknown_{offset:#05x}"),
+                    label: None,
                     group: Some("Raw".to_owned()),
                     offset,
                     kind: Kind::Bytes,
@@ -306,6 +377,8 @@ impl Schema {
                     evidence: None,
                     mirror_of: None,
                     summary: false,
+                    catalog: false,
+                    beside: None,
                 })
                 .collect()
         };
@@ -313,14 +386,43 @@ impl Schema {
             header: runs(HEADER_BYTES),
             record: runs(SLOT_BYTES),
             automap: Automap::default(),
+            catalog: Catalog::default(),
             invariants: Vec::new(),
         }
     }
 
+    /// A map for a test of one part: the header and record need not cover their parts.
+    #[cfg(test)]
+    pub(crate) fn parse_record_for_test(text: &str) -> Schema {
+        let mut schema: Schema = serde_json::from_str(text).unwrap();
+        schema.name_items();
+        schema
+    }
+
+    /// Gives the fields marked `catalog` the catalog's names, and the empty slot one.
+    fn name_items(&mut self) {
+        if self.catalog.items.is_empty() {
+            return;
+        }
+        let mut names: BTreeMap<String, String> = self
+            .catalog
+            .items
+            .iter()
+            .map(|item| (item.id.to_string(), item.name.clone()))
+            .collect();
+        names
+            .entry("0".to_owned())
+            .or_insert_with(|| "Empty".to_owned());
+        for field in self.record.iter_mut().filter(|field| field.catalog) {
+            field.values.clone_from(&names);
+        }
+    }
+
     pub(crate) fn parse(text: &str) -> Result<Schema, SchemaError> {
-        let schema: Schema =
+        let mut schema: Schema =
             serde_json::from_str(text).map_err(|error| SchemaError::Json(error.to_string()))?;
         schema.check()?;
+        schema.name_items();
         Ok(schema)
     }
 
@@ -330,6 +432,10 @@ impl Schema {
         let maps = self.automap.maps.len();
         if maps != 0 && maps != super::automap::MAPS {
             return Err(SchemaError::Maps(maps));
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        if let Some(item) = self.catalog.items.iter().find(|item| !ids.insert(item.id)) {
+            return Err(SchemaError::Catalog(item.id));
         }
         for (fields, size) in [(&self.header, HEADER_BYTES), (&self.record, SLOT_BYTES)] {
             let mut owner: Vec<Option<&str>> = vec![None; size];
@@ -358,6 +464,20 @@ impl Schema {
                     {
                         return Err(SchemaError::Mirror(field.name.clone()));
                     }
+                }
+            }
+            for field in fields {
+                let Some(beside) = &field.beside else {
+                    continue;
+                };
+                let fits = fields.iter().any(|other| {
+                    &other.name == beside
+                        && other.count == field.count
+                        && other.beside.is_none()
+                        && other.mirror_of.is_none()
+                });
+                if !fits || field.mirror_of.is_some() {
+                    return Err(SchemaError::Beside(field.name.clone()));
                 }
             }
             if let Some(gap) = owner.iter().position(Option::is_none) {
@@ -447,6 +567,26 @@ mod tests {
         assert_eq!(bytes[11], 0xfe);
         assert_eq!(raw.read(&bytes, 0).form_text(), "fe");
         assert!(raw.write(&mut bytes, 0, "f").is_err());
+    }
+
+    #[test]
+    fn items_take_a_name_or_a_listed_entry() {
+        let mut item = field(r#"{"name": "items", "offset": 0, "type": "u16", "catalog": true}"#);
+        item.values = BTreeMap::from([
+            ("0".to_owned(), "Empty".to_owned()),
+            ("7".to_owned(), "Long Sword".to_owned()),
+        ]);
+        let mut bytes = [0u8; 2];
+        for text in ["7", "Long Sword (7)", "long sword"] {
+            bytes = [0; 2];
+            item.write(&mut bytes, 0, text).unwrap();
+            assert_eq!(bytes, [7, 0], "{text}");
+        }
+        item.write(&mut bytes, 0, "Anything (300)").unwrap();
+        assert_eq!(u16::from_le_bytes(bytes), 300);
+        assert!(item.write(&mut bytes, 0, "Short Sword").is_err());
+        assert_eq!(item.shown(&Value::Number(7)), "Long Sword (7)");
+        assert_eq!(item.shown(&Value::Number(9)), "9");
     }
 
     #[test]

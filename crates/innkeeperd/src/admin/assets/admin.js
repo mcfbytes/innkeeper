@@ -52,6 +52,38 @@
     });
   });
 
+  // A number typed past an editor field's bounds becomes the nearest bound when the box is left;
+  // the server still refuses an out-of-range value sent without this script.
+  doc.querySelectorAll('.editor input[type=number]').forEach(function (box) {
+    box.addEventListener('change', function () {
+      var v = Number(box.value);
+      if (box.value === '' || !isFinite(v)) return;
+      if (box.max !== '' && v > Number(box.max)) box.value = box.max;
+      else if (box.min !== '' && v < Number(box.min)) box.value = box.min;
+    });
+  });
+
+  // An item slot shows its charges only when its item has them (data-charges on the list's
+  // entry); picking another item puts in that item's starting charges, or the no-charges value.
+  doc.querySelectorAll('.editor .slot').forEach(function (slot) {
+    var item = slot.querySelector('input[list]'), beside = slot.querySelector('.beside');
+    var list = item && doc.getElementById(item.getAttribute('list'));
+    var charges = beside && beside.querySelector('input');
+    if (!list || !charges) return;
+    function entry() {
+      var m = /\((\d+)\)\s*$/.exec(item.value) || /^\s*(\d+)\s*$/.exec(item.value);
+      return m ? list.querySelector('option[data-id="' + Number(m[1]) + '"]') : null;
+    }
+    function show() { var e = entry(); beside.hidden = !!e && e.dataset.charges === undefined; }
+    item.addEventListener('change', function () {
+      var e = entry();
+      if (e && e.dataset.charges !== undefined) charges.value = e.dataset.charges;
+      else if (e && list.dataset.noCharges !== undefined) charges.value = list.dataset.noCharges;
+      show();
+    });
+    show();
+  });
+
   // A file input with data-file-into fills the named hidden field with the file as base64url
   // when its form is sent (the game-table import); the file itself is not a form field.
   doc.querySelectorAll('input[type=file][data-file-into]').forEach(function (picker) {

@@ -142,6 +142,9 @@ textarea { width: 100%; min-height: 72px; }
 .editor fieldset fieldset { background: var(--surface); margin: 0; }
 .editor input[type=number], .editor select { width: 100%; }
 .editor textarea.mono { min-height: 0; }
+.editor .fields > .slot { grid-column: span 2; display: grid; grid-template-columns: 1fr 76px; gap: 8px; align-items: end; }
+.editor .slot input[list] { width: 100%; }
+.editor .slot .beside[hidden] { display: block; visibility: hidden; }
 
 table.automap { width: auto; border-collapse: collapse; margin: 0 0 10px; }
 table.automap td { padding: 0; border: 1px solid var(--faint); }
