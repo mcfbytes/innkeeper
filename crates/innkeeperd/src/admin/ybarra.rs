@@ -84,6 +84,13 @@ impl Opened {
     }
 }
 
+/// A map's snake_case name as a label: "health_max" is "Health max".
+fn pretty(name: &str) -> String {
+    let spaced = name.replace('_', " ");
+    let mut chars = spaced.chars();
+    chars.next().map_or_else(String::new, |first| first.to_uppercase().chain(chars).collect())
+}
+
 fn form_name(index: usize, element: usize) -> String {
     format!("f{index}_{element}")
 }
@@ -181,7 +188,7 @@ fn fields_html(fields: &[Field], bytes: &[u8], sent: Option<&HashMap<String, Str
             let shown = sent
                 .and_then(|sent| sent.get(&name).cloned())
                 .unwrap_or_else(|| field.read(bytes, 0).form_text());
-            html.push_str(&input(field, &name, &field.name, &shown));
+            html.push_str(&input(field, &name, &pretty(&field.name), &shown));
             if !matches!(field.confidence.as_deref(), Some("confirmed")) {
                 html = html.replacen("</label>", &format!("{}</label>", confidence(field)), 1);
             }
@@ -197,7 +204,7 @@ fn fields_html(fields: &[Field], bytes: &[u8], sent: Option<&HashMap<String, Str
             let _ = write!(
                 html,
                 "<fieldset class=\"wide\"><legend>{}{}</legend><div class=\"fields\">{cells}</div></fieldset>",
-                esc(&field.name),
+                esc(&pretty(&field.name)),
                 confidence(field)
             );
         }
@@ -292,7 +299,7 @@ fn summary(game: Game, record: &[u8]) -> String {
                 }
                 _ => value.form_text(),
             };
-            format!("{}: {}", field.name, text)
+            format!("{}: {}", pretty(&field.name), text)
         })
         .collect();
     parts.join(", ")

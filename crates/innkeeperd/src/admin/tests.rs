@@ -1327,6 +1327,11 @@ async fn the_character_editor_imports_tables_edits_a_slot_and_refuses_stale_or_o
     let value = another_value(&fields[index], &plain.slots[0]);
     let mut expected = plain.slots[0];
     fields[index].write(&mut expected, 0, &value).unwrap();
+    for mirror in fields.iter().filter(|f| f.mirror_of.as_ref() == Some(&fields[index].name)) {
+        for (from, to) in fields[index].span().zip(mirror.span()) {
+            expected[to] = expected[from];
+        }
+    }
 
     let stale = fx
         .post("/admin/saves/100001/ybarra/yserbius/1", &[("version", "0"), (&name, &value)])
