@@ -17,7 +17,7 @@ use super::views::{account_link, flag, link, table, tr};
 use super::{Admin, Reply, Req};
 use crate::dates;
 use crate::ybarra::cipher::Cipher;
-use crate::ybarra::schema::{schema, Field, Kind, Value};
+use crate::ybarra::schema::{schema, Catalog, Field, Kind, Value};
 use crate::ybarra::{self, CharFile, Game, SLOTS};
 
 /// Which part of a character file a form shows.
@@ -109,6 +109,12 @@ fn reason_input() -> &'static str {
 fn input(field: &Field, name: &str, label: &str, shown: &str) -> String {
     let id = format!("in-{name}");
     let label = format!("<label for=\"{id}\">{}</label>", esc(label));
+    if field.catalog && !field.values.is_empty() {
+        return format!(
+            "<div>{label}<input type=\"text\" id=\"{id}\" name=\"{name}\" list=\"{CATALOG_LIST}\" value=\"{}\" spellcheck=\"false\" autocomplete=\"off\"></div>",
+            esc(shown)
+        );
+    }
     if field.kind.is_number() && !field.values.is_empty() {
         let mut options = String::new();
         let mut known = false;
@@ -178,38 +184,105 @@ fn confidence(field: &Field) -> String {
     )
 }
 
+/// The id of the one item list a form's item inputs share.
+const CATALOG_LIST: &str = "ybarra-items";
+
+/// The item list: `name (id)` entries, by name, each with its starting charges when it has any.
+fn catalog_html(fields: &[Field], catalog: &Catalog) -> String {
+    let Some(names) = fields
+        .iter()
+        .find(|field| field.catalog && !field.values.is_empty())
+        .map(|field| &field.values)
+    else {
+        return String::new();
+    };
+    let mut entries: Vec<(&String, &String)> = names.iter().collect();
+    entries.sort_by(|a, b| a.1.cmp(b.1).then_with(|| a.0.cmp(b.0)));
+    let mut out = String::new();
+    for (id, name) in entries {
+        let charges = catalog
+            .items
+            .iter()
+            .find(|item| item.id.to_string() == *id)
+            .and_then(|item| item.charges)
+            .map_or_else(String::new, |charges| {
+                format!(" data-charges=\"{charges}\"")
+            });
+        let _ = write!(
+            out,
+            "<option value=\"{} ({})\" data-id=\"{}\"{charges}></option>",
+            esc(name),
+            esc(id),
+            esc(id)
+        );
+    }
+    let empty = catalog
+        .no_charges
+        .map_or_else(String::new, |value| format!(" data-no-charges=\"{value}\""));
+    format!("<datalist id=\"{CATALOG_LIST}\"{empty}>{out}</datalist>")
+}
+
 /// The fields of one part as form sections, one per group, in the map's order.
-fn fields_html(fields: &[Field], bytes: &[u8], sent: Option<&HashMap<String, String>>) -> String {
+fn fields_html(
+    fields: &[Field],
+    catalog: &Catalog,
+    bytes: &[u8],
+    sent: Option<&HashMap<String, String>>,
+) -> String {
+    let shown = |index: usize, field: &Field, element: usize| {
+        let name = form_name(index, element);
+        let text = sent
+            .and_then(|sent| sent.get(&name).cloned())
+            .unwrap_or_else(|| field.shown(&field.read(bytes, element)));
+        (name, text)
+    };
     let mut groups: Vec<(&str, String)> = Vec::new();
     for (index, field) in fields.iter().enumerate() {
-        if field.mirror_of.is_some() {
+        if field.mirror_of.is_some() || field.beside.is_some() {
             continue;
         }
+        let beside = fields
+            .iter()
+            .enumerate()
+            .find(|(_, other)| other.beside.as_deref() == Some(field.name.as_str()));
         let group = field.group.as_deref().unwrap_or("Other");
         let mut html = String::new();
         if field.count == 1 {
-            let name = form_name(index, 0);
-            let shown = sent
-                .and_then(|sent| sent.get(&name).cloned())
-                .unwrap_or_else(|| field.read(bytes, 0).form_text());
-            html.push_str(&input(field, &name, &pretty(&field.name), &shown));
+            let (name, text) = shown(index, field, 0);
+            html.push_str(&input(field, &name, &pretty(&field.name), &text));
             if !matches!(field.confidence.as_deref(), Some("confirmed")) {
                 html = html.replacen("</label>", &format!("{}</label>", confidence(field)), 1);
             }
         } else {
             let mut cells = String::new();
             for element in 0..field.count {
-                let name = form_name(index, element);
-                let shown = sent
-                    .and_then(|sent| sent.get(&name).cloned())
-                    .unwrap_or_else(|| field.read(bytes, element).form_text());
-                cells.push_str(&input(field, &name, &field.item_name(element), &shown));
+                let (name, text) = shown(index, field, element);
+                let cell = input(field, &name, &field.item_name(element), &text);
+                match beside {
+                    Some((other_index, other)) => {
+                        let (other_name, other_text) = shown(other_index, other, element);
+                        let _ = write!(
+                            cells,
+                            "<div class=\"slot\">{cell}<div class=\"beside\">{}</div></div>",
+                            input(other, &other_name, &pretty(&other.name), &other_text)
+                        );
+                    }
+                    None => cells.push_str(&cell),
+                }
             }
+            let legend = match beside {
+                Some((_, other)) => format!(
+                    "{}{} and {}{}",
+                    esc(&pretty(&field.name)),
+                    confidence(field),
+                    esc(&other.name.replace('_', " ")),
+                    confidence(other)
+                ),
+                None => format!("{}{}", esc(&pretty(&field.name)), confidence(field)),
+            };
             let _ = write!(
                 html,
-                "<fieldset class=\"wide\"><legend>{}{}</legend><div class=\"fields\">{cells}</div></fieldset>",
-                esc(&pretty(&field.name)),
-                confidence(field)
+                "<fieldset class=\"wide\"><legend>{legend}</legend><div class=\"fields\">{cells}</div></fieldset>",
             );
         }
         match groups.iter_mut().find(|(name, _)| *name == group) {
@@ -225,6 +298,7 @@ fn fields_html(fields: &[Field], bytes: &[u8], sent: Option<&HashMap<String, Str
             esc(group)
         );
     }
+    out.push_str(&catalog_html(fields, catalog));
     out
 }
 
@@ -247,7 +321,7 @@ fn apply(
             };
             // An untouched input sends what it showed; writing it back would still clip what
             // follows a short string's NUL, so leave such a field alone.
-            if *text == field.read(bytes, element).form_text() {
+            if *text == field.shown(&field.read(bytes, element)) {
                 continue;
             }
             if let Err(why) = field.write(bytes, element, text) {
@@ -593,7 +667,7 @@ impl Admin {
             esc(game.chars_path()),
             opened.version,
             form.open(),
-            fields_html(fields, bytes, sent),
+            fields_html(fields, &map.catalog, bytes, sent),
             reason_input(),
             button("Save changes", "primary"),
         );
@@ -758,10 +832,39 @@ mod tests {
     }
 
     #[test]
+    fn items_are_named_and_their_charges_sit_beside_them() {
+        let schema = crate::ybarra::schema::Schema::parse_record_for_test(
+            r#"{"header": [], "record": [
+              {"name": "items", "offset": 0, "type": "u16", "count": 2, "catalog": true, "items": ["Pack 1", "Pack 2"]},
+              {"name": "item_charges", "offset": 4, "type": "u8", "count": 2, "beside": "items"}
+            ], "catalog": {"items": [{"id": 7, "name": "Wand <of> Fire", "charges": 5}, {"id": 9, "name": "Axe"}], "no_charges": 0}}"#,
+        );
+        let mut bytes = [7, 0, 9, 0, 3, 0];
+        let html = fields_html(&schema.record, &schema.catalog, &bytes, None);
+        assert!(
+            html.contains("value=\"Wand &lt;of&gt; Fire (7)\""),
+            "{html}"
+        );
+        assert!(html.contains("<div class=\"slot\">"), "{html}");
+        assert!(html.contains("data-id=\"7\" data-charges=\"5\""), "{html}");
+        assert!(html.contains("data-id=\"9\"></option>"), "{html}");
+        assert!(html.contains("value=\"Empty (0)\""), "{html}");
+        assert!(html.contains("data-no-charges=\"0\""), "{html}");
+        assert_eq!(html.matches("<datalist").count(), 1);
+        let mut sent = HashMap::new();
+        sent.insert(form_name(0, 0), "Wand <of> Fire (7)".to_owned());
+        sent.insert(form_name(0, 1), "axe".to_owned());
+        sent.insert(form_name(1, 0), "2".to_owned());
+        let changed = apply(&schema.record, &mut bytes, &sent).unwrap();
+        assert_eq!(changed, ["item_charges"]);
+        assert_eq!(bytes, [7, 0, 9, 0, 2, 0]);
+    }
+
+    #[test]
     fn the_form_shows_hostile_text_escaped() {
         let fields = fields();
         let bytes = *b"<b>\0zz<b>\0zz\x05\x01\x02";
-        let html = fields_html(&fields, &bytes, None);
+        let html = fields_html(&fields, &Catalog::default(), &bytes, None);
         assert!(html.contains("value=\"&lt;b&gt;\""), "{html}");
         assert!(!html.contains("Name copy"), "{html}");
         assert!(html.contains(">Bow</label>"), "{html}");
