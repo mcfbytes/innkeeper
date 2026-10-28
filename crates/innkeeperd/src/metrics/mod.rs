@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 pub(crate) mod insights;
 mod payload;
 mod sampler;
+pub(crate) mod trace;
 
 /// What the process counts since it started. Read with [`counters`].
 #[derive(Debug, Default)]

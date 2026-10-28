@@ -126,6 +126,14 @@ impl LandCatalog {
         self
     }
 
+    /// The directory's one-word name of a land type this host runs, such as `Clubhouse`.
+    pub fn name_of(&self, land_type: LandType) -> Option<&'static str> {
+        let mut lands = self.lands.iter();
+        lands
+            .find(|land| land.land_type == land_type)
+            .map(|land| land.description)
+    }
+
     /// The login Ack's `rating` word as the hub reads it: bit `landType - 1` lets the player enter
     /// lands of that type (`hub/script.050 proc_310`). One bit per land type this host runs.
     pub fn rights(&self) -> u16 {
@@ -236,5 +244,15 @@ mod tests {
         assert_eq!(occupancy[5].maximum, 100);
         assert_eq!(table.rights(), 0x00BF);
         assert_eq!(LandCatalog::lsci().rights(), 0x0007);
+    }
+
+    #[test]
+    fn a_land_type_is_named_by_its_directory_row() {
+        let stock = LandCatalog::stock();
+        assert_eq!(stock.name_of(LandType(1)), Some("Clubhouse"));
+        assert_eq!(stock.name_of(LandType(5)), Some("Arena"));
+        assert_eq!(stock.name_of(LandType(8)), Some("Twinion"));
+        assert_eq!(stock.name_of(LandType(0x8B)), None);
+        assert_eq!(LandCatalog::lsci().name_of(LandType(4)), None);
     }
 }

@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use innkeeper_session::SessionError;
 use innkeeper_world::{
@@ -15,6 +15,7 @@ use tsn_link::LinkError;
 use crate::connection::ConnectionSettings;
 use crate::connection_gate::Binding;
 use crate::limits::Limits;
+use crate::metrics::trace::{self, Call, CallResult, LineTrace, Stopwatch};
 use crate::signin::{LoginGate, SignIn};
 use crate::switchboard::{Inbox, Switchboard};
 
@@ -41,6 +42,7 @@ pub(crate) struct Host<'s> {
     noted_account: Option<AccountId>,
     /// The account this line has been counted as a player for (the metrics pusher and the portal).
     counted_account: Option<AccountId>,
+    trace: Option<Arc<LineTrace>>,
 }
 
 /// Tells the connection's other tasks which account its line session is signed on as.
@@ -71,6 +73,16 @@ pub(crate) enum ReplyError {
 pub(crate) struct Answer {
     pub(crate) exchange: Vec<Exchange>,
     pub(crate) outgoing: Vec<HostMessage>,
+    /// On a traced line: the call to report once the replies are sent ([`Host::finish_call`]).
+    pub(crate) call: Option<Call>,
+}
+
+fn answer_of(exchange: Exchange, outgoing: Vec<HostMessage>) -> Answer {
+    Answer {
+        exchange: vec![exchange],
+        outgoing,
+        call: None,
+    }
 }
 
 impl<'s> Host<'s> {
@@ -90,7 +102,13 @@ impl<'s> Host<'s> {
             binding: None,
             noted_account: None,
             counted_account: None,
+            trace: None,
         }
+    }
+
+    /// Reports every client message of this line to its diagnostics trace from now on.
+    pub(crate) fn trace(&mut self, trace: Option<Arc<LineTrace>>) {
+        self.trace = trace;
     }
 
     /// Limits this line's Logins to the accounts the signed-in identity owns.
@@ -123,22 +141,30 @@ impl<'s> Host<'s> {
         }
     }
 
+    /// Answers one client message; on a traced line the answer also carries the call to report.
     pub(crate) fn answer(&mut self, body: &[u8]) -> Answer {
+        let clock = self.trace.is_some().then(Stopwatch::start);
+        let (mut answer, name, result) = self.answer_message(body);
+        answer.call = clock.map(|clock| Call::land(name, self.land_target(), clock, result));
+        answer
+    }
+
+    fn answer_message(&mut self, body: &[u8]) -> (Answer, &'static str, CallResult) {
         crate::metrics::counters().message_in();
         let received = match ClientMessage::parse(body) {
             Ok(received) => received,
             Err(error) => {
-                return Answer {
-                    exchange: vec![Exchange::Undecodable(error)],
-                    outgoing: Vec::new(),
-                }
+                let answer = answer_of(Exchange::Undecodable(error), Vec::new());
+                return (answer, trace::UNDECODABLE, CallResult::Undecodable);
             }
         };
+        let name = received.kind();
+        if let (Some(trace), ClientMessage::Login(login)) = (&self.trace, &received) {
+            trace.note_client_version(login.version);
+        }
         if let Some(outgoing) = self.refusal(&received) {
-            return Answer {
-                exchange: vec![Exchange::Received(received)],
-                outgoing,
-            };
+            let answer = answer_of(Exchange::Received(received), outgoing);
+            return (answer, name, CallResult::Refused);
         }
         let mut objects = lock(self.objects);
         // Under the store lock the inbox holds everything caused before this message, in order.
@@ -146,16 +172,47 @@ impl<'s> Host<'s> {
         let caused = self
             .player
             .handle(self.world, &mut objects, self.connection, &received);
-        outgoing.extend(self.dispatch(caused));
+        let own = self.dispatch(caused);
+        let result = match own.iter().any(|m| matches!(m, HostMessage::Nak(_))) {
+            true => CallResult::Nak,
+            false => CallResult::Ok,
+        };
+        outgoing.extend(own);
         drop(objects);
         self.publish_logon();
         self.note_audit();
         self.note_sign_in();
         self.count_login();
-        Answer {
-            exchange: vec![Exchange::Received(received)],
-            outgoing,
+        (
+            answer_of(Exchange::Received(received), outgoing),
+            name,
+            result,
+        )
+    }
+
+    /// Reports a traced call once its replies went out: one that could not be sent is `not-sent`.
+    pub(crate) fn finish_call(&self, call: Option<Call>, sent: &[Exchange]) {
+        let (Some(trace), Some(mut call)) = (&self.trace, call) else {
+            return;
+        };
+        let unsent = sent.iter().any(|step| matches!(step, Exchange::NotSent(_)));
+        if unsent && call.outcome.success {
+            call.outcome = CallResult::NotSent.outcome();
         }
+        trace.record(call);
+    }
+
+    /// The game this connection plays, when its name is known, else its land.
+    fn land_target(&self) -> String {
+        let objects = lock(self.objects);
+        let connection = self.connection;
+        let mut sessions = objects.game_sessions().filter(|session| {
+            session.leader == connection
+                || session.registered.contains(&connection)
+                || objects.recipients(session.group).contains(&connection)
+        });
+        let game = sessions.find_map(|session| session.game.name());
+        trace::land_target(game, self.player.place(), &self.world.lands)
     }
 
     /// Waits for a message that another connection caused for this one.
@@ -381,6 +438,85 @@ mod tests {
         let verbose = step.to_string();
         assert!(verbose.starts_with("host LoginAccepted"));
         assert!(verbose.contains('{'));
+    }
+
+    fn traced_host_settings() -> (
+        crate::connection::ConnectionSettings,
+        tokio::sync::mpsc::Receiver<trace::Item>,
+    ) {
+        let world = World {
+            accounts: innkeeper_world::AccountBook::listed([(
+                AccountId(100_001),
+                EncodedPassword([0x12, 0xa1, 0x86, 0x01, 0x00, 0x01, 0x1d, 0x7a, 0x01, 0x66]),
+            )]),
+            lands: innkeeper_world::LandCatalog::stock(),
+            ..World::stock()
+        };
+        let session = innkeeper_session::SessionConfig::default();
+        let mut settings = crate::connection::ConnectionSettings::new(session, world, None);
+        let (tracer, items) = trace::channel();
+        settings.tracer = Some(tracer);
+        (settings, items)
+    }
+
+    fn outcome_of(call: &Option<Call>) -> (&'static str, &'static str, &str) {
+        let call = call.as_ref().unwrap();
+        (call.name, call.outcome.code, call.target.as_str())
+    }
+
+    #[test]
+    fn a_traced_host_classifies_each_call_and_names_its_land() {
+        let (settings, mut items) = traced_host_settings();
+        let tracer = settings.tracer.clone().unwrap();
+        let query = "traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        let mut host = Host::new(&settings, ConnectionId(1));
+        host.trace(tracer.begin_line(Some(query)));
+        let garbage = host.answer(&[0xff]);
+        assert_eq!(
+            outcome_of(&garbage.call),
+            ("Undecodable", "undecodable", "Hub")
+        );
+        let mut wrong = login();
+        if let ClientMessage::Login(login) = &mut wrong {
+            login.password = EncodedPassword([9; 10]);
+        }
+        let nak = host.answer(&wrong.encode());
+        assert_eq!(outcome_of(&nak.call), ("Login", "nak", "Hub"));
+        let accepted = host.answer(&login().encode());
+        assert_eq!(outcome_of(&accepted.call), ("Login", "ok", "Hub"));
+        let land = ClientMessage::JoinNet(innkeeper_world::JoinNet {
+            cookie: innkeeper_world::Cookie(2),
+            kind: innkeeper_world::ObjectKind::LandGroup,
+            land_type: LandType(3),
+            parameter: 1,
+            size: 64,
+        });
+        let joined = host.answer(&land.encode());
+        assert_eq!(outcome_of(&joined.call), ("JoinNet", "ok", "CasinoLand"));
+        let unsent = [Exchange::NotSent(ReplyError::Link(LinkError::InvalidSeq(
+            9,
+        )))];
+        host.finish_call(joined.call, &unsent);
+        host.finish_call(garbage.call, &[]);
+        let sent: Vec<_> = std::iter::from_fn(|| items.try_recv().ok()).collect();
+        let codes: Vec<_> = sent
+            .iter()
+            .map(|item| match &item.detail {
+                trace::Detail::Dependency { result_code, .. } => (*result_code, item.success),
+                trace::Detail::Request { .. } => ("request", item.success),
+            })
+            .collect();
+        assert_eq!(codes, [("not-sent", false), ("undecodable", false)]);
+    }
+
+    #[test]
+    fn an_untraced_host_reports_no_call() {
+        let (settings, mut items) = traced_host_settings();
+        let mut host = Host::new(&settings, ConnectionId(1));
+        let answer = host.answer(&login().encode());
+        assert!(answer.call.is_none());
+        host.finish_call(answer.call, &[]);
+        assert!(items.try_recv().is_err());
     }
 
     #[test]

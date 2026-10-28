@@ -23,10 +23,11 @@ use tracing::{debug, info, warn};
 
 use innkeeper_world::AccountId;
 
-use crate::connection::{serve_line, ConnectionSettings, READ_CHUNK};
+use crate::connection::{serve_line, ConnectionSettings, LineContext, READ_CHUNK};
 use crate::connection_gate::{self, Binding};
 use crate::http::{self, Reply};
 use crate::limits::{Limits, Refusal};
+use crate::metrics::trace::{Call, LineTrace, Stopwatch};
 use crate::save_channel::SaveChannel;
 
 /// Serial bytes arrive a few at a time; a binary message larger than this is not a modem line.
@@ -96,10 +97,12 @@ pub(crate) fn accept(
         }
     };
     let accept_key = derive_accept_key(key.as_bytes());
+    let query = request.uri().query();
+    let trace = (settings.tracer.as_ref()).and_then(|tracer| tracer.begin_line(query));
     tokio::spawn(async move {
         let _permit = permit;
         match hyper::upgrade::on(request).await {
-            Ok(upgraded) => run(TokioIo::new(upgraded), addr, settings, binding).await,
+            Ok(upgraded) => run(TokioIo::new(upgraded), addr, settings, binding, trace).await,
             Err(error) => warn!(%error, %peer, "websocket refused"),
         }
     });
@@ -155,6 +158,7 @@ async fn run<S>(
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
     binding: Option<Binding>,
+    trace: Option<Arc<LineTrace>>,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -168,16 +172,14 @@ async fn run<S>(
     let (logon, signed_on) = watch::channel(None);
     let saves = SaveChannel::new(Arc::clone(&settings.world.store));
     let shared = Arc::clone(&settings);
+    let context = LineContext {
+        logon: Some(logon),
+        binding,
+        trace: trace.clone(),
+    };
     let (relayed, ()) = tokio::join!(
-        relay(socket, line, saves, signed_on, &shared.limits),
-        serve_line(
-            session_end,
-            addr,
-            settings,
-            "websocket",
-            Some(logon),
-            binding
-        )
+        relay(socket, line, saves, signed_on, &shared.limits, trace),
+        serve_line(session_end, addr, settings, "websocket", context)
     );
     if let Err(error) = relayed {
         warn!(%error, %peer, "websocket relay stopped");
@@ -199,6 +201,7 @@ async fn relay<S>(
     mut saves: SaveChannel,
     mut signed_on: watch::Receiver<Option<AccountId>>,
     limits: &Limits,
+    trace: Option<Arc<LineTrace>>,
 ) -> Result<(), RelayError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -219,8 +222,14 @@ where
                     Message::Close(_) => return Ok(()),
                     Message::Text(text) => {
                         debug!(len = text.len(), "save channel request");
-                        for reply in saves.handle(&text, now_millis()) {
+                        let clock = trace.is_some().then(Stopwatch::start);
+                        let answer = saves.handle(&text, now_millis());
+                        let call = clock.map(|clock| Call::save(answer.op, answer.outcome(), clock));
+                        for reply in answer.replies {
                             limits.write_within(to_browser.send(Message::text(reply))).await??;
+                        }
+                        if let (Some(trace), Some(call)) = (&trace, call) {
+                            trace.record(call);
                         }
                     }
                     Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
@@ -409,6 +418,84 @@ mod tests {
         let manifest = next_json(&mut second).await;
         assert_eq!(manifest["account"], account);
         assert_eq!(manifest["files"][0]["version"], 1);
+    }
+
+    async fn serve_traced() -> (
+        SocketAddr,
+        tokio::sync::mpsc::Receiver<crate::metrics::trace::Item>,
+    ) {
+        let session = SessionConfig {
+            line: LineKind::Pad,
+            ..SessionConfig::default()
+        };
+        let mut settings = ConnectionSettings::new(session, World::stock(), None);
+        let (tracer, items) = crate::metrics::trace::channel();
+        settings.tracer = Some(tracer);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let served = accept_forever(listener, Arc::new(settings), serve_websocket);
+        tokio::spawn(served);
+        (address, items)
+    }
+
+    async fn open_at(address: SocketAddr, query: &str) -> Browser {
+        let stream = TcpStream::connect(address).await.unwrap();
+        let url = format!("ws://{address}/?{query}");
+        client_async(url, stream).await.unwrap().0
+    }
+
+    #[tokio::test]
+    async fn a_traced_line_reports_its_calls_and_an_untraced_one_nothing() {
+        use crate::metrics::trace::Detail;
+        let (address, mut items) = serve_traced().await;
+        let mut plain = open_at(address, "session=").await;
+        log_on(&mut plain).await;
+        let _ = next_json(&mut plain).await;
+        plain.close(None).await.unwrap();
+        let traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        let mut socket = open_at(address, &format!("traceparent={traceparent}")).await;
+        log_on(&mut socket).await;
+        let _ = next_json(&mut socket).await;
+        let _ = ask(&mut socket, json!({"op": "manifest", "id": 1})).await;
+        socket.close(None).await.unwrap();
+        let mut sent = Vec::new();
+        while !sent
+            .iter()
+            .any(|item: &crate::metrics::trace::Item| item.name == "WS line")
+        {
+            let next = tokio::time::timeout(Duration::from_secs(5), items.recv());
+            sent.push(next.await.expect("the line's request").unwrap());
+        }
+        let line = sent.last().unwrap();
+        assert_eq!(line.parent, "00f067aa0ba902b7");
+        let Detail::Request {
+            response_code,
+            measurements,
+            properties,
+        } = &line.detail
+        else {
+            panic!("{line:?}");
+        };
+        assert_eq!(response_code, "hung-up");
+        assert_eq!(measurements, &[("calls", 2.0), ("dropped", 0.0)]);
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].0, "clientVersion");
+        let calls: Vec<_> = sent[..sent.len() - 1].iter().collect();
+        assert!(calls.iter().all(|call| call.parent == line.id.0));
+        let named: Vec<(&str, &Detail)> =
+            calls.iter().map(|c| (c.name.as_str(), &c.detail)).collect();
+        assert_eq!(named.len(), 2, "{named:?}");
+        assert_eq!(named[0].0, "Login");
+        assert_eq!(
+            named[0].1,
+            &Detail::Dependency {
+                kind: "Land",
+                target: "Hub".into(),
+                result_code: "ok"
+            }
+        );
+        assert_eq!(named[1].0, "manifest");
+        assert!(items.try_recv().is_err(), "the plain line sent nothing");
     }
 
     #[tokio::test]

@@ -75,7 +75,14 @@ async fn route(
     }
     if path.starts_with("/auth/") {
         if let Some(sign_in) = settings.sign_in.clone() {
-            return sign_in.serve(request).await;
+            let name = || crate::signin::route_name(request.method(), path);
+            let trace = (settings.tracer.as_ref())
+                .and_then(|tracer| tracer.begin_request(request.headers(), name));
+            let reply = sign_in.serve(request).await;
+            if let Some(trace) = trace {
+                trace.finish(reply.status().as_u16());
+            }
+            return reply;
         }
     }
     error(StatusCode::NOT_FOUND, "not_found", "No such endpoint.")

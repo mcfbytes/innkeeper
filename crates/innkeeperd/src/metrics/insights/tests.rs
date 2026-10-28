@@ -145,6 +145,7 @@ fn settings(base: &str) -> Settings {
         ikey: "0123abcd-0123".to_owned(),
         track: join(&base, "v2.1/track").unwrap(),
         interval: Duration::from_millis(60),
+        items: None,
     }
 }
 
@@ -221,4 +222,64 @@ async fn an_unreachable_endpoint_does_not_stop_the_task_or_block() {
     tokio::time::sleep(Duration::from_millis(400)).await;
     assert!(!task.is_finished());
     task.abort();
+}
+
+fn envelope_names(body: &Value) -> Vec<String> {
+    let list = body.as_array().map(Vec::as_slice).unwrap_or_default();
+    list.iter()
+        .filter_map(|e| e["name"].as_str().map(str::to_owned))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_traced_line_s_items_reach_the_endpoint_beside_the_metrics() {
+    let (mock, base) = start_mock(200).await;
+    let mut settings = settings(&base);
+    let tracer = settings.tracer();
+    let traceparent = "traceparent=00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    let line = tracer.begin_line(Some(traceparent)).unwrap();
+    let clock = crate::metrics::trace::Stopwatch::start();
+    let call = crate::metrics::trace::Call::land(
+        "Login",
+        "Hub".to_owned(),
+        clock,
+        crate::metrics::trace::CallResult::Ok,
+    );
+    line.record(call);
+    line.finish(crate::metrics::trace::LineEnd::HungUp);
+    let task = tokio::spawn(run(settings, connections()));
+    let mut found = None;
+    for _ in 0..200 {
+        found = mock.tracks.lock().unwrap().iter().find_map(|(auth, body)| {
+            let names = envelope_names(body);
+            names
+                .iter()
+                .any(|n| n.ends_with(".Request"))
+                .then(|| (auth.clone(), body.clone()))
+        });
+        if found.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    task.abort();
+    let (auth, body) = found.expect("the trace items were pushed");
+    assert_eq!(auth.as_deref(), Some("Bearer mi-token"));
+    let names = envelope_names(&body);
+    assert_eq!(
+        names,
+        [
+            "Microsoft.ApplicationInsights.RemoteDependency",
+            "Microsoft.ApplicationInsights.Request"
+        ]
+    );
+    let request = &body[1];
+    let dependency = &body[0];
+    assert_eq!(
+        dependency["tags"]["ai.operation.parentId"],
+        request["data"]["baseData"]["id"]
+    );
+    assert_eq!(request["tags"]["ai.operation.parentId"], "00f067aa0ba902b7");
+    assert_eq!(request["data"]["baseData"]["responseCode"], "hung-up");
+    assert!(!body.to_string().contains("127.0.0.1"));
 }

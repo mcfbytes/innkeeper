@@ -769,7 +769,7 @@ Destructive actions ask for confirmation: a dialog, or a visible "I mean it" tic
 
 | Flag | Meaning |
 |---|---|
-| `--app-insights-connection-string STRING` | `InstrumentationKey=GUID;IngestionEndpoint=https://REGION.in.applicationinsights.azure.com/`, as the portal shows it. Turns the pusher on. The endpoint must be an `applicationinsights.azure.com` HTTPS host. The key is not a secret; with local auth disabled on the component it only routes. |
+| `--app-insights-connection-string STRING` | `InstrumentationKey=GUID;IngestionEndpoint=https://REGION.in.applicationinsights.azure.com/`, as the portal shows it. Turns the pusher on. The endpoint must be an `applicationinsights.azure.com` HTTPS host. The key is not a secret: it ships in the page as well, and the component has local auth on so browsers can post (the infrastructure README, "Diagnostics trace"). innkeeperd itself still authenticates with Entra. |
 | `--test-ingestion-endpoint URL`, `--test-imds-endpoint URL`, `--test-authority-endpoint URL`, `--test-metrics-interval DURATION` | Hidden, for tests: mock endpoints and a short interval. |
 
 The pusher asks the VM's managed identity (or the service principal in `AZURE_*`, as the vault client
@@ -803,6 +803,32 @@ not counted.
 The task never blocks a game connection. A failed push backs off 1, 2, 4, ... up to 10 minutes,
 logs a WARN at most once per 10 minutes, and says so when pushing resumes. Counter growth is kept
 for the next push; gauge samples older than a push are dropped.
+
+### 10.4 Diagnostics trace
+
+With the pusher on, innkeeperd also sends the server half of the page's end-to-end trace, role
+`innkeeperd`, **only for a line or request that carries a valid W3C `traceparent`** (version `00`,
+lowercase hex ids that are not all zeros). The page adds it when the visitor's "Send anonymous
+diagnostics" is on: `?traceparent=` on the WebSocket URL beside `session=`, and a `traceparent`
+header on its `/auth/*` fetches. Anything else, including every TCP and INT 14h line, sends no item;
+there is no server switch. The code is `crates/innkeeperd/src/metrics/trace.rs`.
+
+| Item | Name | Parent | Result | Carries |
+|---|---|---|---|---|
+| request, per traced line, when it ends | `WS line` | the traceparent's parent id | `hung-up`, `idle`, `kicked` (success); `gave-up`, `inbox-full`, `error` (failure) | measurements `calls` (client messages and save requests handled), `dropped` (calls the ceiling or a full queue kept out); property `clientVersion` (`1.1.7`) once a Login was seen |
+| dependency, per client message | the message kind (`Login`, `Bbs`, ...; `Undecodable`) | the line's request | `ok`, `nak`, `refused` (success); `undecodable`, `not-sent` (failure) | type `Land`, target the game's name when the line is in a game group whose game is known (`Red Baron`), else the land of the latest land joinNet (`Clubhouse`, `SierraLand`, `CasinoLand`, `Arena`, `Yserbius`, `Cawdor`, `Twinion`, `land N`), else `Hub` |
+| dependency, per save-channel request | the op (`manifest`, `get`, `versions`, `put`, `unknown`, `undecodable`) | the line's request | `ok` or the reply's error code ([saves.md](saves.md)); only `server_error` is a failure | type `Saves`, target `saves` |
+| request, per traced `/auth/*` call | `<METHOD> <route>`, e.g. `GET /auth/accounts/{id}/saves` | the header's parent id | the HTTP status; 5xx is a failure | nothing else |
+
+Every item has `ai.operation.id` from the traceparent, a random span id and `ai.location.ip`
+`0.0.0.0`. `/healthz` and the upgrade itself are never traced.
+
+Volume, per traced line and minute: the first 30 calls of each (name, target) go out one for one,
+then one in ten with `sampleRate` 10; failures always go. Above 600 items a minute calls are only
+counted in `dropped`. Items wait in a bounded queue of 2048 that no line ever waits on (a full queue
+drops). It is drained every five seconds into one POST with the metrics' token and back-off; items
+are not kept through a back-off. The `/auth/*` CORS answer allows the `traceparent` header
+(`Access-Control-Allow-Headers: Authorization, Content-Type, traceparent`).
 
 ### 10.3 systemd
 
