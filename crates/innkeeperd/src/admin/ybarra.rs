@@ -12,12 +12,13 @@ use hyper::StatusCode;
 use innkeeper_world::AccountId;
 
 use super::html::{button, esc, narrator, when, window, Flash, Form, Nav, Tone};
+use super::item_pickers::{pickers, Pickers, Wearer, CATALOG_LIST};
 use super::store;
 use super::views::{account_link, flag, link, table, tr};
 use super::{Admin, Reply, Req};
 use crate::dates;
 use crate::ybarra::cipher::Cipher;
-use crate::ybarra::schema::{schema, Catalog, Field, Kind, Value};
+use crate::ybarra::schema::{schema, Field, Kind, Value};
 use crate::ybarra::{self, CharFile, Game, SLOTS};
 
 /// Which part of a character file a form shows.
@@ -55,15 +56,15 @@ impl Part {
 }
 
 /// The current version of a game's character file with what it says.
-struct Opened {
-    game: Game,
+pub(super) struct Opened {
+    pub(super) game: Game,
     cipher: Cipher,
-    version: u64,
-    chars: CharFile,
+    pub(super) version: u64,
+    pub(super) chars: CharFile,
 }
 
 /// What came of a request for a character file.
-enum Loaded {
+pub(super) enum Loaded {
     Ready(Box<Opened>),
     Page(Reply),
 }
@@ -99,19 +100,20 @@ fn form_name(index: usize, element: usize) -> String {
     format!("f{index}_{element}")
 }
 
-fn reason_input() -> &'static str {
+pub(super) fn reason_input() -> &'static str {
     "<div><label for=\"reason\">Reason (kept in the audit log, optional)</label>\
      <input type=\"text\" id=\"reason\" name=\"reason\" maxlength=\"200\"></div>"
 }
 
 /// One input for one element of a field. `shown` is the text to put in it: the stored value, or
 /// what the operator sent when the form comes back with a complaint.
-fn input(field: &Field, name: &str, label: &str, shown: &str) -> String {
+fn input(field: &Field, name: &str, label: &str, shown: &str, list: &str) -> String {
     let id = format!("in-{name}");
     let label = format!("<label for=\"{id}\">{}</label>", esc(label));
     if field.catalog && !field.values.is_empty() {
         return format!(
-            "<div>{label}<input type=\"text\" id=\"{id}\" name=\"{name}\" list=\"{CATALOG_LIST}\" value=\"{}\" spellcheck=\"false\" autocomplete=\"off\"></div>",
+            "<div>{label}<input type=\"text\" id=\"{id}\" name=\"{name}\" list=\"{}\" value=\"{}\" spellcheck=\"false\" autocomplete=\"off\"></div>",
+            esc(list),
             esc(shown)
         );
     }
@@ -184,48 +186,10 @@ fn confidence(field: &Field) -> String {
     )
 }
 
-/// The id of the one item list a form's item inputs share.
-const CATALOG_LIST: &str = "ybarra-items";
-
-/// The item list: `name (id)` entries, by name, each with its starting charges when it has any.
-fn catalog_html(fields: &[Field], catalog: &Catalog) -> String {
-    let Some(names) = fields
-        .iter()
-        .find(|field| field.catalog && !field.values.is_empty())
-        .map(|field| &field.values)
-    else {
-        return String::new();
-    };
-    let mut entries: Vec<(&String, &String)> = names.iter().collect();
-    entries.sort_by(|a, b| a.1.cmp(b.1).then_with(|| a.0.cmp(b.0)));
-    let mut out = String::new();
-    for (id, name) in entries {
-        let charges = catalog
-            .items
-            .iter()
-            .find(|item| item.id.to_string() == *id)
-            .and_then(|item| item.charges)
-            .map_or_else(String::new, |charges| {
-                format!(" data-charges=\"{charges}\"")
-            });
-        let _ = write!(
-            out,
-            "<option value=\"{} ({})\" data-id=\"{}\"{charges}></option>",
-            esc(name),
-            esc(id),
-            esc(id)
-        );
-    }
-    let empty = catalog
-        .no_charges
-        .map_or_else(String::new, |value| format!(" data-no-charges=\"{value}\""));
-    format!("<datalist id=\"{CATALOG_LIST}\"{empty}>{out}</datalist>")
-}
-
 /// The fields of one part as form sections, one per group, in the map's order.
 fn fields_html(
     fields: &[Field],
-    catalog: &Catalog,
+    pickers: &Pickers,
     bytes: &[u8],
     sent: Option<&HashMap<String, String>>,
 ) -> String {
@@ -250,7 +214,7 @@ fn fields_html(
         if field.count == 1 {
             let (name, text) = shown(index, field, 0);
             let label = field.label.clone().unwrap_or_else(|| pretty(&field.name));
-            html.push_str(&input(field, &name, &label, &text));
+            html.push_str(&input(field, &name, &label, &text, CATALOG_LIST));
             if !matches!(field.confidence.as_deref(), Some("confirmed")) {
                 html = html.replacen("</label>", &format!("{}</label>", confidence(field)), 1);
             }
@@ -258,14 +222,26 @@ fn fields_html(
             let mut cells = String::new();
             for element in 0..field.count {
                 let (name, text) = shown(index, field, element);
-                let cell = input(field, &name, &field.item_name(element), &text);
+                let cell = input(
+                    field,
+                    &name,
+                    &field.item_name(element),
+                    &text,
+                    pickers.list_for(element),
+                );
                 match beside {
                     Some((other_index, other)) => {
                         let (other_name, other_text) = shown(other_index, other, element);
                         let _ = write!(
                             cells,
                             "<div class=\"slot\">{cell}<div class=\"beside\">{}</div></div>",
-                            input(other, &other_name, &pretty(&other.name), &other_text)
+                            input(
+                                other,
+                                &other_name,
+                                &pretty(&other.name),
+                                &other_text,
+                                CATALOG_LIST
+                            )
                         );
                     }
                     None => cells.push_str(&cell),
@@ -299,7 +275,7 @@ fn fields_html(
             esc(group)
         );
     }
-    out.push_str(&catalog_html(fields, catalog));
+    out.push_str(&pickers.html);
     out
 }
 
@@ -399,7 +375,7 @@ impl Admin {
     }
 
     /// Opens the current character file of a game for an account, or the page that says why not.
-    fn load_chars(&self, req: &Req, account: u32, game: Game) -> Loaded {
+    pub(super) fn load_chars(&self, req: &Req, account: u32, game: Game) -> Loaded {
         let cipher = match store::cipher_for(&self.store, game) {
             Ok(Some(cipher)) => cipher,
             Ok(None) => {
@@ -576,6 +552,11 @@ impl Admin {
                 } else {
                     String::new()
                 },
+                if !schema(game).automap.maps.is_empty() {
+                    link(&format!("{base}/{}/warp", slot + 1), "Warp")
+                } else {
+                    String::new()
+                },
             ]));
         }
         let body = format!(
@@ -584,7 +565,10 @@ impl Admin {
             account_link(account),
             esc(game.chars_path()),
             opened.version,
-            window("Characters", &table(&["Slot", "Character", "", ""], &rows)),
+            window(
+                "Characters",
+                &table(&["Slot", "Character", "", "", ""], &rows)
+            ),
             window(
                 "File header",
                 &format!(
@@ -632,11 +616,13 @@ impl Admin {
         let base = Self::editor_base(account, game);
         let action = format!("{base}/{}", part.url_part());
         let version = opened.version.to_string();
-        let hidden = [("version", version.as_str())];
+        let show_all = req.param("all") == "1";
+        let hidden_all = [("version", version.as_str()), ("all", "1")];
+        let hidden_one = [("version", version.as_str())];
         let form = Form {
             action: &action,
             csrf: &req.ctx.csrf,
-            hidden: &hidden,
+            hidden: if show_all { &hidden_all } else { &hidden_one },
             confirm: None,
             inline: false,
         };
@@ -660,20 +646,115 @@ impl Admin {
             list.push_str("</ul>");
             window("What the game checks", &list)
         };
+        let (picker_lists, picker_note) =
+            match self.slot_pickers(game, fields, bytes, show_all, &action) {
+                Ok(found) => found,
+                Err(error) => return self.failed(req, &error),
+            };
+        let warp = match part {
+            Part::Slot(slot) if !map.automap.maps.is_empty() => format!(
+                " &middot; {}",
+                link(&format!("{base}/{}/warp", slot + 1), "Warp to a map tile")
+            ),
+            _ => String::new(),
+        };
         let body = format!(
-            "<p>{} &middot; account {} &middot; {} v{}</p>{warning}{invariants}\
-             {}<div class=\"editor\">{}</div>{}<div class=\"row\">{}</div></form>",
+            "<p>{}{warp} &middot; account {} &middot; {} v{}</p>{warning}{invariants}\
+             {picker_note}{}<div class=\"editor\">{}</div>{}<div class=\"row\">{}</div></form>",
             link(&base, "All characters in this file"),
             account_link(account),
             esc(game.chars_path()),
             opened.version,
             form.open(),
-            fields_html(fields, &map.catalog, bytes, sent),
+            fields_html(fields, &picker_lists, bytes, sent),
             reason_input(),
             button("Save changes", "primary"),
         );
         let title = format!("{}: {}", game.title(), part.title());
         self.render_status(req, status, Nav::Saves, &title, flash, &body)
+    }
+
+    /// The item lists of a part's form and the line that says how they are filtered, with the
+    /// link that turns the filter off or on again.
+    fn slot_pickers(
+        &self,
+        game: Game,
+        fields: &[Field],
+        bytes: &[u8],
+        show_all: bool,
+        action: &str,
+    ) -> Result<(Pickers, String), innkeeper_world::StoreError> {
+        let catalog = &schema(game).catalog;
+        let Some(items) = fields
+            .iter()
+            .find(|field| field.catalog && !field.values.is_empty())
+        else {
+            return Ok((Pickers::default(), String::new()));
+        };
+        let number = |field: &Field, element: usize| match field.read(bytes, element) {
+            Value::Number(n) => Some(n),
+            _ => None,
+        };
+        let current: Vec<u16> = (0..items.count)
+            .map(|slot| {
+                number(items, slot)
+                    .and_then(|n| u16::try_from(n).ok())
+                    .unwrap_or(0)
+            })
+            .collect();
+        let guild = fields
+            .iter()
+            .find(|field| field.name == "guild")
+            .and_then(|field| number(field, 0))
+            .and_then(|n| u8::try_from(n).ok());
+        let table = if show_all {
+            None
+        } else {
+            self.game_items(game)?
+        };
+        let filtered = table.is_some();
+        let lists = pickers(
+            table.as_ref(),
+            &Wearer {
+                guild,
+                current: &current,
+            },
+            catalog,
+        );
+        let toggle = if show_all {
+            link(action, "Filter the item pickers")
+        } else {
+            link(&format!("{action}?all=1"), "Show all items in every picker")
+        };
+        let text = match (show_all, filtered) {
+            (true, _) => "Item pickers: showing all items (filter off).",
+            (false, true) => "Item pickers: worn and unused slots list only what fits there for this guild, weakest first; the item in a slot now always stays listed. Any item can still be typed.",
+            (false, false) => "Item pickers: not filtered, because this game's RESOURCE.038 is not imported (Game data).",
+        };
+        Ok((
+            lists,
+            format!("<p class=\"muted\"><b>{}</b> {toggle}</p>", esc(text)),
+        ))
+    }
+
+    /// The page a POST answers with: the warp page when the form came from it, else the form.
+    #[allow(clippy::too_many_arguments)]
+    fn saved_page(
+        &self,
+        req: &Req,
+        account: u32,
+        opened: &Opened,
+        part: Part,
+        flash: Option<&Flash>,
+        sent: Option<&HashMap<String, String>>,
+        status: StatusCode,
+    ) -> Reply {
+        match part {
+            Part::Slot(slot) if req.param("view") == "warp" => {
+                self.warp_page(req, account, opened, slot, flash, status)
+            }
+            _ => self.part_page(req, account, opened, part, flash, sent, status),
+        }
     }
 
     /// `POST /admin/saves/<account>/ybarra/<game>/<part>`: stores the changed file as the new
@@ -692,7 +773,7 @@ impl Admin {
         };
         let sent = &req.params;
         let refuse = |opened: &Opened, flash: Flash, status| {
-            self.part_page(req, account, opened, part, Some(&flash), Some(sent), status)
+            self.saved_page(req, account, opened, part, Some(&flash), Some(sent), status)
         };
         if !self.online_for(account).is_empty() {
             let flash = Flash::bad(
@@ -731,7 +812,7 @@ impl Admin {
                 "Nothing was different, so nothing was saved.",
                 "The ink stays in the pot.",
             );
-            return self.part_page(
+            return self.saved_page(
                 req,
                 account,
                 &opened,
@@ -777,7 +858,7 @@ impl Admin {
             ),
             "Blotted, stamped and back in the drawer.",
         );
-        self.part_page(
+        self.saved_page(
             req,
             account,
             &opened,
@@ -841,7 +922,15 @@ mod tests {
             ], "catalog": {"items": [{"id": 7, "name": "Wand <of> Fire", "charges": 5}, {"id": 9, "name": "Axe"}], "no_charges": 0}}"#,
         );
         let mut bytes = [7, 0, 9, 0, 3, 0];
-        let html = fields_html(&schema.record, &schema.catalog, &bytes, None);
+        let lists = pickers(
+            None,
+            &Wearer {
+                guild: None,
+                current: &[],
+            },
+            &schema.catalog,
+        );
+        let html = fields_html(&schema.record, &lists, &bytes, None);
         assert!(
             html.contains("value=\"Wand &lt;of&gt; Fire (7)\""),
             "{html}"
@@ -865,7 +954,7 @@ mod tests {
     fn the_form_shows_hostile_text_escaped() {
         let fields = fields();
         let bytes = *b"<b>\0zz<b>\0zz\x05\x01\x02";
-        let html = fields_html(&fields, &Catalog::default(), &bytes, None);
+        let html = fields_html(&fields, &Pickers::default(), &bytes, None);
         assert!(html.contains("value=\"&lt;b&gt;\""), "{html}");
         assert!(!html.contains("Name copy"), "{html}");
         assert!(html.contains(">Bow</label>"), "{html}");

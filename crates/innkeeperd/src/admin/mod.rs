@@ -9,12 +9,17 @@
 mod actions;
 pub(crate) mod allowlist;
 pub(crate) mod cli;
+mod gamedata;
 mod html;
+mod item_list;
+mod item_pickers;
+mod map_grid;
 mod signins;
 pub(crate) mod store;
 mod views;
 mod ybarra;
 mod ybarra_maps;
+mod ybarra_warp;
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -342,7 +347,7 @@ impl Admin {
                 warn!(handle = %req.who.handle, "portal POST refused: wrong Origin");
                 return self.forbidden(&req, "That request did not come from this office.");
             }
-            let limit = if path == IMPORT_PATH {
+            let limit = if path == IMPORT_PATH || path == gamedata::GAME_DATA_IMPORT_PATH {
                 MAX_IMPORT_FORM
             } else {
                 MAX_FORM
@@ -721,7 +726,13 @@ impl Admin {
             ["saves", account, "ybarra", game, slot, "map"] => {
                 self.ybarra_maps(req, account, game, slot)
             }
+            ["saves", account, "ybarra", game, slot, "warp"] => {
+                self.ybarra_warp(req, account, game, slot)
+            }
             ["ybarra"] => self.ybarra_tables(req),
+            ["gamedata"] => self.game_data(req),
+            ["gamedata", game, "items"] => self.game_items_page(req, game),
+            ["gamedata", game, "maps"] => self.game_maps(req, game),
             ["holds"] => self.holds(req),
             ["audit"] => self.audit(req),
             ["help"] => self.help(req),
@@ -751,6 +762,7 @@ impl Admin {
                 self.ybarra_maps_save(req, account, game, slot)
             }
             ["ybarra", "import"] => self.ybarra_import(req),
+            ["gamedata", "import"] => self.game_data_import(req),
             _ => self.not_found(req),
         }
     }

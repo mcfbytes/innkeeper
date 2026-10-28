@@ -24,7 +24,7 @@ pub(crate) const BASELINE_VERSION: i32 = 5;
 
 /// Changes after the baseline, in order: entry `n` takes a database from `BASELINE_VERSION + n` to
 /// one more. Each runs in the transaction that also writes the new `user_version`.
-const MIGRATIONS: &[&str] = &[IDENTITY_GROUPS, YBARRA_CIPHERS];
+const MIGRATIONS: &[&str] = &[IDENTITY_GROUPS, YBARRA_CIPHERS, YBARRA_RESOURCES];
 
 /// Version 6: accounts belong to an identity group, so linked sign-ins share them. Each existing
 /// identity becomes a group of one that owns its accounts (docs/server/store.md section 3.1).
@@ -262,6 +262,19 @@ const YBARRA_CIPHERS: &str = "
         key BLOB NOT NULL CHECK (length(key) = 8),
         source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
         imported_at INTEGER NOT NULL
+    ) STRICT;
+";
+
+/// Version 8: the item and map files of each Ybarra game, as the operator imported them from their
+/// copy for the portal's game data pages (docs/server/ybarra.md section 8). Game data, no account.
+const YBARRA_RESOURCES: &str = "
+    CREATE TABLE ybarra_resources (
+        game TEXT NOT NULL CHECK (game IN ('yserbius', 'twinion', 'cawdor')),
+        resource TEXT NOT NULL CHECK (resource IN ('items', 'maps')),
+        data BLOB NOT NULL,
+        source_sha256 TEXT NOT NULL CHECK (length(source_sha256) = 64),
+        imported_at INTEGER NOT NULL,
+        PRIMARY KEY (game, resource)
     ) STRICT;
 ";
 

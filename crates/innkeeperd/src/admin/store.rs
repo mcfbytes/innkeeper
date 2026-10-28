@@ -10,6 +10,7 @@ use crate::signin::keys::{self, IdentityKey};
 use crate::sqlite_store::SqliteStore;
 use crate::subject::{c_string, post_author, trim_nul};
 use crate::ybarra::cipher::Cipher;
+use crate::ybarra::game_file::Resource;
 use crate::ybarra::Game;
 
 fn backend(error: rusqlite::Error) -> StoreError {
@@ -1221,6 +1222,97 @@ pub(crate) fn cipher_for(store: &SqliteStore, game: Game) -> Result<Option<Ciphe
         .into_iter()
         .find(|row| row.game == game)
         .map(|row| row.cipher))
+}
+
+// ---- Ybarra game data ----
+
+/// A game data file as imported, without its bytes.
+#[derive(Debug)]
+pub(crate) struct ResourceRow {
+    pub(crate) game: Game,
+    pub(crate) resource: Resource,
+    pub(crate) source_sha256: String,
+    pub(crate) imported_at: i64,
+}
+
+/// Keeps a game's copy of a data file, replacing the one imported before.
+pub(crate) fn resource_put(
+    store: &SqliteStore,
+    game: Game,
+    resource: Resource,
+    data: &[u8],
+    source_sha256: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    store
+        .connection()
+        .execute(
+            "INSERT INTO ybarra_resources (game, resource, data, source_sha256, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (game, resource) DO UPDATE SET data = excluded.data,
+                 source_sha256 = excluded.source_sha256, imported_at = excluded.imported_at",
+            params![game.id(), resource.id(), data, source_sha256, now],
+        )
+        .map_err(backend)?;
+    Ok(())
+}
+
+/// Every imported data file, by game and then file.
+pub(crate) fn resources(store: &SqliteStore) -> Result<Vec<ResourceRow>, StoreError> {
+    let conn = store.connection();
+    let mut statement = conn
+        .prepare("SELECT game, resource, source_sha256, imported_at FROM ybarra_resources")
+        .map_err(backend)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })
+        .map_err(backend)?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (game, resource, source_sha256, imported_at) = row.map_err(backend)?;
+        let (Some(game), Some(resource)) = (Game::from_id(&game), Resource::from_id(&resource))
+        else {
+            continue;
+        };
+        out.push(ResourceRow {
+            game,
+            resource,
+            source_sha256,
+            imported_at,
+        });
+    }
+    out.sort_by_key(|row| {
+        (
+            Game::ALL.iter().position(|game| *game == row.game),
+            Resource::ALL
+                .iter()
+                .position(|resource| *resource == row.resource),
+        )
+    });
+    Ok(out)
+}
+
+/// The bytes of a game's data file, if it was imported.
+pub(crate) fn resource_for(
+    store: &SqliteStore,
+    game: Game,
+    resource: Resource,
+) -> Result<Option<Vec<u8>>, StoreError> {
+    store
+        .connection()
+        .query_row(
+            "SELECT data FROM ybarra_resources WHERE game = ?1 AND resource = ?2",
+            params![game.id(), resource.id()],
+            |row| row.get::<_, Vec<u8>>(0),
+        )
+        .optional()
+        .map_err(backend)
 }
 
 #[cfg(test)]

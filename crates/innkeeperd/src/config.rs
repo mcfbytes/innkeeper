@@ -311,6 +311,18 @@ pub(crate) enum AdminAction {
         #[arg(long)]
         data_dir: PathBuf,
     },
+    /// Import a Ybarra game's item file (RESOURCE.038) or maps file (RESOURCE.035) from your copy,
+    /// for the portal's game data pages. Works while the server runs.
+    YbarraData {
+        /// yserbius, twinion or cawdor.
+        #[arg(long)]
+        game: String,
+        /// One or both files, told apart by their size.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        data_dir: PathBuf,
+    },
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]

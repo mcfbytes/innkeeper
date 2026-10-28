@@ -1612,3 +1612,218 @@ async fn the_automap_editor_sets_cells_forgets_maps_and_takes_raw_bytes() {
     assert_eq!(short.status, 422);
     assert_eq!(fx.audit_actions(), ["save.edit", "save.edit", "save.edit"]);
 }
+
+#[tokio::test]
+async fn the_game_data_pages_import_files_show_items_and_maps_and_the_warp_moves_a_character() {
+    use crate::ybarra::cipher::tests::sample;
+    use crate::ybarra::extract::tests::fake_exe;
+    use crate::ybarra::items::tests::{record, stored_file as items_file};
+    use crate::ybarra::schema::schema;
+    use crate::ybarra::{dungeon, CharFile, Game, CHARS_FILE_BYTES};
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
+    let fx = fixture(Door::Listed).await;
+    let overview = fx.get("/admin/gamedata").await;
+    assert_eq!(overview.status, 200);
+    assert!(overview.body.contains("not imported"), "{}", overview.body);
+    assert!(
+        overview.body.contains("/admin/gamedata/cawdor/maps"),
+        "{}",
+        overview.body
+    );
+    let missing = fx.get("/admin/gamedata/yserbius/items").await.body;
+    assert!(missing.contains("is not imported yet"), "{missing}");
+
+    let junk = fx
+        .post(
+            "/admin/gamedata/import",
+            &[
+                ("game", "yserbius"),
+                ("file", &URL_SAFE_NO_PAD.encode(b"junk")),
+            ],
+        )
+        .await;
+    assert!(junk.body.contains("Nothing was imported"), "{}", junk.body);
+    let items = items_file(&[
+        record("Nothing", 0, &[]),
+        record("<b>Axe</b>&\"'", 1, &[(0x1D, 0x80), (0x21, 0xFE)]),
+        record("Potion", 11, &[(0x1C, 3), (0x2B, 1), (0x25, 19), (0x26, 4)]),
+    ]);
+    let imported = fx
+        .post(
+            "/admin/gamedata/import",
+            &[
+                ("game", "yserbius"),
+                ("file", &URL_SAFE_NO_PAD.encode(&items)),
+            ],
+        )
+        .await;
+    assert!(
+        imported.body.contains("items are imported"),
+        "{}",
+        imported.body
+    );
+    let list = fx.get("/admin/gamedata/yserbius/items").await.body;
+    assert!(
+        list.contains("&lt;b&gt;Axe&lt;/b&gt;&amp;&quot;&#39;"),
+        "{list}"
+    );
+    assert!(!list.contains("<b>Axe"), "{list}");
+    assert!(
+        list.contains("Knight, Ranger, Thief, Cleric, Wizard") && list.contains("-2"),
+        "{list}"
+    );
+    let usable = fx
+        .get("/admin/gamedata/yserbius/items?type=11&sort=name&dir=desc")
+        .await
+        .body;
+    assert!(
+        usable.contains("1 of 256 items") && usable.contains("Cure (level 4)"),
+        "{usable}"
+    );
+    assert!(usable.contains("aria-sort=\"descending\""), "{usable}");
+
+    let maps = dungeon::tests::stored_file(4, 3);
+    let imported = fx
+        .post(
+            "/admin/gamedata/import",
+            &[
+                ("game", "yserbius"),
+                ("file", &URL_SAFE_NO_PAD.encode(&maps)),
+            ],
+        )
+        .await;
+    assert!(
+        imported.body.contains("maps are imported"),
+        "{}",
+        imported.body
+    );
+    let grid = fx.get("/admin/gamedata/yserbius/maps?map=2").await.body;
+    assert!(
+        grid.contains("class=\"mapgrid\"") && grid.contains("class=\"dn used\""),
+        "{grid}"
+    );
+    assert!(grid.contains("L1: The Mines"), "{grid}");
+    assert!(fx
+        .get("/admin/gamedata/twinion/maps")
+        .await
+        .body
+        .contains("is not imported yet"));
+
+    // The warp writes the map code, cell and facing through the slot form's save path.
+    fx.account(100_001, "Elaine");
+    let cipher = sample();
+    let plain = CharFile::open(&cipher, &vec![0u8; CHARS_FILE_BYTES]).unwrap();
+    let path = Game::Yserbius.chars_path();
+    fx.store
+        .save_write(AccountId(100_001), path, &plain.seal(&cipher), 1000, true)
+        .unwrap();
+    let program = URL_SAFE_NO_PAD.encode(fake_exe(Game::Yserbius, &cipher));
+    fx.post("/admin/ybarra/import", &[("program", &program)])
+        .await;
+    // The slot form's worn pickers follow the imported items: the axe is barred to guild 0.
+    let form = fx.get("/admin/saves/100001/ybarra/yserbius/1").await.body;
+    assert!(form.contains("list=\"ybarra-items-17\""), "{form}");
+    let weapon = form
+        .split("<datalist id=\"ybarra-items-17\"")
+        .nth(1)
+        .unwrap();
+    let weapon = weapon.split("</datalist>").next().unwrap();
+    assert!(
+        weapon.contains("data-id=\"0\"") && !weapon.contains("data-id=\"1\""),
+        "{weapon}"
+    );
+    let all = fx
+        .get("/admin/saves/100001/ybarra/yserbius/1?all=1")
+        .await
+        .body;
+    assert!(
+        !all.contains("ybarra-items-17") && all.contains("filter off"),
+        "{all}"
+    );
+    assert!(all.contains("name=\"all\" value=\"1\""), "{all}");
+    let fields = &schema(Game::Yserbius).record;
+    let input = |name: &str| format!("f{}_0", fields.iter().position(|f| f.name == name).unwrap());
+    let (map_in, cell_in, facing_in) = (input("map_code"), input("position"), input("facing"));
+    let page = fx
+        .get("/admin/saves/100001/ybarra/yserbius/1/warp?map=3")
+        .await;
+    assert_eq!(page.status, 200, "{}", page.body);
+    assert!(
+        page.body
+            .contains(&format!("name=\"{cell_in}\" value=\"58\"")),
+        "{}",
+        page.body
+    );
+    assert!(
+        page.body
+            .contains(&format!("name=\"{map_in}\" value=\"259\"")),
+        "{}",
+        page.body
+    );
+    assert!(page.body.contains("class=\"dn used\""), "{}", page.body);
+    let warp = [
+        ("version", "1"),
+        ("view", "warp"),
+        ("map", "3"),
+        (map_in.as_str(), "259"),
+        (cell_in.as_str(), "58"),
+        (facing_in.as_str(), "1"),
+        ("reason", "testing the vestibule"),
+    ];
+    let mut host = Host::new(&fx.settings, ConnectionId(9));
+    assert!(accepted(
+        &host.answer(&login(100_001, "SWORDFISH")).outgoing
+    ));
+    let online = fx
+        .post("/admin/saves/100001/ybarra/yserbius/1", &warp)
+        .await;
+    assert_eq!(online.status, 409);
+    assert!(
+        online.body.contains("warp character slot 1"),
+        "{}",
+        online.body
+    );
+    host.hang_up();
+    let saved = fx
+        .post("/admin/saves/100001/ybarra/yserbius/1", &warp)
+        .await;
+    assert_eq!(saved.status, 200, "{}", saved.body);
+    assert!(
+        saved
+            .body
+            .contains("Saved as v2 (map_code, position, facing)"),
+        "{}",
+        saved.body
+    );
+    assert!(
+        saved.body.contains("L1: Vestibule, row 3, column 10"),
+        "{}",
+        saved.body
+    );
+    let (_, data) = fx
+        .store
+        .save_read(AccountId(100_001), path, None)
+        .unwrap()
+        .unwrap();
+    let after = CharFile::open(&cipher, &data).unwrap();
+    assert_eq!(&after.slots[0][0xF2..0xF6], &[0x03, 0x01, 58, 1]);
+    let stale = fx
+        .post("/admin/saves/100001/ybarra/yserbius/1", &warp)
+        .await;
+    assert_eq!(stale.status, 409, "{}", stale.body);
+    let entry = &store::recent_audit(&fx.store, 1, None).unwrap()[0];
+    assert_eq!(entry.action, "save.edit");
+    assert!(
+        entry
+            .target
+            .ends_with("character slot 1: map_code, position, facing"),
+        "{}",
+        entry.target
+    );
+    assert_eq!(entry.reason.as_deref(), Some("testing the vestibule"));
+    assert_eq!(
+        fx.audit_actions(),
+        ["save.edit", "ybarra.import", "ybarra.data", "ybarra.data"]
+    );
+}

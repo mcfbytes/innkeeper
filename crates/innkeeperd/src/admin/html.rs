@@ -188,6 +188,7 @@ pub(crate) enum Nav {
     Letters,
     Saves,
     Holds,
+    GameData,
     Help,
     None,
 }
@@ -220,6 +221,27 @@ fn menubar(ctx: &Ctx, nav: Nav) -> String {
         item("/admin/saves", "Saved games", nav == Nav::Saves),
         item("/admin/holds", "Legal holds", nav == Nav::Holds),
     );
+    let mut game_data = item(
+        "/admin/gamedata",
+        "Game files and import",
+        nav == Nav::GameData,
+    );
+    for game in crate::ybarra::Game::ALL {
+        let _ = write!(
+            game_data,
+            "{}{}",
+            item(
+                &format!("/admin/gamedata/{}/items", game.id()),
+                &format!("{} items", game.short_name()),
+                false
+            ),
+            item(
+                &format!("/admin/gamedata/{}/maps", game.id()),
+                &format!("{} maps", game.short_name()),
+                false
+            ),
+        );
+    }
     let help = format!(
         "{}<div class=\"sep\"></div>\
          <button type=\"button\" data-theme-set=\"light\">Time: day</button>\
@@ -231,13 +253,14 @@ fn menubar(ctx: &Ctx, nav: Nav) -> String {
         format!("<details><summary>{name}</summary><div class=\"pop\">{links}</div></details>")
     };
     format!(
-        "<nav class=\"menubar\" aria-label=\"Back office\"><span class=\"brand\">Town Hall</span>{}{}{}{}\
+        "<nav class=\"menubar\" aria-label=\"Back office\"><span class=\"brand\">Town Hall</span>{}{}{}{}{}\
          <span class=\"spacer\"></span><span class=\"who\">{}</span>\
          <form method=\"post\" action=\"/admin/logout\"><input type=\"hidden\" name=\"csrf\" value=\"{}\">\
          <button type=\"submit\" class=\"mbtn\">Sign out</button></form></nav>",
         menu("Ledger", &ledger),
         menu("Desk", &desk),
         menu("Records", &records),
+        menu("Game data", &game_data),
         menu("Help", &help),
         esc(&ctx.handle),
         esc(&ctx.csrf),
