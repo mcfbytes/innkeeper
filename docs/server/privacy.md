@@ -33,6 +33,7 @@ Unix milliseconds UTC.
 | `sessions` | `token_hash` (SHA-256 of the token), `identity_key`, `account` (the account the line logged on to), `created_at`, `expires_at` | A WebSocket is bound to the identity | Logout and account deletion set `expires_at` to now; hard-purged 30 days after `expires_at` (section 6) |
 | `operators`, `staff`, `admin_sessions`, `admin_audit` | the portal's own tables (section 8) | Who may use the portal and what they did | Section 6 |
 | `ybarra_ciphers` | `game`, `shuffle`, `masks`, `key`, `source_sha256`, `imported_at` | The portal's character editor: the Ybarra games' character-file tables, imported from the operator's copy ([ybarra.md](ybarra.md)); no personal data | Kept until imported again |
+| `ybarra_resources` | `game`, `resource`, `data`, `source_sha256`, `imported_at` | The portal's game data pages: the Ybarra games' item and map files, imported from the operator's copy ([ybarra.md](ybarra.md) section 8); no personal data | Kept until imported again |
 
 `audit_sessions.identity_key` is the signed-in identity's HMAC, NULL for a line without a session
 or once that identity has been purged.

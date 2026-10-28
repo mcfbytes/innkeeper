@@ -707,7 +707,7 @@ front of Caddy, so a client-sent header is replaced and never believed.
 ### 9.4 What it does
 
 Menu: Ledger (dashboard, accounts, sign-ins without an account, audit), Desk (complaints, holds), Records (accounts, posts, letters, saves),
-Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
+Game data (the import page and each Ybarra game's items and maps), Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
 
 - **Dashboard:** who is online with a Kick button, counts, links to `/healthz` and `/admin/healthz`, and an
   **Announce** form that sends a notice to every logged-in player (section 11).
@@ -736,7 +736,13 @@ Help (Time of day toggle: system, day, dusk; saved as `inn.theme`).
   number that was never issued is refused.
 - **Saves:** list and download; each download is audited. The characters and automaps of Yserbius,
   Twinion and Cawdor can be edited once their tables are imported from the operator's copy of the game
-  ([ybarra.md](ybarra.md)); each change is a new save version, refused while the account is online, and audited.
+  ([ybarra.md](ybarra.md)); each change is a new save version, refused while the account is online, and audited. A character's saved
+  position can be set by clicking a tile on its map (the warp page, [ybarra.md](ybarra.md) section 8.3).
+- **Game data:** `/admin/gamedata` imports each Ybarra game's item file (`RESOURCE.038`) and maps file
+  (`RESOURCE.035`) from the operator's copy (audited as `ybarra.data`; also `innkeeperd admin ybarra-data
+  --game GAME --data-dir DIR FILE...`). `/admin/gamedata/<game>/items` lists every item, filtered by type,
+  guild and power and sorted by any column; `/admin/gamedata/<game>/maps?map=N` draws a map's walls,
+  passable walls and events ([ybarra.md](ybarra.md) section 8). Both are read-only.
 - **Audit:** every state-changing action and every letter read or save download, with who, what,
   target and reason. No bodies, subjects or tokens are ever written.
 

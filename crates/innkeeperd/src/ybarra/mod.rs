@@ -1,10 +1,13 @@
-//! The save files of the three Ybarra games (The Shadow of Yserbius, The Fates of Twinion, The
-//! Ruins of Cawdor) as the operator portal's character editor reads and writes them: the
-//! character file's layout and cipher, the field maps and the automaps. docs/server/ybarra.md.
+//! The three Ybarra games (The Shadow of Yserbius, The Fates of Twinion, The Ruins of Cawdor) as
+//! the operator portal reads them: the save files' layout, cipher, field maps and automaps, and
+//! the item and map files imported from the operator's copy. docs/server/ybarra.md.
 
 pub(crate) mod automap;
 pub(crate) mod cipher;
+pub(crate) mod dungeon;
 pub(crate) mod extract;
+pub(crate) mod game_file;
+pub(crate) mod items;
 pub(crate) mod schema;
 
 use cipher::{Cipher, SEALED, SEALED_AT};
@@ -63,6 +66,15 @@ impl Game {
             Game::Yserbius => "The Shadow of Yserbius",
             Game::Twinion => "The Fates of Twinion",
             Game::Cawdor => "The Ruins of Cawdor",
+        }
+    }
+
+    /// The name alone, for menus.
+    pub(crate) fn short_name(self) -> &'static str {
+        match self {
+            Game::Yserbius => "Yserbius",
+            Game::Twinion => "Twinion",
+            Game::Cawdor => "Cawdor",
         }
     }
 

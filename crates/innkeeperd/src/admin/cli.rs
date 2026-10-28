@@ -1,5 +1,6 @@
-//! `innkeeperd admin allow|revoke|list`: the `staff` table, edited offline or while the server runs
-//! (SQLite serialises the writers). Docs: docs/server/innkeeperd.md section 9.
+//! `innkeeperd admin allow|revoke|list|ybarra-import|ybarra-data`: the `staff` table and the Ybarra
+//! game data, edited offline or while the server runs (SQLite serialises the writers). Docs:
+//! docs/server/innkeeperd.md section 9.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -75,6 +76,28 @@ fn run_action(action: AdminAction) -> Result<(), String> {
                 println!(
                     "{}: the character editor can now open {} saves.",
                     file.display(),
+                    game.title()
+                );
+            }
+            Ok(())
+        }
+        AdminAction::YbarraData {
+            game,
+            files,
+            data_dir,
+        } => {
+            let game = crate::ybarra::Game::from_id(&game)
+                .ok_or("--game is yserbius, twinion or cawdor")?;
+            let store = open(&data_dir)?;
+            for file in files {
+                let bytes = std::fs::read(&file)
+                    .map_err(|error| format!("cannot read {}: {error}", file.display()))?;
+                let found = crate::ybarra::game_file::import(&store, game, &bytes, now)
+                    .map_err(|error| format!("{}: {error}", file.display()))?;
+                println!(
+                    "{}: the portal now shows the {} of {}.",
+                    file.display(),
+                    found.resource.title().to_lowercase(),
                     game.title()
                 );
             }
