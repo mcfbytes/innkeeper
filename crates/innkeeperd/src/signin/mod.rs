@@ -27,6 +27,7 @@ use crate::seal::{self, Recipient};
 use crate::sqlite_store::SqliteStore;
 use config::PageOrigins;
 use keys::{IdentityKey, KeyRing};
+pub(crate) use routes::route_name;
 use rp::Rp;
 use state::{LoginStates, PageState};
 

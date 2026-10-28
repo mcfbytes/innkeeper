@@ -228,6 +228,14 @@ impl PlayerSession {
         }
     }
 
+    /// The place of the latest land joinNet; `None` before one, or before the Login.
+    pub fn place(&self) -> Option<Place> {
+        match &self.state {
+            PlayerState::LoggedIn(player) => player.place,
+            PlayerState::AwaitingLogin => None,
+        }
+    }
+
     /// Keeps the phone book's copy of this session in step with the player.
     fn publish(&self, objects: &mut ObjectStore, connection: ConnectionId) {
         match &self.state {
@@ -476,6 +484,27 @@ mod tests {
             messages(player.handle(&world, &mut objects, ME, &login(7))).as_slice(),
             [HostMessage::LoginAccepted(_)]
         ));
+    }
+
+    #[test]
+    fn the_place_is_the_latest_land_join_and_none_before_it() {
+        let world = world_with_one_account();
+        let mut objects = ObjectStore::new();
+        let mut player = PlayerSession::new();
+        let _ = player.handle(&world, &mut objects, ME, &login(7));
+        assert_eq!(player.place(), None);
+        let land = ClientMessage::JoinNet(JoinNet {
+            cookie: Cookie(2),
+            kind: ObjectKind::LandGroup,
+            land_type: LandType(4),
+            parameter: 1,
+            size: 100,
+        });
+        let _ = player.handle(&world, &mut objects, ME, &land);
+        let place = player
+            .place()
+            .map(|place| (place.land_type, place.land_number));
+        assert_eq!(place, Some((LandType(4), 1)));
     }
 
     #[test]

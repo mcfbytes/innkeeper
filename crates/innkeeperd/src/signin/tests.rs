@@ -82,12 +82,23 @@ async fn serve(
     enrolment: EnrolmentMode,
     require_session: bool,
 ) -> Fixture {
+    serve_traced(store, sign_in, enrolment, require_session, None).await
+}
+
+async fn serve_traced(
+    store: Arc<SqliteStore>,
+    sign_in: SignIn,
+    enrolment: EnrolmentMode,
+    require_session: bool,
+    tracer: Option<crate::metrics::trace::Tracer>,
+) -> Fixture {
     let sign_in = Arc::new(sign_in);
     let mut world = World::stored(Arc::clone(&store) as Arc<dyn innkeeper_world::Store>);
     world.accounts = crate::server::account_book(&store, enrolment);
     let mut settings = ConnectionSettings::new(SessionConfig::default(), world, None);
     settings.sign_in = Some(Arc::clone(&sign_in));
     settings.require_session = require_session;
+    settings.tracer = tracer;
     let settings = Arc::new(settings);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -165,6 +176,62 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn a_traced_auth_call_is_one_request_named_by_its_route_template() {
+    let store = Arc::new(SqliteStore::open_in_memory().unwrap());
+    let sign_in = sign_in_for(&store, EnrolmentMode::Open, 3, false);
+    let (tracer, mut items) = crate::metrics::trace::channel();
+    let fx = serve_traced(store, sign_in, EnrolmentMode::Open, false, Some(tracer)).await;
+    let traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    let get = |path: &str| fx.http.get(fx.url(path));
+    get("/auth/session").send().await.unwrap();
+    let health = get("/healthz").header("traceparent", traceparent);
+    health.send().await.unwrap();
+    let saves = get("/auth/accounts/100001/saves?path=inn%2Fx.dat")
+        .header("traceparent", traceparent)
+        .bearer_auth("secret-token");
+    assert_eq!(saves.send().await.unwrap().status(), 401);
+    let logout = fx.http.post(fx.url("/auth/logout"));
+    let logout = logout.header("traceparent", traceparent);
+    assert_eq!(logout.send().await.unwrap().status(), 204);
+    let sent: Vec<_> = std::iter::from_fn(|| items.try_recv().ok()).collect();
+    let names: Vec<&str> = sent.iter().map(|item| item.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["GET /auth/accounts/{id}/saves", "POST /auth/logout"]
+    );
+    assert!(sent
+        .iter()
+        .all(|item| item.success && item.parent == "00f067aa0ba902b7"));
+    let text = format!("{sent:?}");
+    for secret in ["100001", "secret-token", "x.dat", "127.0.0.1"] {
+        assert!(!text.contains(secret), "{secret} in {text}");
+    }
+}
+
+#[test]
+fn route_names_carry_no_account_number() {
+    use hyper::Method;
+    let name = super::route_name;
+    assert_eq!(name(&Method::GET, "/auth/session"), "GET /auth/session");
+    assert_eq!(
+        name(&Method::POST, "/auth/accounts/100001/credential"),
+        "POST /auth/accounts/{id}/credential"
+    );
+    assert_eq!(
+        name(&Method::GET, "/auth/accounts/100001/saves"),
+        "GET /auth/accounts/{id}/saves"
+    );
+    assert_eq!(
+        name(&Method::GET, "/auth/accounts/x1/saves"),
+        "GET /auth/{unknown}"
+    );
+    assert_eq!(
+        name(&Method::PUT, "/auth/nothing/123"),
+        "OTHER /auth/{unknown}"
+    );
+}
+
+#[tokio::test]
 async fn cors_names_only_the_configured_page_origin() {
     let fx = fixture(EnrolmentMode::Open, 3, false).await;
     let preflight = fx
@@ -185,7 +252,7 @@ async fn cors_names_only_the_configured_page_origin() {
     );
     assert_eq!(
         headers["access-control-allow-headers"],
-        "Authorization, Content-Type"
+        "Authorization, Content-Type, traceparent"
     );
     assert_eq!(headers["vary"], "Origin");
     assert_eq!(headers["cache-control"], "no-store");

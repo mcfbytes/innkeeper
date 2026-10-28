@@ -519,7 +519,7 @@ const SUBJECT_SEALED: &str =
     "sealed: the provider's issuer and subject are encrypted to the operator key, not exported";
 const SUBJECT_NOT_KEPT: &str = "not kept: no audit key was configured at sign-in";
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

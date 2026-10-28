@@ -189,7 +189,7 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     if config.public && !has_providers {
         warn!("{}", crate::connection_gate::NO_PROVIDERS);
     }
-    let metrics =
+    let mut metrics =
         crate::metrics::insights::Settings::from_config(&config).map_err(ServerError::Metrics)?;
     let plan = config.listen_plan();
     let legacy = listen_std_if(plan.legacy)?;
@@ -206,6 +206,9 @@ pub(crate) fn prepare(config: Config) -> Result<Prepared, ServerError> {
     settings.forwarding = config.forwarding();
     settings.seal_required = config.public;
     settings.limits = config.limits();
+    settings.tracer = metrics
+        .as_mut()
+        .map(crate::metrics::insights::Settings::tracer);
     settings.switchboard = Switchboard::with_queue_limit(settings.limits.line_queue_bytes);
     let settings = Arc::new(settings);
     let admin = match (admin_listener, opened.store.as_ref()) {

@@ -14,7 +14,40 @@ use innkeeper_world::{AccountId, Store};
 use serde_json::{json, Map, Value};
 use tracing::{debug, warn};
 
+use crate::metrics::trace::Outcome;
+
 type Reply = Map<String, Value>;
+
+/// The ops a request may name; any other is `unknown` in the trace, and its text stays out.
+const OPS: [&str; 4] = ["manifest", "get", "versions", "put"];
+const UNKNOWN_OP: &str = "unknown";
+/// The trace's name for a text frame that is not a JSON object.
+const UNDECODABLE_OP: &str = "undecodable";
+/// The one refusal code that is the server's fault rather than the request's.
+const SERVER_ERROR: &str = "server_error";
+
+/// The reply texts of one request, and its op and result code for the diagnostics trace.
+#[derive(Debug)]
+pub(crate) struct SaveAnswer {
+    pub(crate) replies: Vec<String>,
+    pub(crate) op: &'static str,
+    code: &'static str,
+}
+
+impl SaveAnswer {
+    pub(crate) fn outcome(&self) -> Outcome {
+        Outcome {
+            code: self.code,
+            success: self.code != SERVER_ERROR,
+        }
+    }
+}
+
+fn op_of(request: &Map<String, Value>) -> &'static str {
+    let named = request.get("op").and_then(Value::as_str);
+    let known = named.and_then(|op| OPS.iter().find(|known| **known == op));
+    known.copied().unwrap_or(UNKNOWN_OP)
+}
 
 /// One WebSocket's save channel; it serves nobody until the line session has logged on.
 #[derive(Debug)]
@@ -58,18 +91,29 @@ impl SaveChannel {
     }
 
     /// Answers one text frame; `now` is the host clock in milliseconds since the Unix epoch.
-    pub(crate) fn handle(&mut self, text: &str, now: u64) -> Vec<String> {
+    pub(crate) fn handle(&mut self, text: &str, now: u64) -> SaveAnswer {
         let Ok(Value::Object(request)) = serde_json::from_str(text) else {
-            let reply = error_reply(&refuse("bad_request", "not a JSON object"));
-            return vec![self.reply_to(&Map::new(), reply)];
+            let refusal = refuse("bad_request", "not a JSON object");
+            return SaveAnswer {
+                replies: vec![self.reply_to(&Map::new(), error_reply(&refusal))],
+                op: UNDECODABLE_OP,
+                code: refusal.code,
+            };
         };
         let request = &request;
         let outcome = match self.account {
             None => Err(refuse("not_logged_on", "log on through the line first")),
             Some(account) => self.dispatch(account, request, now),
         };
-        let reply = outcome.unwrap_or_else(|refusal| error_reply(&refusal));
-        vec![self.reply_to(request, reply)]
+        let (reply, code) = match outcome {
+            Ok(reply) => (reply, "ok"),
+            Err(refusal) => (error_reply(&refusal), refusal.code),
+        };
+        SaveAnswer {
+            replies: vec![self.reply_to(request, reply)],
+            op: op_of(request),
+            code,
+        }
     }
 
     /// The reply text, tagged with the request's `id` when it had one.
@@ -258,7 +302,7 @@ fn optional_number(request: &Map<String, Value>, key: &str) -> Result<Option<u64
 fn store_refusal(error: innkeeper_world::StoreError) -> Refusal {
     warn!(%error, "save store failed");
     crate::metrics::counters().store_error();
-    refuse("server_error", "the store failed")
+    refuse(SERVER_ERROR, "the store failed")
 }
 
 fn error_reply(refusal: &Refusal) -> Reply {
@@ -294,7 +338,7 @@ mod tests {
     }
 
     fn ask(channel: &mut SaveChannel, request: &Value, now: u64) -> Value {
-        let replies = channel.handle(&request.to_string(), now);
+        let replies = channel.handle(&request.to_string(), now).replies;
         assert_eq!(replies.len(), 1);
         serde_json::from_str(&replies[0]).unwrap()
     }
@@ -332,6 +376,36 @@ mod tests {
             assert_eq!(code(&reply), wanted);
         }
         assert_eq!(channel.store.saves(ALICE).unwrap(), []);
+    }
+
+    #[test]
+    fn the_trace_names_the_op_from_the_fixed_vocabulary_and_its_code() {
+        let store = new_store();
+        let mut channel = channel_on(&store, ALICE);
+        let traced = |channel: &mut SaveChannel, request: &str| {
+            let answer = channel.handle(request, 0);
+            let outcome = answer.outcome();
+            (answer.op, outcome.code, outcome.success)
+        };
+        let manifest = r#"{"op": "manifest"}"#;
+        assert_eq!(traced(&mut channel, manifest), ("manifest", "ok", true));
+        let missing = r#"{"op": "get", "path": "inn/yserbius/mychars.dat"}"#;
+        assert_eq!(traced(&mut channel, missing), ("get", "no_such_file", true));
+        let invented = r#"{"op": "steal C:\\secret.txt"}"#;
+        assert_eq!(
+            traced(&mut channel, invented),
+            ("unknown", "unknown_op", true)
+        );
+        assert_eq!(
+            traced(&mut channel, "[1"),
+            ("undecodable", "bad_request", true)
+        );
+        let failed = SaveAnswer {
+            replies: Vec::new(),
+            op: "put",
+            code: SERVER_ERROR,
+        };
+        assert!(!failed.outcome().success);
     }
 
     #[test]

@@ -459,6 +459,18 @@ provider, session or message text goes with them, and nothing in them can single
 envelopes carry the role name `innkeeperd` and the instrumentation key, which is no secret (the VM's
 managed identity is the credential). The portal's Status panel shows the same counters from memory.
 
+**Diagnostics trace.** The same pusher sends one trace per browser page load, and only when the
+browser asks for it with a `traceparent` (the page sends one while its "Send anonymous diagnostics"
+box is ticked, and never under Global Privacy Control or Do Not Track). Without one, no item is
+made for that line or request: a native client, a visitor who opted out and every TCP line send only
+the counts above. The trace holds a random operation id that lives in the page's memory, random
+span ids, the name of each client message kind or save op, the land or game it went to, the
+`/auth` route template and status, result codes from a fixed list, durations, counts and the client
+version ([innkeeperd.md](innkeeperd.md) section 10.4). It never holds an account number, persona,
+sign-in identity or its hash, session token, SID or object id, IP address or peer token, server
+address, message fields or text, file name or error text, and its client IP tag is `0.0.0.0`.
+Nothing in it links two page loads.
+
 ## 8. Operator portal
 
 The portal ([innkeeperd.md](innkeeperd.md) section 9) records each action in `admin_audit`: time, the

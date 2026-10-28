@@ -107,7 +107,7 @@ impl SignIn {
             );
             headers.insert(
                 ACCESS_CONTROL_ALLOW_HEADERS,
-                HeaderValue::from_static("Authorization, Content-Type"),
+                HeaderValue::from_static("Authorization, Content-Type, traceparent"),
             );
             headers.insert(ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
         }
@@ -702,6 +702,39 @@ fn save_entry(meta: &SaveMeta) -> serde_json::Map<String, Value> {
         return serde_json::Map::new();
     };
     map
+}
+
+/// The `/auth/*` paths a trace names as they are; the account paths are named by template.
+const FIXED_ROUTES: [&str; 10] = [
+    "/auth/login",
+    "/auth/callback",
+    "/auth/providers",
+    "/auth/session",
+    "/auth/logout",
+    "/auth/attest",
+    "/auth/accounts",
+    "/auth/identities",
+    "/auth/identities/ticket",
+    "/auth/identities/unlink",
+];
+
+/// `<METHOD> <route template>` for the diagnostics trace: no account number, query or token.
+pub(crate) fn route_name(method: &Method, path: &str) -> String {
+    let method = match *method {
+        Method::GET => "GET",
+        Method::POST => "POST",
+        Method::OPTIONS => "OPTIONS",
+        _ => "OTHER",
+    };
+    let fixed = FIXED_ROUTES.iter().find(|route| **route == path).copied();
+    let route = fixed.unwrap_or(if saves_target(path).is_some() {
+        "/auth/accounts/{id}/saves"
+    } else if credential_target(path).is_some() {
+        "/auth/accounts/{id}/credential"
+    } else {
+        "/auth/{unknown}"
+    });
+    format!("{method} {route}")
 }
 
 fn credential_target(path: &str) -> Option<AccountId> {

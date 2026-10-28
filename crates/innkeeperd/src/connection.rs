@@ -9,6 +9,7 @@ use std::time::Instant;
 use innkeeper_session::{Session, SessionConfig, SessionEvent, SessionOutput};
 use innkeeper_world::{ConnectionId, HostMessage, LogPolicy, ObjectStore, World};
 use pad_thai::{LineEvent, ModemEvent, PadEvent};
+use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tracing::{debug, info, info_span, warn, Instrument};
@@ -18,12 +19,47 @@ use crate::capture::{Capture, Direction};
 use crate::connection_gate::Binding;
 use crate::host::{Exchange, Host, LoggedExchange, LogonSignal, ReplyError};
 use crate::limits::Limits;
+use crate::metrics::trace::{LineEnd, LineTrace, Tracer};
 use crate::peer::{PeerLog, PeerTokens};
 use crate::switchboard::Switchboard;
 
 pub(crate) const READ_CHUNK: usize = 4096;
 
 pub(crate) type FileCapture = Capture<BufWriter<File>>;
+
+/// What a WebSocket line brings beside its bytes; a TCP line has none of it.
+#[derive(Debug, Default)]
+pub(crate) struct LineContext {
+    /// Told the account the Login opened, and `None` after the hang-up.
+    pub(crate) logon: Option<LogonSignal>,
+    /// Limits Logins to the accounts of the signed-in identity.
+    pub(crate) binding: Option<Binding>,
+    pub(crate) trace: Option<Arc<LineTrace>>,
+}
+
+/// Why the host ended a line, kept inside the I/O error so the trace can name it.
+#[derive(Debug, Error)]
+enum LineStop {
+    #[error("the client was idle")]
+    Idle,
+    #[error("the client stopped acknowledging")]
+    GaveUp,
+    #[error("the client's inbox is full")]
+    InboxFull,
+}
+
+fn line_end(ended: &std::io::Result<LineEnd>) -> LineEnd {
+    let error = match ended {
+        Ok(end) => return *end,
+        Err(error) => error,
+    };
+    match error.get_ref().and_then(|e| e.downcast_ref::<LineStop>()) {
+        Some(LineStop::Idle) => LineEnd::Idle,
+        Some(LineStop::GaveUp) => LineEnd::GaveUp,
+        Some(LineStop::InboxFull) => LineEnd::InboxFull,
+        None => LineEnd::Error,
+    }
+}
 
 /// What every connection shares: the session settings, the world, the host's objects, the way to
 /// reach other connections and where captures go.
@@ -47,6 +83,8 @@ pub(crate) struct ConnectionSettings {
     /// Public mode: a line whose sealed record cannot be written is ended, not served unrecorded.
     pub(crate) seal_required: bool,
     pub(crate) limits: Limits,
+    /// With the metrics pusher: where traced lines and HTTP calls queue their items.
+    pub(crate) tracer: Option<Tracer>,
     next_connection: AtomicU64,
 }
 
@@ -66,6 +104,7 @@ impl ConnectionSettings {
             forwarding: crate::forwarded::Forwarding::Direct,
             seal_required: false,
             limits: Limits::default(),
+            tracer: None,
             next_connection: AtomicU64::new(1),
             world,
         }
@@ -98,19 +137,16 @@ pub(crate) async fn serve_connection(
     if let Err(error) = stream.set_nodelay(true) {
         warn!(%error, %peer, "cannot disable Nagle; replies may lag");
     }
-    serve_line(stream, addr, settings, "tcp", None, None).await;
+    serve_line(stream, addr, settings, "tcp", LineContext::default()).await;
 }
 
 /// Runs a legacy line session over any byte stream: a TCP socket or a WebSocket's bytes.
-/// With a `logon` signal, it reports the account the Login opened, and `None` after the hang-up.
-/// A `binding` limits Logins to the accounts of the signed-in identity.
 pub(crate) async fn serve_line<S>(
     stream: S,
     addr: SocketAddr,
     settings: Arc<ConnectionSettings>,
     transport: &'static str,
-    logon: Option<LogonSignal>,
-    binding: Option<Binding>,
+    context: LineContext,
 ) where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -119,8 +155,13 @@ pub(crate) async fn serve_line<S>(
     let span = info_span!("session", id = id.0, %peer);
     async move {
         info!("client connected");
-        match drive(stream, addr, id, &settings, transport, (logon, binding)).await {
-            Ok(()) => info!("client hung up"),
+        let trace = context.trace.clone();
+        let ended = drive(stream, addr, id, &settings, transport, context).await;
+        if let Some(trace) = trace {
+            trace.finish(line_end(&ended));
+        }
+        match ended {
+            Ok(_) => info!("client hung up"),
             Err(error) => warn!(%error, "connection failed"),
         }
     }
@@ -134,8 +175,8 @@ async fn drive<S>(
     id: ConnectionId,
     settings: &ConnectionSettings,
     transport: &'static str,
-    (logon, binding): (Option<LogonSignal>, Option<Binding>),
-) -> std::io::Result<()>
+    context: LineContext,
+) -> std::io::Result<LineEnd>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -143,9 +184,15 @@ where
     let mut capture = open_capture(settings, id, peer, started);
     let mut host = Host::new(settings, id);
     host.label(transport);
+    let LineContext {
+        logon,
+        binding,
+        trace,
+    } = context;
     if let Some(signal) = logon {
         host.announce_logon(signal);
     }
+    host.trace(trace);
     let mut ticket = crate::audit::begin(settings.audit.as_ref(), peer, transport);
     if ticket.is_none() && settings.audit.is_some() && settings.seal_required {
         return Err(std::io::Error::other(
@@ -169,7 +216,7 @@ async fn pump<S>(
     mut session: Session,
     host: &mut Host<'_>,
     capture: &mut Option<FileCapture>,
-) -> std::io::Result<()>
+) -> std::io::Result<LineEnd>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -183,7 +230,7 @@ where
         tokio::select! {
             read = stream.read_buf(&mut chunk) => {
                 if read? == 0 {
-                    return Ok(());
+                    return Ok(LineEnd::HungUp);
                 }
                 let now = Instant::now();
                 heard = now;
@@ -193,14 +240,14 @@ where
             () = sleep_until(session.next_deadline()) => session.handle_timeout(Instant::now()),
             () = sleep_until(run_deadline) => record(capture, Capture::finish_run),
             () = sleep_until(idle_after.map(|idle| heard + idle)) => {
-                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "the client was idle"));
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, LineStop::Idle));
             }
             () = kick.notified() => {
                 if host.inbox_overflowed() {
-                    return Err(std::io::Error::other("the client's inbox is full"));
+                    return Err(std::io::Error::other(LineStop::InboxFull));
                 }
                 info!("connection ended by the operator");
-                return Ok(());
+                return Ok(LineEnd::Kicked);
             }
             Some(notice) = host.next_notice() => {
                 let now = Instant::now();
@@ -244,12 +291,9 @@ where
                     SessionEvent::Message(message) => {
                         let answer = host.answer(message.body());
                         report(capture, now, answer.exchange, host.log_policy());
-                        report(
-                            capture,
-                            now,
-                            send_all(session, answer.outgoing, now),
-                            host.log_policy(),
-                        );
+                        let sent = send_all(session, answer.outgoing, now);
+                        host.finish_call(answer.call, &sent);
+                        report(capture, now, sent, host.log_policy());
                     }
                     SessionEvent::LinkLost(_) => host.hang_up(),
                     SessionEvent::Link(LinkEvent::GaveUp { .. }) => return Err(gave_up()),
@@ -263,8 +307,7 @@ where
 
 /// The client's sequence no longer matches the host's once a frame is abandoned, so the line is over.
 fn gave_up() -> std::io::Error {
-    let reason = "the client stopped acknowledging";
-    std::io::Error::new(std::io::ErrorKind::TimedOut, reason)
+    std::io::Error::new(std::io::ErrorKind::TimedOut, LineStop::GaveUp)
 }
 
 fn send_all(session: &mut Session, messages: Vec<HostMessage>, now: Instant) -> Vec<Exchange> {
@@ -407,5 +450,24 @@ async fn sleep_until(deadline: Option<Instant>) {
     match deadline {
         Some(deadline) => tokio::time::sleep_until(deadline.into()).await,
         None => std::future::pending().await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_line_s_end_is_read_from_its_result() {
+        let stop = |why| std::io::Error::new(std::io::ErrorKind::TimedOut, why);
+        assert_eq!(line_end(&Ok(LineEnd::HungUp)), LineEnd::HungUp);
+        assert_eq!(line_end(&Ok(LineEnd::Kicked)), LineEnd::Kicked);
+        assert_eq!(line_end(&Err(stop(LineStop::Idle))), LineEnd::Idle);
+        assert_eq!(line_end(&Err(gave_up())), LineEnd::GaveUp);
+        let full = std::io::Error::other(LineStop::InboxFull);
+        assert_eq!(line_end(&Err(full)), LineEnd::InboxFull);
+        let other = std::io::Error::other("the client's inbox is full");
+        assert_eq!(line_end(&Err(other)), LineEnd::Error);
+        assert_eq!(gave_up().to_string(), "the client stopped acknowledging");
     }
 }

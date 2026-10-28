@@ -1,6 +1,6 @@
-//! `--app-insights-connection-string`: pushes the process counters to Application Insights'
-//! ingestion endpoint, authenticated by the VM's managed identity (docs/server/innkeeperd.md
-//! section 10). The component has local auth disabled, so the connection string's key is no secret.
+//! `--app-insights-connection-string`: pushes the process counters and the diagnostics trace items
+//! to Application Insights' ingestion endpoint, authenticated by the VM's managed identity
+//! (docs/server/innkeeperd.md section 10). The connection string's key is no secret.
 //!
 //! The task owns everything it touches and awaits only with a timeout, so a slow or unreachable
 //! Azure never delays a game connection. Failures back off and log at most once per ten minutes.
@@ -9,12 +9,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 use url::Url;
 use zeroize::Zeroizing;
 
-use super::payload::envelopes;
+use super::payload::{envelopes, trace_envelopes};
 use super::sampler::{Batch, Gauges, Sampler};
+use super::trace::{self, Item, Tracer, QUEUE_ITEMS};
 use super::{counters, rss_bytes};
 use crate::config::Config;
 use crate::connection::ConnectionSettings;
@@ -29,6 +31,8 @@ const HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 const PUSH_EVERY: Duration = Duration::from_secs(60);
 /// Samples per push: one every ten seconds at the default interval.
 const SAMPLES_PER_PUSH: u32 = 6;
+/// Trace drains per metrics push: one every five seconds at the default interval.
+const DRAINS_PER_PUSH: u32 = 12;
 const FIRST_BACKOFF: Duration = Duration::from_secs(60);
 const MAX_BACKOFF: Duration = Duration::from_secs(600);
 const WARN_EVERY: Duration = Duration::from_secs(600);
@@ -45,6 +49,8 @@ pub(crate) struct Settings {
     /// The full `.../v2.1/track` URL.
     track: Url,
     interval: Duration,
+    /// The trace queue, once [`Settings::tracer`] has made it.
+    items: Option<mpsc::Receiver<Item>>,
 }
 
 /// `InstrumentationKey` and `IngestionEndpoint` out of a connection string; other keys are ignored.
@@ -106,7 +112,15 @@ impl Settings {
             ikey,
             track,
             interval,
+            items: None,
         }))
+    }
+
+    /// The lines' end of the trace queue this pusher drains.
+    pub(crate) fn tracer(&mut self) -> Tracer {
+        let (tracer, items) = trace::channel();
+        self.items = Some(items);
+        tracer
     }
 }
 
@@ -218,12 +232,22 @@ impl Client {
         if batch.gauges.is_empty() && batch.counts.is_empty() {
             return Ok(());
         }
+        let body = envelopes(&self.settings.ikey, time, batch);
+        self.post(&body).await
+    }
+
+    async fn push_items(&mut self, items: &[Item]) -> Result<(), String> {
+        let body = trace_envelopes(&self.settings.ikey, items);
+        self.post(&body).await
+    }
+
+    async fn post(&mut self, body: &Value) -> Result<(), String> {
         let token = self.token().await?;
         let response = self
             .http
             .post(self.settings.track.clone())
             .bearer_auth(token.as_str())
-            .json(&envelopes(&self.settings.ikey, time, batch))
+            .json(body)
             .send()
             .await
             .map_err(|error| format!("track: {}", error.without_url()))?;
@@ -248,9 +272,72 @@ fn gauges(settings: &ConnectionSettings) -> Gauges {
     }
 }
 
-/// Samples every `interval / 6` and pushes every `interval`, until the process ends.
-pub(crate) async fn run(settings: Settings, connections: Arc<ConnectionSettings>) {
+/// The shared back-off of the metrics and trace posts: one endpoint, one token, one health.
+#[derive(Debug)]
+struct Health {
+    failures: u32,
+    retry_at: Instant,
+    warnings: WarnLimiter,
+}
+
+impl Health {
+    fn new() -> Self {
+        Health {
+            failures: 0,
+            retry_at: Instant::now(),
+            warnings: WarnLimiter::new(WARN_EVERY),
+        }
+    }
+
+    fn backing_off(&self) -> bool {
+        Instant::now() < self.retry_at
+    }
+
+    fn note(&mut self, pushed: Result<(), String>) -> bool {
+        match pushed {
+            Ok(()) => {
+                if self.failures > 0 {
+                    info!("app insights metrics: pushing again");
+                }
+                self.failures = 0;
+                true
+            }
+            Err(error) => {
+                self.failures = self.failures.saturating_add(1);
+                self.retry_at = Instant::now() + backoff(self.failures);
+                if self.warnings.allow(Instant::now()) {
+                    let failures = self.failures;
+                    warn!(%error, failures, "app insights metrics: push failed; will retry");
+                }
+                false
+            }
+        }
+    }
+}
+
+/// Everything queued now, up to one queue's worth.
+fn take_items(items: &mut mpsc::Receiver<Item>) -> Vec<Item> {
+    let mut batch = Vec::new();
+    while batch.len() < QUEUE_ITEMS {
+        let Ok(item) = items.try_recv() else {
+            break;
+        };
+        batch.push(item);
+    }
+    batch
+}
+
+fn ticker(period: Duration) -> tokio::time::Interval {
+    let mut ticker = tokio::time::interval(period.max(Duration::from_millis(1)));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    ticker
+}
+
+/// Samples every `interval / 6` and pushes every `interval`; drains the trace queue every
+/// `interval / 12`. Runs until the process ends.
+pub(crate) async fn run(mut settings: Settings, connections: Arc<ConnectionSettings>) {
     let interval = settings.interval;
+    let mut items = settings.items.take();
     let mut client = match Client::new(settings) {
         Ok(client) => client,
         Err(error) => {
@@ -259,46 +346,39 @@ pub(crate) async fn run(settings: Settings, connections: Arc<ConnectionSettings>
         }
     };
     let mut sampler = Sampler::starting_at(counters().totals());
-    let mut warnings = WarnLimiter::new(WARN_EVERY);
-    let mut ticker =
-        tokio::time::interval((interval / SAMPLES_PER_PUSH).max(Duration::from_millis(1)));
-    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut health = Health::new();
+    let mut samples = ticker(interval / SAMPLES_PER_PUSH);
+    let mut drains = ticker(interval / DRAINS_PER_PUSH);
     let mut ticks = 0u32;
-    let mut failures = 0u32;
-    let mut retry_at = Instant::now();
     loop {
-        ticker.tick().await;
+        tokio::select! {
+            _ = samples.tick() => {}
+            _ = drains.tick(), if items.is_some() => {
+                let batch = items.as_mut().map(take_items).unwrap_or_default();
+                // Items cannot wait out a back-off; dropping them keeps the queue moving.
+                if !batch.is_empty() && !health.backing_off() {
+                    health.note(client.push_items(&batch).await);
+                }
+                continue;
+            }
+        }
         sampler.sample(gauges(&connections));
         ticks += 1;
         if ticks < SAMPLES_PER_PUSH {
             continue;
         }
-        if Instant::now() < retry_at {
+        ticks = 0;
+        if health.backing_off() {
             // Gauges older than Azure's window are no use; counters keep their growth.
             sampler.drop_gauges();
-            ticks = 0;
             continue;
         }
-        ticks = 0;
         let now = counters().totals();
         let batch = sampler.batch(now);
         let time = crate::dates::now_ms();
-        match client.push(&batch, time).await {
-            Ok(()) => {
-                if failures > 0 {
-                    info!("app insights metrics: pushing again");
-                }
-                failures = 0;
-                sampler.acknowledge(now);
-            }
-            Err(error) => {
-                failures = failures.saturating_add(1);
-                retry_at = Instant::now() + backoff(failures);
-                sampler.drop_gauges();
-                if warnings.allow(Instant::now()) {
-                    warn!(%error, failures, "app insights metrics: push failed; will retry");
-                }
-            }
+        match health.note(client.push(&batch, time).await) {
+            true => sampler.acknowledge(now),
+            false => sampler.drop_gauges(),
         }
     }
 }
